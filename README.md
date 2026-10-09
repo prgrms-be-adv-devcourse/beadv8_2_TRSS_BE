@@ -4,8 +4,7 @@
 
 팔레트는 여러 판매자가 입점해 상품을 팔고, 플랫폼이 중개·결제·정산을 맡는 백엔드 서비스입니다. 모든 주문은 토스페이먼츠로 충전한 **예치금**으로 결제하고, 결제 금액은 구매 확정 전까지 플랫폼이 보관(홀딩)했다가 매월 10일 수수료 10%를 뺀 금액을 판매자에게 정산합니다.
 
-- 개발 기간: 2026.10.08 ~ 2026.10.18
-- 문서: [기획서](docs/palette_proposal.md) · [정책](docs/palette_policy.md) · [예외 처리](docs/exception-handling.md) · ERD(`docs/palette.erd`)
+- 문서: [기획서](docs/palette_proposal.md) · [정책](docs/palette_policy.md) · [예외 처리](docs/palette_exception_handling.md) · ERD(`docs/palette.erd`)
 
 ## 주요 기능
 
@@ -133,7 +132,7 @@ Windows에서는 `gradlew.bat bootRun`을 사용합니다. IntelliJ에서는 `Ap
 { "resultCode": "402-INSUFFICIENT_BALANCE", "msg": "예치금 잔액이 부족합니다.", "data": { "shortage": 18000 } }
 ```
 
-전체 API 목록은 [기획서 3장](docs/palette_proposal.md), 오류 코드는 [예외 처리 가이드](docs/exception-handling.md)를 참고하세요.
+전체 API 목록은 [기획서 3장](docs/palette_proposal.md), 오류 코드는 [예외 처리 가이드](docs/palette_exception_handling.md)를 참고하세요.
 
 
 
