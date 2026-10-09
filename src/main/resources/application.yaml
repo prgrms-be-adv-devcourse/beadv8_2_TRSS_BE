@@ -1,6 +1,6 @@
 spring:
   application:
-    name: demo
+    name: palette
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}
@@ -17,10 +17,29 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        jdbc:
-          time_zone: UTC
     show-sql: true
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
 
   batch:
     jdbc:
       initialize-schema: always
+
+# 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
+custom:
+  order:
+    expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
+    autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
+  payment:
+    topupUnit: 10000           # 충전 단위·최소 금액(원)
+    topupMax: 1000000          # 1회 최대 충전 금액(원)
+    adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
+  settlement:
+    feeRate: 10                # 수수료율(%)
+    payDayOfMonth: 10          # 매월 정산일
+    maxAttempts: 3             # 최초 1회 + 재시도 2회
+    retryIntervalMinutes: 10   # 재시도 간격(분)
