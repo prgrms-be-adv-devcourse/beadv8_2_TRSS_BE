@@ -36,6 +36,12 @@ dependencies {
 	testAnnotationProcessor("org.projectlombok:lombok")
 }
 
+// 정책 시간이 모두 KST 기준이므로 테스트·bootRun JVM도 KST로 실행한다.
 tasks.withType<Test> {
 	useJUnitPlatform()
+	jvmArgs("-Duser.timezone=Asia/Seoul")
+}
+
+tasks.named<JavaExec>("bootRun") {
+	jvmArgs("-Duser.timezone=Asia/Seoul")
 }

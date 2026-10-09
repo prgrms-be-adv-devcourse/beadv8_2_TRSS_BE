@@ -205,7 +205,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
   - 성공 `resultCode`는 `200-{순번}`이다(조회·생성·처리 모두 `200-1`). 생성도 201이 아니라 200으로 응답한다. `data`에는 응답 DTO를 담는다
   - 실패 `resultCode`는 `{HTTP 상태}-{오류 이름}`이다(예: `402-INSUFFICIENT_BALANCE`). `data`에는 추가 정보가 필요한 오류만 담고(입력 검증 필드 오류, 잔액 부족의 부족액 등) 없으면 `null`이다
   - 인증 실패 401, 권한 부족 403, 상태 충돌 409, 잔액 부족 402. 아래 표의 "주요 오류" `409 EMAIL_DUPLICATED`는 `resultCode` `409-EMAIL_DUPLICATED`를 뜻한다
-  - 예외 처리 방식은 `docs/exception-handling.md`를 따른다
+  - 예외 처리 방식은 `palette_exception_handling.md`를 따른다
 - 목록: `page`(0부터), `size`(기본 20, 최대 50), 기본 최신순
 - 돈이 움직이는 쓰기 API(충전·결제·충전 취소)는 `Idempotency-Key` 헤더를 받아 24시간 같은 응답을 돌려준다
 - 금액은 원 단위 정수, 시각은 KST ISO-8601
