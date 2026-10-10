@@ -270,6 +270,8 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-SETTLEMENT_RUNNING | 같은 월 정산 실행 중 |
 | | 409-SETTLEMENT_STATE_INVALID | 보류·해제·재처리를 할 수 없는 상태 |
 | | 400-SETTLEMENT_MONTH_INVALID | 끝나지 않은 달 정산 시도 |
+| | 404-SETTLEMENT_CANDIDATE_NOT_FOUND | 정산 후보를 찾을 수 없는 상태 |
+| | 409-SETTLEMENT_CANDIDATE_STATE_INVALID | 정산 할 수 없는 정산 후보 상태가 정산을 시도 |
 
 ## 9. 로그 규칙
 
