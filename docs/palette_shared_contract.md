@@ -8,7 +8,7 @@
 
 | 컨텍스트 | 담당 | 제공하는 Api | 발행하는 이벤트 |
 | --- | --- | --- | --- |
-| member | 시연·지은 | `MemberApi` | - |
+| member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent` |
 | product | 유진 | `ProductApi` | - |
 | order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
@@ -20,7 +20,7 @@
 
 | 시나리오 | 시작 | 호출 순서 | 방식 |
 | --- | --- | --- | --- |
-| 회원 가입 | member | `PaymentApi.createWallet(memberId)` | 동기, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로) |
+| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로). Outbox 도입 시 별도 Tx |
 | 장바구니 조회 | order | `ProductApi.getProducts(ids)` → 현재 가격·상태로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | `ProductApi.getProducts` → `MemberApi.getSellers`(판매자명 스냅샷) → `ProductApi.deductStock` | 동기, 같은 Tx |
@@ -79,6 +79,18 @@ public enum SellerStatus { PENDING, APPROVED, REJECTED, WITHDRAW_REQUESTED, WITH
 public enum SellerCategory { BEAUTY, CLOTHING }
 ```
 
+### 이벤트
+
+```java
+package com.backend.shared.member.event;
+
+/** 회원 가입 완료. 결제가 받아 잔액 0인 지갑을 생성한다 */
+public record MemberSignedUpEvent(Long memberId) { }
+```
+
+- 지금은 `@EventListener`로 가입 트랜잭션 안에서 처리해, 지갑 생성이 실패하면 가입도 롤백된다.
+- Outbox 도입 후에는 폴러가 트랜잭션 밖에서 발행하고, 결제의 `PaymentFacade.createWallet`이 새 트랜잭션에서 지갑을 만든다. 리스너 코드는 바뀌지 않는다.
+
 ## 3. product
 
 ### ProductApi
@@ -89,22 +101,28 @@ package com.backend.shared.product.out;
 public interface ProductApi {
 
     /**
-     * 상품 여러 개의 현재 정보. 장바구니 금액 계산과 주문 스냅샷에 쓴다.
-     * 없는 ID는 결과에서 빠지고, 상태(STOPPED·DELETED 등)는 호출한 쪽이 판단한다.
+     * 상품 여러 개의 현재 정보. 장바구니 담기·조회와 주문 생성에 쓴다.
+     * 삭제된 상품도 결과에 포함하고(status = DELETED, saleable = false), 없는 ID만 빠진다.
+     * 판매 가능 여부는 saleable로 판단한다. 결과 순서는 보장하지 않는다.
      */
     List<ProductSnapshotDto> getProducts(Collection<Long> productIds);
 
     /**
      * 주문 생성 시 재고 차감(ORDER_DEDUCT). 호출한 쪽 트랜잭션에 참여한다.
+     * 주문 항목을 저장해 orderItemId가 생긴 뒤 호출한다.
      * 데드락을 막기 위해 상품 ID 오름차순으로 잠근다.
-     * 실패: 409 OUT_OF_STOCK, 409 PRODUCT_NOT_ON_SALE (하나라도 실패하면 전체 롤백)
+     * 실패: 400 OUT_OF_STOCK, 409 PRODUCT_NOT_ON_SALE(SOLD_OUT·STOPPED·DELETED·카테고리 사용 중지) (하나라도 실패하면 전체 롤백)
      * 재고가 0이 되면 SOLD_OUT으로 바꾼다.
+     * 이미 차감한 주문 항목으로 다시 호출하면 아무것도 하지 않고 정상 종료한다.
      */
     void deductStock(List<StockChangeDto> items);
 
     /**
      * 재고 복원. 주문 취소·만료·판매 중지 취소는 ORDER_RESTORE, 반품 승인은 RETURN_RESTORE.
-     * SOLD_OUT은 ON_SALE로 바꾸고, STOPPED는 재고만 늘린다. DELETED는 409 PRODUCT_DELETED.
+     * SOLD_OUT은 ON_SALE로 바꾸고, STOPPED는 재고만 늘린다.
+     * DELETED는 ORDER_RESTORE만 재고를 늘리고, RETURN_RESTORE면 409 PRODUCT_DELETED
+     * (주문 컨텍스트가 반품 승인에서 삭제된 상품을 미리 거른다).
+     * 같은 주문 항목·사유로 다시 호출하면 아무것도 하지 않고 정상 종료한다.
      */
     void restoreStock(List<StockChangeDto> items, StockRestoreReason reason);
 
@@ -121,19 +139,25 @@ public interface ProductApi {
 ```java
 package com.backend.shared.product.dto;
 
+/**
+ * saleable = ON_SALE이고 카테고리가 사용 중. 상품 자체 조건만 본다.
+ * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 orderable로 최종 판단한다.
+ * unsaleableReason은 saleable이면 null.
+ */
 public record ProductSnapshotDto(Long productId, Long sellerId, String name, long price,
-                                 int stock, ProductStatus status, String thumbnailUrl) {
-    public boolean isOrderable() { return status == ProductStatus.ON_SALE; }
-}
+                                 int stock, ProductStatus status, boolean saleable,
+                                 ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { }
 
-/** orderItemId는 재고 이력에 남길 주문 항목 (주문 생성 시점에 아직 없으면 null) */
-public record StockChangeDto(Long productId, int quantity, Long orderItemId) { }
+/** 주문 항목 한 줄. orderId·orderItemId는 재고 이력에 남고 중복 처리를 막는 기준이 된다. quantity는 1 이상 */
+public record StockChangeDto(Long orderId, Long orderItemId, Long productId, int quantity) { }
 
 public enum ProductStatus { ON_SALE, SOLD_OUT, STOPPED, DELETED }
+public enum ProductUnsaleableReason { SOLD_OUT, STOPPED, DELETED, CATEGORY_INACTIVE }
 public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 ```
 
-- 정할 것: 주문 생성 시 재고를 먼저 차감하면 `orderItemId`가 아직 없습니다. 주문을 먼저 저장(flush)한 뒤 차감할지, 이력에 `orderId`만 남길지 유진·은정이 정합니다.
+- 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
+- 구현 상태: `getProducts`·`deductStock`·`restoreStock`은 `ProductApiAdapter`에 임시 구현이 있습니다(임의 ID에 판매 중인 임시 상품 반환, 재고 변경 없음).
 
 ## 4. order
 
@@ -196,9 +220,6 @@ package com.backend.shared.payment.out;
 
 public interface PaymentApi {
 
-    /** 지갑 생성(잔액 0). 회원 가입 트랜잭션에 참여한다. 이미 있으면 아무것도 하지 않는다 */
-    void createWallet(Long memberId);
-
     /** 잔액과 홀딩 중 금액. 지갑이 없으면 404 WALLET_NOT_FOUND */
     WalletSummaryDto getWallet(Long memberId);
 
@@ -256,6 +277,7 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
 | `OrderReturnedEvent` | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
+| `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (`@EventListener`, 가입 트랜잭션 안에서 처리) | `wallet.member_id` 유니크, 이미 있으면 무시 |
 
 - 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다.
 
@@ -325,7 +347,7 @@ public interface SettlementApi {
 
 ## 9. 정할 것
 
-- [ ] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
+- [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
 - [x] 결제 `PROCESSING`은 일단 두고, 쓰지 않으면 2주차에 제거 (지은)
 - [x] 판매자의 회원 탈퇴: 판매자는 판매자 철회 완료(WITHDRAWN) 후에만 회원 탈퇴할 수 있다. 철회 승인 시점에 진행 중인 판매(`OrderApi.hasActiveSales`)와 미정산 금액(`SettlementApi.getUnsettledAmount`)이 없어야 한다. 탈퇴 후 정산금이 탈퇴 회원 지갑으로 들어가는 것을 막기 위함 (시연·지은·은정·다은)
