@@ -126,7 +126,9 @@ class ApiV1AuthControllerTest {
                     {"email": "new@palette.com", "password": "%s", "name": "홍길동", "verificationToken": "verified-token"}
                     """.formatted(password))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.data.fieldErrors[0].field").value("password"))
+                    .andExpect(jsonPath("$.data.fieldErrors[0].rejectedValue").doesNotExist());
         }
 
         verify(memberFacade, never()).signUp(anyString(), anyString(), anyString(), anyString());

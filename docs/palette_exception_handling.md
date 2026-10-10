@@ -35,7 +35,7 @@ HTTP {상태} + RsData { "resultCode": "{상태}-{오류 이름}", "msg": "...",
 
 // 입력 검증 실패 (400)
 { "resultCode": "400-VALIDATION_FAILED", "msg": "입력값이 올바르지 않습니다.",
-  "data": { "fieldErrors": [ { "field": "quantity", "rejectedValue": "120", "reason": "1~99 사이여야 합니다." } ] } }
+  "data": { "fieldErrors": [ { "field": "quantity", "reason": "1~99 사이여야 합니다." } ] } }
 ```
 
 | 필드 | 성공 | 실패 |
@@ -122,7 +122,7 @@ catch (RestClientException e) {
 | 발생 상황 | 응답 | 비고 |
 | --- | --- | --- |
 | `DomainException` | 예외에 담긴 코드 그대로 | 4xx는 INFO 한 줄, 5xx는 ERROR + stack trace |
-| `@Valid @RequestBody` 검증 실패 | `400-VALIDATION_FAILED` | `data.fieldErrors`에 field·rejectedValue·reason |
+| `@Valid @RequestBody` 검증 실패 | `400-VALIDATION_FAILED` | `data.fieldErrors`에 field·reason (입력값은 민감 정보 노출 방지를 위해 담지 않음) |
 | `@RequestParam`·`@PathVariable` 제약 검증 실패 | `400-VALIDATION_FAILED` | `data`는 `null` |
 | JSON 파싱 실패, 파라미터 타입 불일치, 필수 파라미터 누락, 지원하지 않는 Content-Type | `400-INVALID_REQUEST` | |
 | 필수 헤더 누락 (`@RequestHeader`) | `400-HEADER_REQUIRED` | `data.header`에 헤더 이름 |
