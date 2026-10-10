@@ -18,10 +18,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import com.backend.boundedContext.member.out.EmailVerificationStore;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
-import com.backend.shared.payment.out.PaymentApi;
+import com.backend.boundedContext.payment.app.PaymentFacade;
 
 /**
- * 회원 가입 → 지갑 생성이 한 트랜잭션으로 묶이는지 확인한다. 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 회원 가입 → 가입 완료 이벤트 → 지갑 생성이 한 트랜잭션으로 묶이는지 확인한다. 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
 @SpringBootTest
 class MemberSignUpIntegrationTest {
@@ -39,7 +39,7 @@ class MemberSignUpIntegrationTest {
     private EmailVerificationStore emailVerificationStore;
 
     @MockitoSpyBean
-    private PaymentApi paymentApi;
+    private PaymentFacade paymentFacade;
 
     private final String email = "signup-it-" + UUID.randomUUID() + "@palette.com";
 
@@ -70,7 +70,7 @@ class MemberSignUpIntegrationTest {
     @Test
     @DisplayName("지갑 생성이 실패하면 회원 저장도 함께 롤백된다")
     void signUp_rollsBackWhenWalletFails() {
-        willThrow(new IllegalStateException("지갑 생성 실패")).given(paymentApi).createWallet(anyLong());
+        willThrow(new IllegalStateException("지갑 생성 실패")).given(paymentFacade).createWallet(anyLong());
 
         assertThatThrownBy(() -> memberFacade.signUp(email, "palette123!", "홍길동", issueVerifiedToken()))
                 .isInstanceOf(IllegalStateException.class);

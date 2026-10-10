@@ -3,7 +3,6 @@ package com.backend.boundedContext.member.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -27,10 +26,11 @@ import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.out.EmailVerificationStore;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
-import com.backend.shared.payment.out.PaymentApi;
+import com.backend.shared.member.event.MemberSignedUpEvent;
 
 @ExtendWith(MockitoExtension.class)
 class MemberSignUpUseCaseTest {
@@ -53,13 +53,13 @@ class MemberSignUpUseCaseTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private PaymentApi paymentApi;
+    private EventPublisher eventPublisher;
 
     @InjectMocks
     private MemberSignUpUseCase memberSignUpUseCase;
 
     @Test
-    @DisplayName("인증된 이메일이면 암호화한 비밀번호로 USER·ACTIVE 회원을 저장하고 지갑을 만든 뒤 토큰을 지운다")
+    @DisplayName("인증된 이메일이면 암호화한 비밀번호로 USER·ACTIVE 회원을 저장하고 가입 완료 이벤트를 발행한 뒤 토큰을 지운다")
     void signUp_success() {
         given(emailVerificationStore.findVerifiedEmail(TOKEN)).willReturn(Optional.of(EMAIL));
         given(passwordEncoder.encode(PASSWORD)).willReturn("encoded");
@@ -81,7 +81,7 @@ class MemberSignUpUseCaseTest {
         assertThat(saved.getValue().getRole()).isEqualTo(MemberRole.USER);
         assertThat(saved.getValue().getStatus()).isEqualTo(MemberStatus.ACTIVE);
 
-        verify(paymentApi).createWallet(1L);
+        verify(eventPublisher).publish(new MemberSignedUpEvent(1L));
         verify(emailVerificationStore).deleteVerifiedToken(TOKEN);
     }
 
@@ -96,7 +96,7 @@ class MemberSignUpUseCaseTest {
                 .isEqualTo(MemberErrorCode.EMAIL_NOT_VERIFIED.resultCode());
 
         verify(memberRepository, never()).save(any());
-        verify(paymentApi, never()).createWallet(anyLong());
+        verify(eventPublisher, never()).publish(any());
     }
 
     @Test
@@ -140,6 +140,6 @@ class MemberSignUpUseCaseTest {
                 .extracting("resultCode")
                 .isEqualTo(MemberErrorCode.EMAIL_DUPLICATED.resultCode());
 
-        verify(paymentApi, never()).createWallet(anyLong());
+        verify(eventPublisher, never()).publish(any());
     }
 }

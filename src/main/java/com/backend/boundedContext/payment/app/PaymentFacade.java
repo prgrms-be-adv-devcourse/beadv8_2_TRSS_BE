@@ -11,7 +11,7 @@ public class PaymentFacade {
 
     private final PaymentCreateWalletUseCase paymentCreateWalletUseCase;
 
-    // 지갑 생성 (호출한 쪽 트랜잭션에 참여)
+    // 지갑 생성 (진행 중인 트랜잭션이 있으면 참여, 없으면 새로 시작)
     @Transactional
     public void createWallet(Long memberId) {
         paymentCreateWalletUseCase.createWallet(memberId);

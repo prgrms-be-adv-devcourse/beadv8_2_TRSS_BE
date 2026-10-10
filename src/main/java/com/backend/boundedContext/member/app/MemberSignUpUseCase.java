@@ -8,8 +8,9 @@ import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.out.EmailVerificationStore;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
-import com.backend.shared.payment.out.PaymentApi;
+import com.backend.shared.member.event.MemberSignedUpEvent;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,15 +22,15 @@ public class MemberSignUpUseCase {
     private final MemberRepository memberRepository;
     private final EmailVerificationStore emailVerificationStore;
     private final PasswordEncoder passwordEncoder;
-    private final PaymentApi paymentApi;
+    private final EventPublisher eventPublisher;
 
-    // 인증 완료 토큰 확인 후 회원 저장 및 예치금 지갑 생성
+    // 인증 완료 토큰 확인 후 회원 저장, 가입 완료 이벤트 발행 (결제 컨텍스트가 받아 지갑 생성)
     public Long signUp(String email, String password, String name, String verificationToken) {
         validateVerifiedEmail(email, verificationToken);
         memberCheckEmailUseCase.checkEmail(email);
 
         Member member = saveMember(Member.signUp(email, passwordEncoder.encode(password), name));
-        paymentApi.createWallet(member.getId());
+        eventPublisher.publish(new MemberSignedUpEvent(member.getId()));
 
         emailVerificationStore.deleteVerifiedToken(verificationToken);  // 같은 토큰으로 다시 가입하지 못하도록 사용한 토큰 삭제
         return member.getId();
