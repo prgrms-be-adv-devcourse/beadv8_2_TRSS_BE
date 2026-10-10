@@ -15,6 +15,7 @@ public enum MemberErrorCode implements ErrorCode {
     EMAIL_DUPLICATED(409, "이미 가입된 이메일입니다."),
     CODE_INVALID(400, "인증코드가 올바르지 않습니다."),
     CODE_EXPIRED(400, "인증코드가 만료되었습니다. 인증코드를 다시 요청해 주세요."),
+    CODE_ATTEMPTS_EXCEEDED(400, "인증 시도 횟수를 초과했습니다. 인증코드를 다시 요청해 주세요."),
     EMAIL_NOT_VERIFIED(400, "이메일 인증이 완료되지 않았습니다.");
 
     private final int status;

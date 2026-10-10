@@ -11,6 +11,7 @@ public class MemberFacade {
 
     private final MemberCheckEmailUseCase memberCheckEmailUseCase;
     private final MemberSendEmailCodeUseCase memberSendEmailCodeUseCase;
+    private final MemberVerifyEmailCodeUseCase memberVerifyEmailCodeUseCase;
 
     @Transactional(readOnly = true)
     public void checkEmail(String email) {
@@ -19,5 +20,10 @@ public class MemberFacade {
 
     public void sendEmailCode(String email) {
         memberSendEmailCodeUseCase.sendEmailCode(email);
+    }
+
+    // 인증 완료 토큰 반환
+    public String verifyEmailCode(String email, String code) {
+        return memberVerifyEmailCodeUseCase.verifyEmailCode(email, code);
     }
 }

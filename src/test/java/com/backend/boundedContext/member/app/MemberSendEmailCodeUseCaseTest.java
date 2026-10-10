@@ -46,7 +46,7 @@ class MemberSendEmailCodeUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        MemberPolicy memberPolicy = new MemberPolicy(5, 60, 30);
+        MemberPolicy memberPolicy = new MemberPolicy(5, 60, 30, 5);
         memberSendEmailCodeUseCase = new MemberSendEmailCodeUseCase(
                 memberCheckEmailUseCase, emailVerificationStore, memberMailSender, memberPolicy);
     }
@@ -62,6 +62,7 @@ class MemberSendEmailCodeUseCaseTest {
         verify(emailVerificationStore).saveCode(eq(EMAIL), savedCode.capture(), eq(Duration.ofMinutes(5)));
         assertThat(savedCode.getValue()).matches("\\d{6}");
         verify(memberMailSender).sendVerificationCode(EMAIL, savedCode.getValue(), 5);
+        verify(emailVerificationStore).deleteFailCount(EMAIL);
     }
 
     @Test

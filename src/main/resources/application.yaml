@@ -51,6 +51,7 @@ custom:
     emailCodeExpireMinutes: 5             # 이메일 인증코드 유효 시간(분)
     emailCodeResendSeconds: 60            # 인증코드 재발송 제한 간격(초)
     emailVerifiedTokenExpireMinutes: 30   # 인증 완료 토큰 유효 시간(분)
+    emailCodeMaxAttempts: 5               # 인증코드 확인 최대 실패 횟수
   order:
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
     autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)

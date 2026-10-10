@@ -33,6 +33,7 @@ public class MemberSendEmailCodeUseCase {
 
         String code = generateCode();
         emailVerificationStore.saveCode(email, code, memberPolicy.emailCodeTtl());
+        emailVerificationStore.deleteFailCount(email);  // 새 코드는 실패 횟수 0부터 시작
 
         try {
             memberMailSender.sendVerificationCode(email, code, memberPolicy.emailCodeTtl().toMinutes());
