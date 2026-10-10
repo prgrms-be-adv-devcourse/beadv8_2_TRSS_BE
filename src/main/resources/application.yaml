@@ -28,6 +28,19 @@ spring:
         default-page-size: 20
         max-page-size: 100
 
+  # 인증 메일 발송(Gmail SMTP). 계정 정보는 환경변수로 주입하고, 없으면 발송할 때만 실패한다.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
   batch:
     jdbc:
       initialize-schema: always
