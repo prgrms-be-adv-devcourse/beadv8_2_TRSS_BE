@@ -57,6 +57,15 @@ public class EmailVerificationStore {
         redisTemplate.opsForValue().set(VERIFIED_TOKEN_KEY + token, email, ttl);
     }
 
+    // 인증 완료 토큰으로 인증된 이메일 조회 (만료됐거나 없으면 empty)
+    public Optional<String> findVerifiedEmail(String token) {
+        return Optional.ofNullable(redisTemplate.opsForValue().get(VERIFIED_TOKEN_KEY + token));
+    }
+
+    public void deleteVerifiedToken(String token) {
+        redisTemplate.delete(VERIFIED_TOKEN_KEY + token);
+    }
+
     // 재발송 제한 (이미 걸려 있으면 false)
     public boolean lockResend(String email, Duration interval) {
         return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(RESEND_LOCK_KEY + email, "1", interval));
