@@ -46,7 +46,7 @@ class MemberSendEmailCodeUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        MemberPolicy memberPolicy = new MemberPolicy(5, 60, 30, 5);
+        MemberPolicy memberPolicy = new MemberPolicy(5, 60, 30, 5, 14, false, "Lax");
         memberSendEmailCodeUseCase = new MemberSendEmailCodeUseCase(
                 memberCheckEmailUseCase, emailVerificationStore, memberMailSender, memberPolicy);
     }
