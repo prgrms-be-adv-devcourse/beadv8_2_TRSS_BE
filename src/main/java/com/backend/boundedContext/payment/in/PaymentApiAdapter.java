@@ -1,18 +1,22 @@
 package com.backend.boundedContext.payment.in;
 
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.shared.payment.out.PaymentApi;
 
-import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 
-// TODO 결제 컨텍스트 구현 전 임시 구현. 지갑 생성이 구현되면 paymentFacade.createWallet(memberId) 호출로 바꾼다.
-@Slf4j
 @Component
+@RequiredArgsConstructor
 public class PaymentApiAdapter implements PaymentApi {
+
+    @Lazy   // 컨텍스트 간 순환 참조 방지
+    private final PaymentFacade paymentFacade;
 
     @Override
     public void createWallet(Long memberId) {
-        log.warn("[임시] 지갑 생성 미구현: memberId={}", memberId);
+        paymentFacade.createWallet(memberId);
     }
 }
