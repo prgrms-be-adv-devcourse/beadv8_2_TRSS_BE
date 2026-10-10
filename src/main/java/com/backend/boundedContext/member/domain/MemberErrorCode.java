@@ -11,6 +11,9 @@ import lombok.experimental.Accessors;
 @Accessors(fluent = true)
 public enum MemberErrorCode implements ErrorCode {
 
+    // 회원 조회
+    MEMBER_NOT_FOUND(404, "회원을 찾을 수 없습니다."),
+
     // 회원가입·이메일 인증
     EMAIL_DUPLICATED(409, "이미 가입된 이메일입니다."),
     CODE_INVALID(400, "인증코드가 올바르지 않습니다."),

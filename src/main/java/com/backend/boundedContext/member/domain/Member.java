@@ -3,6 +3,7 @@ package com.backend.boundedContext.member.domain;
 import java.time.LocalDateTime;
 
 import com.backend.global.jpa.entity.BaseIdAndTime;
+import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 
@@ -25,7 +26,7 @@ public class Member extends BaseIdAndTime {
     private String email;
 
     @Column(nullable = false)
-    private String password;    // BCrypt 해시
+    private String password;  // BCrypt 해시
 
     @Column(nullable = false, length = 20)
     private String name;
@@ -58,5 +59,10 @@ public class Member extends BaseIdAndTime {
 
     public boolean isActive() {
         return status == MemberStatus.ACTIVE;
+    }
+
+    // 다른 컨텍스트에 넘길 DTO
+    public MemberDto toDto() {
+        return new MemberDto(getId(), email, name, role, status);
     }
 }

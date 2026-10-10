@@ -236,7 +236,8 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 
 | 컨텍스트(담당) | resultCode | 언제 |
 | --- | --- | --- |
-| member (시연·지은) | 409-EMAIL_DUPLICATED | 가입된 이메일 |
+| member (시연·지은) | 404-MEMBER_NOT_FOUND | 회원 없음 (`MemberApi.getMember`) |
+| | 409-EMAIL_DUPLICATED | 가입된 이메일 |
 | | 400-CODE_INVALID / 400-CODE_EXPIRED | 인증코드 불일치 / 5분 경과 |
 | | 400-CODE_ATTEMPTS_EXCEEDED | 인증코드 5회 불일치 (코드 삭제, 재발송 필요) |
 | | 400-EMAIL_NOT_VERIFIED | 인증 없이 가입 시도 |
