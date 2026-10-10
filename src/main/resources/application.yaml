@@ -58,6 +58,9 @@ custom:
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
+    refreshTokenExpireDays: 14            # Refresh Token 유효 기간(일)
+    refreshCookieSecure: ${AUTH_COOKIE_SECURE:false}       # HTTPS 배포 시 true
+    refreshCookieSameSite: ${AUTH_COOKIE_SAME_SITE:Lax}    # 프론트·백엔드 도메인이 다르면 None (Secure 필수)
     emailCodeExpireMinutes: 5             # 이메일 인증코드 유효 시간(분)
     emailCodeResendSeconds: 60            # 인증코드 재발송 제한 간격(초)
     emailVerifiedTokenExpireMinutes: 30   # 인증 완료 토큰 유효 시간(분)
