@@ -10,9 +10,14 @@ import lombok.RequiredArgsConstructor;
 public class MemberFacade {
 
     private final MemberCheckEmailUseCase memberCheckEmailUseCase;
+    private final MemberSendEmailCodeUseCase memberSendEmailCodeUseCase;
 
     @Transactional(readOnly = true)
     public void checkEmail(String email) {
         memberCheckEmailUseCase.checkEmail(email);
+    }
+
+    public void sendEmailCode(String email) {
+        memberSendEmailCodeUseCase.sendEmailCode(email);
     }
 }
