@@ -68,15 +68,13 @@ package com.backend.shared.member.dto;
 public record MemberDto(Long id, String email, String name, MemberRole role, MemberStatus status) { }
 
 /** 계좌 정보는 넣지 않는다 (정산은 예치금 지갑으로 지급) */
-public record SellerDto(Long sellerId, Long memberId, String businessName,
-                        SellerCategory category, SellerStatus status) {
+public record SellerDto(Long sellerId, Long memberId, String businessName, SellerStatus status) {
     public boolean canSell() { return status == SellerStatus.APPROVED; }
 }
 
 public enum MemberRole { USER, SELLER, ADMIN }
 public enum MemberStatus { ACTIVE, INACTIVE, DELETED }
 public enum SellerStatus { PENDING, APPROVED, REJECTED, WITHDRAW_REQUESTED, WITHDRAWN }
-public enum SellerCategory { BEAUTY, CLOTHING }
 ```
 
 ### 이벤트
