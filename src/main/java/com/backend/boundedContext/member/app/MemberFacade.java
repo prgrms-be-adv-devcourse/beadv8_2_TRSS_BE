@@ -18,6 +18,9 @@ public class MemberFacade {
     private final MemberSendEmailCodeUseCase memberSendEmailCodeUseCase;
     private final MemberVerifyEmailCodeUseCase memberVerifyEmailCodeUseCase;
     private final MemberSignUpUseCase memberSignUpUseCase;
+    private final MemberLoginUseCase memberLoginUseCase;
+    private final MemberRefreshTokenUseCase memberRefreshTokenUseCase;
+    private final MemberLogoutUseCase memberLogoutUseCase;
     private final MemberSupport memberSupport;
     private final MemberApplySellerUseCase memberApplySellerUseCase;
     private final MemberGetMySellerUseCase memberGetMySellerUseCase;
@@ -60,5 +63,22 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public MySellerResponse getMySeller(Long memberId) {
         return memberGetMySellerUseCase.getMySeller(memberId);
+    }
+
+    // 로그인 (Access·Refresh Token 발급)
+    @Transactional(readOnly = true)
+    public AuthTokens login(String email, String password) {
+        return memberLoginUseCase.login(email, password);
+    }
+
+    // Access·Refresh Token 재발급 (Refresh Token 회전)
+    @Transactional(readOnly = true)
+    public AuthTokens refresh(String refreshToken) {
+        return memberRefreshTokenUseCase.refresh(refreshToken);
+    }
+
+    // 로그아웃 (Refresh Token 폐기)
+    public void logout(String refreshToken) {
+        memberLogoutUseCase.logout(refreshToken);
     }
 }

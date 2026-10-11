@@ -12,17 +12,26 @@ public class MemberPolicy {
     private final Duration emailCodeResendInterval;
     private final Duration emailVerifiedTokenTtl;
     private final int emailCodeMaxAttempts;
+    private final Duration refreshTokenTtl;
+    private final boolean refreshCookieSecure;
+    private final String refreshCookieSameSite;
 
     public MemberPolicy(
             @Value("${custom.member.emailCodeExpireMinutes}") long emailCodeExpireMinutes,
             @Value("${custom.member.emailCodeResendSeconds}") long emailCodeResendSeconds,
             @Value("${custom.member.emailVerifiedTokenExpireMinutes}") long emailVerifiedTokenExpireMinutes,
-            @Value("${custom.member.emailCodeMaxAttempts}") int emailCodeMaxAttempts
+            @Value("${custom.member.emailCodeMaxAttempts}") int emailCodeMaxAttempts,
+            @Value("${custom.member.refreshTokenExpireDays}") long refreshTokenExpireDays,
+            @Value("${custom.member.refreshCookieSecure}") boolean refreshCookieSecure,
+            @Value("${custom.member.refreshCookieSameSite}") String refreshCookieSameSite
     ) {
         this.emailCodeTtl = Duration.ofMinutes(emailCodeExpireMinutes);
         this.emailCodeResendInterval = Duration.ofSeconds(emailCodeResendSeconds);
         this.emailVerifiedTokenTtl = Duration.ofMinutes(emailVerifiedTokenExpireMinutes);
         this.emailCodeMaxAttempts = emailCodeMaxAttempts;
+        this.refreshTokenTtl = Duration.ofDays(refreshTokenExpireDays);
+        this.refreshCookieSecure = refreshCookieSecure;
+        this.refreshCookieSameSite = refreshCookieSameSite;
     }
 
     // 이메일 인증코드 유효 시간
@@ -43,5 +52,20 @@ public class MemberPolicy {
     // 인증코드 확인 최대 실패 횟수
     public int emailCodeMaxAttempts() {
         return emailCodeMaxAttempts;
+    }
+
+    // Refresh Token 유효 기간
+    public Duration refreshTokenTtl() {
+        return refreshTokenTtl;
+    }
+
+    // Refresh Token 쿠키 Secure 여부 (HTTPS 배포 시 true)
+    public boolean refreshCookieSecure() {
+        return refreshCookieSecure;
+    }
+
+    // Refresh Token 쿠키 SameSite (Lax / None)
+    public String refreshCookieSameSite() {
+        return refreshCookieSameSite;
     }
 }
