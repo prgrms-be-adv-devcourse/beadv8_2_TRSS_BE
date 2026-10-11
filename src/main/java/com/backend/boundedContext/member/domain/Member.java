@@ -57,6 +57,11 @@ public class Member extends BaseIdAndTime {
         return new Member(email, encodedPassword, name, MemberRole.ADMIN);
     }
 
+    // 개발용 시드 판매자 (실제 판매자 권한은 판매자 승인 시 부여)
+    public static Member seller(String email, String encodedPassword, String name) {
+        return new Member(email, encodedPassword, name, MemberRole.SELLER);
+    }
+
     public boolean isActive() {
         return status == MemberStatus.ACTIVE;
     }

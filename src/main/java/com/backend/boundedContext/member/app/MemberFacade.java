@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
+import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerApplyResponse;
@@ -20,7 +21,9 @@ import com.backend.shared.member.dto.MemberStatus;
 import com.backend.shared.member.dto.SellerDto;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemberFacade {
@@ -34,6 +37,8 @@ public class MemberFacade {
     private final MemberLogoutUseCase memberLogoutUseCase;
     private final MemberGetMembersUseCase memberGetMembersUseCase;
     private final MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
+    private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
+    private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
     private final MemberSupport memberSupport;
     private final MemberApplySellerUseCase memberApplySellerUseCase;
     private final MemberGetMySellerUseCase memberGetMySellerUseCase;
@@ -124,5 +129,23 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public AdminMemberDetailDto getMemberDetail(Long memberId) {
         return memberGetMemberDetailUseCase.getMemberDetail(memberId);
+    }
+
+    // 개발용 시드 회원 생성 (비밀번호가 없거나 회원이 이미 있으면 아무것도 하지 않음)
+    @Transactional
+    public void createSeedMembers(String password) {
+        if (password == null || password.isBlank()) {
+            log.info("시드 회원 비밀번호(MEMBER_SEED_PASSWORD)가 없어 회원 시드를 건너뜀");
+            return;
+        }
+        if (memberSupport.countMembers() > 0) return;
+
+        memberCreateSeedMembersUseCase.createSeedMembers(password);
+    }
+
+    // 내 정보 조회
+    @Transactional(readOnly = true)
+    public MyInfoDto getMyInfo(Long memberId) {
+        return memberGetMyInfoUseCase.getMyInfo(memberId);
     }
 }
