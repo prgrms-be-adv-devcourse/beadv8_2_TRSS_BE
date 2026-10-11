@@ -28,11 +28,10 @@ public class Seller extends BaseIdAndTime {
     public static final String UQ_ONGOING_BUSINESS_NUMBER = "uq_seller_ongoing_business_number";
 
     // 진행 중인 신청 상태(심사 중·판매 중·철회 심사 중). 반려·철회 완료는 끝난 신청이다
-    // 중복 검사 조회와 부분 유니크 인덱스 조건이 모두 이 목록을 쓴다
+    // 중복 검사 조회와 부분 유니크 인덱스 조건이 모두 이 목록을 사용한다
     public static final List<SellerStatus> ONGOING_STATUSES =
             List.of(SellerStatus.PENDING, SellerStatus.APPROVED, SellerStatus.WITHDRAW_REQUESTED);
 
-    // 같은 member 컨텍스트라 연관관계로 둔다. member_id에 외래키가 생겨 없는 회원으로는 저장되지 않는다
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
@@ -99,23 +98,16 @@ public class Seller extends BaseIdAndTime {
         return seller;
     }
 
-    /**
-     * 다른 컨텍스트에 넘길 때 쓴다. 계좌 정보는 넣지 않는다.
-     */
     public SellerDto toDto() {
         return new SellerDto(getId(), member.getId(), businessName, status);
     }
 
-    /**
-     * 진행 중인 신청인지. REJECTED·WITHDRAWN은 끝난 신청이라 중복 검사에서 빠진다.
-     */
-    public boolean isOngoing() {
-        return ONGOING_STATUSES.contains(status);
+    // 계좌번호는 끝 4자리만 보여 준다 (예: **********3456)
+    public String getMaskedAccountNumber() {
+        int visible = Math.min(4, accountNumber.length());
+        return "*".repeat(accountNumber.length() - visible) + accountNumber.substring(accountNumber.length() - visible);
     }
 
-    /**
-     * 하이픈·공백 등을 빼고 숫자만 남긴다. "123-45-67890"과 "1234567890"을 같은 값으로 저장하기 위함.
-     */
     public static String digitsOnly(String value) {
         return value.replaceAll("\\D", "");
     }

@@ -3,6 +3,7 @@ package com.backend.boundedContext.member.app;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerApplyResponse;
 import com.backend.shared.member.dto.MemberDto;
@@ -19,6 +20,7 @@ public class MemberFacade {
     private final MemberSignUpUseCase memberSignUpUseCase;
     private final MemberSupport memberSupport;
     private final MemberApplySellerUseCase memberApplySellerUseCase;
+    private final MemberGetMySellerUseCase memberGetMySellerUseCase;
 
     // 가입 가능한 이메일인지 확인
     @Transactional(readOnly = true)
@@ -52,5 +54,11 @@ public class MemberFacade {
     @Transactional
     public SellerApplyResponse applySeller(Long memberId, SellerApplyRequest request) {
         return memberApplySellerUseCase.apply(memberId, request);
+    }
+
+    // 내 판매자 정보·신청 상태 조회 (계좌는 끝 4자리)
+    @Transactional(readOnly = true)
+    public MySellerResponse getMySeller(Long memberId) {
+        return memberGetMySellerUseCase.getMySeller(memberId);
     }
 }
