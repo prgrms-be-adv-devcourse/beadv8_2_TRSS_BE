@@ -199,7 +199,43 @@ public class SettlementEventListener {
   ```
   - `AuthMember(memberId, role)`는 `global/security`에 있고, JWT 필터가 Access Token에서 꺼내 넣습니다.
   - 판매자 승인 상태처럼 바뀔 수 있는 값은 토큰에 없으므로, 판매 기능은 요청마다 DB에서 다시 확인합니다.
-  - 컨트롤러 테스트(`@WebMvcTest`)는 `@Import({SecurityConfig.class, JwtTokenProvider.class, JwtAuthenticationEntryPoint.class, JwtAccessDeniedHandler.class, SecurityErrorResponseWriter.class})`를 붙이고, `JwtTokenProvider.createAccessToken(memberId, role)`로 만든 토큰을 `Authorization: Bearer` 헤더에 넣어 호출합니다. 테스트 의존성 `spring-boot-starter-security-test`가 필요합니다.
+  - **컨트롤러 테스트(`@WebMvcTest`)에서 Security 쓰기**
+    - `@WebMvcTest`는 컨트롤러 주변만 띄우므로 Security 설정과 JWT 빈 5개를 `@Import`로 넣습니다.
+    - 토큰은 `JwtTokenProvider.createAccessToken(memberId, role)`로 만들어 `Authorization: Bearer` 헤더에 넣습니다.
+    - 테스트 의존성 `spring-boot-starter-security-test`가 필요합니다(`build.gradle.kts`에 추가되어 있음).
+    ```java
+    @WebMvcTest(ApiV1OrderController.class)
+    @Import({SecurityConfig.class, JwtTokenProvider.class, JwtAuthenticationEntryPoint.class,
+            JwtAccessDeniedHandler.class, SecurityErrorResponseWriter.class})
+    class ApiV1OrderControllerTest {
+
+        @Autowired
+        private MockMvc mockMvc;
+
+        @Autowired
+        private JwtTokenProvider jwtTokenProvider;
+
+        @MockitoBean
+        private OrderFacade orderFacade;
+
+        @Test
+        void getOrders() throws Exception {
+            String token = jwtTokenProvider.createAccessToken(1L, MemberRole.USER);   // 판매자·관리자는 SELLER·ADMIN
+
+            mockMvc.perform(get("/api/v1/orders").header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void getOrders_unauthorized() throws Exception {
+            mockMvc.perform(get("/api/v1/orders"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+        }
+    }
+    ```
+    - 컨트롤러가 `@AuthenticationPrincipal AuthMember`로 받는 값은 토큰을 만들 때 넣은 `memberId`, `role`입니다.
+    - 컨트롤러가 다른 빈(`@Component`)을 주입받으면 그 빈도 `@Import`에 추가하거나 `@MockitoBean`으로 대신합니다.
 
 ## 8. 예외
 
