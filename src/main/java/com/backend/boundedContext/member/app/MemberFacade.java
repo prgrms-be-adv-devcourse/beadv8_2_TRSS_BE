@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
@@ -32,6 +33,7 @@ public class MemberFacade {
     private final MemberRefreshTokenUseCase memberRefreshTokenUseCase;
     private final MemberLogoutUseCase memberLogoutUseCase;
     private final MemberGetMembersUseCase memberGetMembersUseCase;
+    private final MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
     private final MemberSupport memberSupport;
     private final MemberApplySellerUseCase memberApplySellerUseCase;
     private final MemberGetMySellerUseCase memberGetMySellerUseCase;
@@ -116,5 +118,11 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberRole role, Pageable pageable) {
         return memberGetMembersUseCase.getMembers(email, status, role, pageable);
+    }
+
+    // 관리자 회원 상세
+    @Transactional(readOnly = true)
+    public AdminMemberDetailDto getMemberDetail(Long memberId) {
+        return memberGetMemberDetailUseCase.getMemberDetail(memberId);
     }
 }
