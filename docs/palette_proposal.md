@@ -51,7 +51,7 @@
 
 **판매자**
 
-- 사업자번호·카테고리(뷰티/의류)·상호명·연락처·정산 계좌를 받아 신청하고, 관리자가 승인하면 기존 계정에 SELLER 권한이 더해진다
+- 사업자번호·상호명·연락처·정산 계좌를 받아 신청하고, 관리자가 승인하면 기존 계정에 SELLER 권한이 더해진다
 - 상태는 PENDING → APPROVED/REJECTED, 철회는 WITHDRAW_REQUESTED → WITHDRAWN이다
 - 회원·사업자번호당 활성 신청은 1건만 허용하고, 판매자 기능은 요청마다 DB의 승인 상태를 다시 확인한다
 - 판매 기능은 role이 SELLER이고 판매자 상태가 APPROVED일 때만 쓸 수 있다
@@ -226,7 +226,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
-| /sellers | POST | USER | 판매자 신청(사업자번호, 카테고리, 상호명, 휴대폰, 정산 계좌) | 400 VALIDATION_FAILED, 409 SELLER_DUPLICATED |
+| /sellers | POST | USER | 판매자 신청(사업자번호, 상호명, 휴대폰, 정산 계좌) | 400 VALIDATION_FAILED, 409 SELLER_ALREADY_APPLIED, 409 BUSINESS_NUMBER_DUPLICATED |
 | /sellers/me | GET | USER | 내 판매자 정보·신청 상태(계좌는 끝 4자리) | 404 |
 | /seller/me | PATCH | SELLER | 상호명·연락처·정산 계좌 수정 | 403 |
 | /seller/me/withdrawal | POST | SELLER | 판매자 철회 요청 | 409 UNSETTLED_AMOUNT_EXISTS |

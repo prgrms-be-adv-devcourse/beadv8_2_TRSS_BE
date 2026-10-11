@@ -21,6 +21,11 @@ public enum MemberErrorCode implements ErrorCode {
     CODE_ATTEMPTS_EXCEEDED(400, "인증 시도 횟수를 초과했습니다. 인증코드를 다시 요청해 주세요."),
     EMAIL_NOT_VERIFIED(400, "이메일 인증이 완료되지 않았습니다."),
 
+    // 판매자
+    SELLER_NOT_FOUND(404, "판매자 신청 내역이 없습니다."),
+    SELLER_ALREADY_APPLIED(409, "이미 진행 중인 판매자 신청이 있습니다."),
+    BUSINESS_NUMBER_DUPLICATED(409, "이미 다른 판매자가 사용 중인 사업자등록번호입니다."),
+
     // 로그인
     LOGIN_FAILED(401, "이메일 또는 비밀번호가 올바르지 않습니다.");
 
