@@ -3,6 +3,7 @@ package com.backend.boundedContext.member.app;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.shared.member.dto.MemberDto;
 
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class MemberFacade {
     private final MemberRefreshTokenUseCase memberRefreshTokenUseCase;
     private final MemberLogoutUseCase memberLogoutUseCase;
     private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
+    private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
     private final MemberSupport memberSupport;
 
     // 가입 가능한 이메일인지 확인
@@ -78,5 +80,11 @@ public class MemberFacade {
         if (memberSupport.countMembers() > 0) return;
 
         memberCreateSeedMembersUseCase.createSeedMembers(password);
+    }
+
+    // 내 정보 조회
+    @Transactional(readOnly = true)
+    public MyInfoDto getMyInfo(Long memberId) {
+        return memberGetMyInfoUseCase.getMyInfo(memberId);
     }
 }
