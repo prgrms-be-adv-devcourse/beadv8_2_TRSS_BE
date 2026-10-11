@@ -65,6 +65,10 @@ custom:
     emailCodeResendSeconds: 60            # 인증코드 재발송 제한 간격(초)
     emailVerifiedTokenExpireMinutes: 30   # 인증 완료 토큰 유효 시간(분)
     emailCodeMaxAttempts: 5               # 인증코드 확인 최대 실패 횟수
+    # 정산 계좌번호 암호화 키. 기본값은 개발용이고, 운영은 환경변수로 덮어쓴다.
+    accountEncryption:
+      password: ${ACCOUNT_ENCRYPTION_PASSWORD:palette-dev-account-key}
+      salt: ${ACCOUNT_ENCRYPTION_SALT:5c0744940b5c369b}
   order:
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
     autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
