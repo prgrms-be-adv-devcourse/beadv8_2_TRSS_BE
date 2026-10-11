@@ -24,7 +24,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.app.MemberFacade;
+import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
+import com.backend.boundedContext.member.domain.MemberErrorCode;
+import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.SellerStatus;
 import com.backend.global.page.PageResponse;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
@@ -99,5 +103,38 @@ class ApiV1AdminMemberControllerTest {
         mockMvc.perform(get("/api/v1/admin/users").param("status", "SLEEPING").header("Authorization", bearer(MemberRole.ADMIN)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("회원 상세: 판매자 상태와 지갑 잔액을 함께 돌려준다")
+    void getMemberDetail_admin() throws Exception {
+        given(memberFacade.getMemberDetail(2L)).willReturn(new AdminMemberDetailDto(
+                2L, "seller@palette.test", "판매자", MemberRole.SELLER, MemberStatus.ACTIVE,
+                LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED, new AdminMemberDetailDto.Wallet(30_000L, 0L)));
+
+        mockMvc.perform(get("/api/v1/admin/users/2").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.memberId").value(2))
+                .andExpect(jsonPath("$.data.sellerStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.data.wallet.balance").value(30000))
+                .andExpect(jsonPath("$.data.wallet.heldAmount").value(0));
+    }
+
+    @Test
+    @DisplayName("회원 상세: 없는 회원이면 404 MEMBER_NOT_FOUND")
+    void getMemberDetail_notFound() throws Exception {
+        given(memberFacade.getMemberDetail(99L)).willThrow(new DomainException(MemberErrorCode.MEMBER_NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/admin/users/99").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.resultCode").value("404-MEMBER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("회원 상세: 관리자가 아니면 403 FORBIDDEN")
+    void getMemberDetail_forbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users/2").header("Authorization", bearer(MemberRole.USER)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
     }
 }
