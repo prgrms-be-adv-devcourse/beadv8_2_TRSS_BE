@@ -35,7 +35,7 @@ HTTP {상태} + RsData { "resultCode": "{상태}-{오류 이름}", "msg": "...",
 
 // 입력 검증 실패 (400)
 { "resultCode": "400-VALIDATION_FAILED", "msg": "입력값이 올바르지 않습니다.",
-  "data": { "fieldErrors": [ { "field": "quantity", "rejectedValue": "120", "reason": "1~99 사이여야 합니다." } ] } }
+  "data": { "fieldErrors": [ { "field": "quantity", "reason": "1~99 사이여야 합니다." } ] } }
 ```
 
 | 필드 | 성공 | 실패 |
@@ -122,7 +122,7 @@ catch (RestClientException e) {
 | 발생 상황 | 응답 | 비고 |
 | --- | --- | --- |
 | `DomainException` | 예외에 담긴 코드 그대로 | 4xx는 INFO 한 줄, 5xx는 ERROR + stack trace |
-| `@Valid @RequestBody` 검증 실패 | `400-VALIDATION_FAILED` | `data.fieldErrors`에 field·rejectedValue·reason |
+| `@Valid @RequestBody` 검증 실패 | `400-VALIDATION_FAILED` | `data.fieldErrors`에 field·reason (입력값은 민감 정보 노출 방지를 위해 담지 않음) |
 | `@RequestParam`·`@PathVariable` 제약 검증 실패 | `400-VALIDATION_FAILED` | `data`는 `null` |
 | JSON 파싱 실패, 파라미터 타입 불일치, 필수 파라미터 누락, 지원하지 않는 Content-Type | `400-INVALID_REQUEST` | |
 | 필수 헤더 누락 (`@RequestHeader`) | `400-HEADER_REQUIRED` | `data.header`에 헤더 이름 |
@@ -236,8 +236,10 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 
 | 컨텍스트(담당) | resultCode | 언제 |
 | --- | --- | --- |
-| member (시연·지은) | 409-EMAIL_DUPLICATED | 가입된 이메일 |
+| member (시연·지은) | 404-MEMBER_NOT_FOUND | 회원 없음 (`MemberApi.getMember`) |
+| | 409-EMAIL_DUPLICATED | 가입된 이메일 |
 | | 400-CODE_INVALID / 400-CODE_EXPIRED | 인증코드 불일치 / 5분 경과 |
+| | 400-CODE_ATTEMPTS_EXCEEDED | 인증코드 5회 불일치 (코드 삭제, 재발송 필요) |
 | | 400-EMAIL_NOT_VERIFIED | 인증 없이 가입 시도 |
 | | 401-LOGIN_FAILED | 이메일·비밀번호 불일치(어느 쪽인지 알려 주지 않음) |
 | | 409-WITHDRAWAL_NOT_ALLOWED | 진행 중 주문·미정산·잔액이 남음 (`data.reasons`) |

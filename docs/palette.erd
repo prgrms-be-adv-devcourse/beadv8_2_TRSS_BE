@@ -138,7 +138,6 @@
           "VqjOQAZF5NlOu0mXWhtZd",
           "05oxCkiYCuZ1hMtYn_IKh",
           "VH_XFI_Un4HDdxzOSgKwX",
-          "iD9GcFkBJSvzlZmOwf5kX",
           "0_923FM-jn1UBmkFAXvZ4",
           "K0vIglwIO_akSzIOHbc3x",
           "R7B1NZNvLPxMIRlI9d663",
@@ -150,7 +149,6 @@
           "VqjOQAZF5NlOu0mXWhtZd",
           "05oxCkiYCuZ1hMtYn_IKh",
           "VH_XFI_Un4HDdxzOSgKwX",
-          "iD9GcFkBJSvzlZmOwf5kX",
           "0_923FM-jn1UBmkFAXvZ4",
           "K0vIglwIO_akSzIOHbc3x",
           "R7B1NZNvLPxMIRlI9d663",
@@ -1171,26 +1169,6 @@
           "widthName": 60,
           "widthComment": 60,
           "widthDataType": 83,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791448370854,
-          "createAt": 1791448370854
-        }
-      },
-      "iD9GcFkBJSvzlZmOwf5kX": {
-        "id": "iD9GcFkBJSvzlZmOwf5kX",
-        "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
-        "name": "email_verified",
-        "comment": "이메일 인증 여부",
-        "dataType": "BOOLEAN",
-        "default": "FALSE",
-        "options": 8,
-        "ui": {
-          "keys": 0,
-          "widthName": 81,
-          "widthComment": 81,
-          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {

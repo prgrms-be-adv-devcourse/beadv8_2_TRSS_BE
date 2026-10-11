@@ -8,7 +8,7 @@
 
 | 컨텍스트 | 담당 | 제공하는 Api | 발행하는 이벤트 |
 | --- | --- | --- | --- |
-| member | 시연·지은 | `MemberApi` | - |
+| member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent` |
 | product | 유진 | `ProductApi` | - |
 | order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
@@ -20,7 +20,7 @@
 
 | 시나리오 | 시작 | 호출 순서 | 방식 |
 | --- | --- | --- | --- |
-| 회원 가입 | member | `PaymentApi.createWallet(memberId)` | 동기, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로) |
+| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로). Outbox 도입 시 별도 Tx |
 | 장바구니 조회 | order | `ProductApi.getProducts(ids)` → 현재 가격·상태로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | `ProductApi.getProducts` → `MemberApi.getSellers`(판매자명 스냅샷) → `ProductApi.deductStock` | 동기, 같은 Tx |
@@ -78,6 +78,18 @@ public enum MemberStatus { ACTIVE, INACTIVE, DELETED }
 public enum SellerStatus { PENDING, APPROVED, REJECTED, WITHDRAW_REQUESTED, WITHDRAWN }
 public enum SellerCategory { BEAUTY, CLOTHING }
 ```
+
+### 이벤트
+
+```java
+package com.backend.shared.member.event;
+
+/** 회원 가입 완료. 결제가 받아 잔액 0인 지갑을 생성한다 */
+public record MemberSignedUpEvent(Long memberId) { }
+```
+
+- 지금은 `@EventListener`로 가입 트랜잭션 안에서 처리해, 지갑 생성이 실패하면 가입도 롤백된다.
+- Outbox 도입 후에는 폴러가 트랜잭션 밖에서 발행하고, 결제의 `PaymentFacade.createWallet`이 새 트랜잭션에서 지갑을 만든다. 리스너 코드는 바뀌지 않는다.
 
 ## 3. product
 
@@ -208,9 +220,6 @@ package com.backend.shared.payment.out;
 
 public interface PaymentApi {
 
-    /** 지갑 생성(잔액 0). 회원 가입 트랜잭션에 참여한다. 이미 있으면 아무것도 하지 않는다 */
-    void createWallet(Long memberId);
-
     /** 잔액과 홀딩 중 금액. 지갑이 없으면 404 WALLET_NOT_FOUND */
     WalletSummaryDto getWallet(Long memberId);
 
@@ -268,6 +277,7 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
 | `OrderReturnedEvent` | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
+| `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (`@EventListener`, 가입 트랜잭션 안에서 처리) | `wallet.member_id` 유니크, 이미 있으면 무시 |
 
 - 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다.
 

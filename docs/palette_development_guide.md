@@ -129,7 +129,7 @@ public class ProductApiAdapter implements ProductApi {
 
 ```mermaid
 flowchart LR
-    member -->|createWallet, getWallet| payment
+    member -->|getWallet| payment
     member -->|stopAllBySeller| product
     member -->|hasActiveOrders| order
     member -->|getUnsettledAmount, holdSeller| settlement
@@ -142,9 +142,10 @@ flowchart LR
     settlement -->|getSeller| member
     order -. OrderReturnedEvent .-> payment
     order -. OrderConfirmedEvent .-> settlement
+    member -. MemberSignedUpEvent .-> payment
 ```
 
-실선은 동기 Api, 점선은 Outbox 이벤트입니다. 결제(payment)는 다른 컨텍스트를 호출하지 않습니다.
+실선은 동기 Api, 점선은 이벤트입니다(주문 이벤트는 Outbox 대상, `MemberSignedUpEvent`는 Outbox 도입 전까지 같은 트랜잭션에서 처리). 결제(payment)는 다른 컨텍스트를 호출하지 않습니다.
 
 ### 6.4 이벤트 규칙
 
@@ -169,6 +170,7 @@ public class SettlementEventListener {
 
 - 이벤트는 불변 record로 만들고, 받는 쪽이 다시 조회하지 않아도 되도록 필요한 값을 모두 담습니다.
 - 리스너는 `AFTER_COMMIT` + `REQUIRES_NEW`를 쓰고 Facade 한 줄만 호출합니다.
+  - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다. Outbox 도입 후에도 리스너는 그대로 둡니다.
 - **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, `payment_refund.payment_id`)으로 중복을 막습니다.
 - 발행은 엔티티의 `publishEvent(...)` 또는 `EventPublisher.publish(...)`로 합니다.
 

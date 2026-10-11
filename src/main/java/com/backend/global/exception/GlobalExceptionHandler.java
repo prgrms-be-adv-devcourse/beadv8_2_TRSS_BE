@@ -35,10 +35,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<RsData<Object>> handleValidation(MethodArgumentNotValidException e) {
+        // 입력값(rejectedValue)은 비밀번호 등 민감한 값이 노출될 수 있어 응답에 담지 않음
         List<Map<String, String>> fieldErrors = e.getBindingResult().getFieldErrors().stream()
                 .map(f -> Map.of(
                         "field", f.getField(),
-                        "rejectedValue", String.valueOf(f.getRejectedValue()),
                         "reason", Objects.requireNonNullElse(f.getDefaultMessage(), "")))
                 .toList();
         return toResponse(GlobalErrorCode.VALIDATION_FAILED, Map.of("fieldErrors", fieldErrors));
