@@ -5,6 +5,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -21,6 +23,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.RefreshTokenStore;
+import com.jayway.jsonpath.JsonPath;
 
 import jakarta.servlet.http.Cookie;
 
@@ -42,7 +46,13 @@ class AuthFlowIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private RefreshTokenStore refreshTokenStore;
+
     private final String email = "auth-it-" + UUID.randomUUID() + "@palette.com";
+
+    // 테스트 중 발급된 Refresh Token (끝나면 Redis에서 지운다)
+    private final List<String> issuedRefreshTokens = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -51,21 +61,33 @@ class AuthFlowIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        issuedRefreshTokens.forEach(refreshTokenStore::delete);
         memberRepository.findByEmail(email).ifPresent(memberRepository::delete);
     }
 
     private MvcResult login() throws Exception {
-        return mockMvc.perform(post("/api/v1/auth/login")
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "%s", "password": "%s"}
                                 """.formatted(email, PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn();
+        recordIssuedRefreshToken(result);
+        return result;
     }
 
     private MvcResult refresh(String refreshToken) throws Exception {
-        return mockMvc.perform(post("/api/v1/auth/refresh").cookie(new Cookie("refreshToken", refreshToken))).andReturn();
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/refresh").cookie(new Cookie("refreshToken", refreshToken))).andReturn();
+        recordIssuedRefreshToken(result);
+        return result;
+    }
+
+    private void recordIssuedRefreshToken(MvcResult result) {
+        Cookie cookie = result.getResponse().getCookie("refreshToken");
+        if (cookie != null && !cookie.getValue().isBlank()) {
+            issuedRefreshTokens.add(cookie.getValue());
+        }
     }
 
     @Test
@@ -88,7 +110,7 @@ class AuthFlowIntegrationTest {
     void logoutRevokesRefreshToken() throws Exception {
         MvcResult loggedIn = login();
         String refreshToken = loggedIn.getResponse().getCookie("refreshToken").getValue();
-        String accessToken = com.jayway.jsonpath.JsonPath.read(loggedIn.getResponse().getContentAsString(), "$.data.accessToken");
+        String accessToken = JsonPath.read(loggedIn.getResponse().getContentAsString(), "$.data.accessToken");
 
         mockMvc.perform(post("/api/v1/auth/logout")
                         .header("Authorization", "Bearer " + accessToken)
