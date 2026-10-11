@@ -6,7 +6,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.backend.shared.member.dto.MemberDto;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemberFacade {
@@ -18,6 +20,7 @@ public class MemberFacade {
     private final MemberLoginUseCase memberLoginUseCase;
     private final MemberRefreshTokenUseCase memberRefreshTokenUseCase;
     private final MemberLogoutUseCase memberLogoutUseCase;
+    private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
     private final MemberSupport memberSupport;
 
     // 가입 가능한 이메일인지 확인
@@ -63,5 +66,17 @@ public class MemberFacade {
     // 로그아웃 (Refresh Token 폐기)
     public void logout(String refreshToken) {
         memberLogoutUseCase.logout(refreshToken);
+    }
+
+    // 개발용 시드 회원 생성 (비밀번호가 없거나 회원이 이미 있으면 아무것도 하지 않음)
+    @Transactional
+    public void createSeedMembers(String password) {
+        if (password == null || password.isBlank()) {
+            log.info("시드 회원 비밀번호(MEMBER_SEED_PASSWORD)가 없어 회원 시드를 건너뜀");
+            return;
+        }
+        if (memberSupport.countMembers() > 0) return;
+
+        memberCreateSeedMembersUseCase.createSeedMembers(password);
     }
 }
