@@ -189,9 +189,53 @@ public class SettlementEventListener {
   - 실패: `{HTTP 상태}-{ERROR_NAME}`(예: `409-ORDER_EXPIRED`), HTTP 상태는 `GlobalExceptionHandler`가 맞춥니다
 - 요청 DTO는 record + Bean Validation(`@NotBlank`, `@Positive` 등), 컨트롤러 파라미터에 `@Valid`
 - Swagger: 컨트롤러에 `@Tag`, 메서드에 `@Operation(summary = "...")`
-- **로그인 회원 꺼내기:** 컨트롤러는 아래 한 가지 방식만 씁니다. 꺼내는 코드는 시연님이 `global`에 만들어 공유합니다.
-  - JWT 인증을 시연님이 구현 중입니다. 완성되면 Spring Security 인증 정보에서 회원 ID를 꺼내는 방식을 공유합니다.
-  - 그 전까지 컨트롤러를 테스트해야 하면 테스트 코드에서 인증 정보를 직접 넣습니다(`@WithMockUser` 등).
+- **로그인 회원 꺼내기:** 컨트롤러는 아래 한 가지 방식만 씁니다.
+  ```java
+  @GetMapping("/orders")
+  public RsData<...> getOrders(@AuthenticationPrincipal AuthMember authMember) {
+      Long memberId = authMember.memberId();   // role: authMember.role()
+      ...
+  }
+  ```
+  - `AuthMember(memberId, role)`는 `global/security`에 있고, JWT 필터가 Access Token에서 꺼내 넣습니다.
+  - 판매자 승인 상태처럼 바뀔 수 있는 값은 토큰에 없으므로, 판매 기능은 요청마다 DB에서 다시 확인합니다.
+  - **컨트롤러 테스트(`@WebMvcTest`)에서 Security 쓰기**
+    - `@WebMvcTest`는 컨트롤러 주변만 띄우므로 Security 설정과 JWT 빈 5개를 `@Import`로 넣습니다.
+    - 토큰은 `JwtTokenProvider.createAccessToken(memberId, role)`로 만들어 `Authorization: Bearer` 헤더에 넣습니다.
+    - 테스트 의존성 `spring-boot-starter-security-test`가 필요합니다(`build.gradle.kts`에 추가되어 있음).
+    ```java
+    @WebMvcTest(ApiV1OrderController.class)
+    @Import({SecurityConfig.class, JwtTokenProvider.class, JwtAuthenticationEntryPoint.class,
+            JwtAccessDeniedHandler.class, SecurityErrorResponseWriter.class})
+    class ApiV1OrderControllerTest {
+
+        @Autowired
+        private MockMvc mockMvc;
+
+        @Autowired
+        private JwtTokenProvider jwtTokenProvider;
+
+        @MockitoBean
+        private OrderFacade orderFacade;
+
+        @Test
+        void getOrders() throws Exception {
+            String token = jwtTokenProvider.createAccessToken(1L, MemberRole.USER);   // 판매자·관리자는 SELLER·ADMIN
+
+            mockMvc.perform(get("/api/v1/orders").header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void getOrders_unauthorized() throws Exception {
+            mockMvc.perform(get("/api/v1/orders"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+        }
+    }
+    ```
+    - 컨트롤러가 `@AuthenticationPrincipal AuthMember`로 받는 값은 토큰을 만들 때 넣은 `memberId`, `role`입니다.
+    - 컨트롤러가 다른 빈(`@Component`)을 주입받으면 그 빈도 `@Import`에 추가하거나 `@MockitoBean`으로 대신합니다.
 
 ## 8. 예외
 
@@ -284,5 +328,5 @@ custom:
 
 **남은 것**
 
-- [ ] 로그인 회원 꺼내는 방식 (시연, JWT 구현 후 공유)
+- [x] 로그인 회원 꺼내는 방식: `@AuthenticationPrincipal AuthMember` (7장)
 - [ ] 감사 로그 기록 방식 (팀 논의 후 결정)
