@@ -4,13 +4,18 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerApplyResponse;
+import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
+import com.backend.shared.member.dto.MemberRole;
+import com.backend.shared.member.dto.MemberStatus;
 import com.backend.shared.member.dto.SellerDto;
 
 import lombok.RequiredArgsConstructor;
@@ -26,6 +31,7 @@ public class MemberFacade {
     private final MemberLoginUseCase memberLoginUseCase;
     private final MemberRefreshTokenUseCase memberRefreshTokenUseCase;
     private final MemberLogoutUseCase memberLogoutUseCase;
+    private final MemberGetMembersUseCase memberGetMembersUseCase;
     private final MemberSupport memberSupport;
     private final MemberApplySellerUseCase memberApplySellerUseCase;
     private final MemberGetMySellerUseCase memberGetMySellerUseCase;
@@ -104,5 +110,11 @@ public class MemberFacade {
     // 로그아웃 (Refresh Token 폐기)
     public void logout(String refreshToken) {
         memberLogoutUseCase.logout(refreshToken);
+    }
+
+    // 관리자 회원 목록
+    @Transactional(readOnly = true)
+    public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberRole role, Pageable pageable) {
+        return memberGetMembersUseCase.getMembers(email, status, role, pageable);
     }
 }
