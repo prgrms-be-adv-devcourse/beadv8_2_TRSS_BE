@@ -10,7 +10,10 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -27,8 +30,9 @@ public class Topup extends BaseIdAndTime {
     @Column(nullable = false)
     private Long memberId;
 
-    @Column(nullable = false)
-    private Long walletId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "wallet_id", nullable = false)
+    private Wallet wallet;
 
     // 서버가 발급한 토스 주문번호 (TOPUP-{UUID})
     @Column(nullable = false, unique = true, length = 64)
@@ -56,10 +60,10 @@ public class Topup extends BaseIdAndTime {
 
     private LocalDateTime canceledAt;
 
-    public static Topup create(Long memberId, Long walletId, long amount) {
+    public static Topup create(Long memberId, Wallet wallet, long amount) {
         Topup topup = new Topup();
         topup.memberId = memberId;
-        topup.walletId = walletId;
+        topup.wallet = wallet;
         topup.tossOrderId = TOSS_ORDER_ID_PREFIX + UUID.randomUUID();
         topup.amount = amount;
         topup.remainingAmount = 0;
