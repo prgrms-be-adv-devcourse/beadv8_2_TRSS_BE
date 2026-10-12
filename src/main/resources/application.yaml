@@ -83,4 +83,6 @@ custom:
     feeRate: 10                # 수수료율(%)
     payDayOfMonth: 10          # 매월 정산일
     maxAttempts: 3             # 최초 1회 + 재시도 2회
-    retryIntervalMinutes: 10   # 재시도 간격(분)
+    retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
+    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
+    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
