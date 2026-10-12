@@ -15,7 +15,7 @@
 
 - 사업자번호·상호명·대표자명·연락처·정산 계좌를 받아 신청하고, 관리자가 승인하면 기존 계정에 SELLER 권한이 더해진다
 - 상태는 PENDING → APPROVED/REJECTED이다. 본인 철회는 WITHDRAW_REQUESTED → WITHDRAWN이고, 철회가 거절되면 APPROVED로 돌아간다. 관리자 제재는 APPROVED·WITHDRAW_REQUESTED에서 바로 SANCTIONED가 된다
-- 회원당 판매자 정보는 1개다. 반려(REJECTED)되거나 본인 철회(WITHDRAWN_SELF)한 회원은 다시 신청할 수 있고, 이때 같은 판매자 정보가 다시 PENDING이 된다. 제재(WITHDRAWN_SANCTION)된 회원은 다시 신청할 수 없다
+- 회원당 판매자 정보는 1개다. 반려(REJECTED)되거나 본인 철회(WITHDRAWN)한 회원은 다시 신청할 수 있고, 이때 같은 판매자 정보가 다시 PENDING이 된다. 제재(SANCTIONED)된 회원은 다시 신청할 수 없다
 - 사업자번호는 심사 중·판매 중·철회 심사 중·제재된 판매자와 겹칠 수 없다. 반려되거나 본인 철회한 판매자의 사업자번호는 다른 회원이 다시 사용할 수 있다
 - 판매자 상태가 바뀔 때마다 이력을 남기고, 반려·철회·제재 사유는 이력에 저장한다
 - 판매자 정보(상호명·연락처·정산 계좌)는 판매 중(APPROVED)일 때만 수정할 수 있다
@@ -27,11 +27,12 @@
 **판매자 철회**
 
 - 판매자 스스로 철회: 판매자 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → 철회 완료(WITHDRAWN) → 판매 상품 전체 판매 중지
+  - 철회를 요청할 때 사유를 입력한다(필수)
   - 미정산 금액이 있으면 철회를 요청할 수 없다
   - 관리자가 철회를 승인할 때 다시 확인한다. 진행 중인 판매(본인 상품이 들어간 CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED 주문)나 미정산 금액이 있으면 승인할 수 없다
   - 미정산 금액이 없으면 일반 사용자로 전환한다(판매 기능 사용 불가, 구매는 가능)
-- 관리자 제재: 관리자가 문제를 확인하면 판매자를 바로 WITHDRAWN으로 전환한다
-  - role은 SELLER 그대로 두고 판매자 상태만 WITHDRAWN으로 바꾼다. 판매 기능은 막히고 구매는 가능하다
+- 관리자 제재: 관리자가 문제를 확인하면 판매자를 바로 SANCTIONED로 전환한다(사유 필수)
+  - role은 SELLER 그대로 두고 판매자 상태만 SANCTIONED로 바꾼다. 판매 기능은 막히고 구매는 가능하다
   - 결제 완료(PAID)된 주문은 구매 확정 전이라도 그대로 진행한다
   - 결제 대기(CREATED·PAYMENT_FAILED) 주문은 취소(CANCELED)하고 재고를 복원한다
   - 철회된 판매자의 상품은 모두 판매 중지(STOPPED)한다
@@ -188,7 +189,7 @@
 - 집계와 지급은 매월 10일 00:00(KST)에 시작한다
 - 지급 완료 보장 시각은 매월 10일 05:00이다(테스트 환경은 00:30). 이 시각까지 모든 정산서는 PAID, MANUAL_REQUIRED, HOLD 중 하나가 된다
 - 집계는 판매자별로 그 달의 정산 후보를 모아 정산서를 READY로 만들고, 묶인 정산 후보는 INCLUDED로 바꾼다
-- 집계 시점에 판매자 상태가 WITHDRAWN(관리자 제재)이면 정산서를 HOLD로 만든다
+- 집계 시점에 판매자 상태가 SANCTIONED(관리자 제재)이면 정산서를 HOLD로 만든다
 
 ### 수수료와 소수점 처리
 
@@ -295,8 +296,9 @@
 | PENDING | 입점 신청, 관리자 심사 대기 | 불가 |
 | APPROVED | 승인 완료 | 가능 |
 | REJECTED | 반려 (사유 필수) | 불가 |
-| WITHDRAW_REQUESTED | 판매자가 철회 요청, 관리자 승인 대기 | 가능 (승인 전까지) |
-| WITHDRAWN | 철회 완료 또는 관리자 제재. role은 SELLER 유지, 구매만 가능 | 불가 |
+| WITHDRAW_REQUESTED | 판매자가 철회 요청, 관리자 승인 대기 | 불가 (이미 올린 상품은 승인 전까지 계속 판매) |
+| WITHDRAWN | 본인 철회 완료. role은 SELLER 유지, 구매만 가능, 재신청 가능 | 불가 |
+| SANCTIONED | 관리자 제재. role은 SELLER 유지, 구매만 가능, 재신청 불가 | 불가 |
 
 - 판매 기능은 role = SELLER이고 판매자 상태 = APPROVED일 때만 사용할 수 있다.
 
