@@ -78,6 +78,12 @@ custom:
     topupMax: 1000000          # 1회 최대 충전 금액(원)
     topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
+  # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
+  toss:
+    baseUrl: https://api.tosspayments.com
+    secretKey: ${TOSS_SECRET_KEY:}
+    connectTimeoutSeconds: 5   # 토스 서버 접속 제한 시간(초)
+    readTimeoutSeconds: 30     # 요청 후 토스 응답 대기 제한 시간(초). 넘으면 충전 건을 PROCESSING으로 두고, 스케줄러가 토스 조회로 최종 결과를 반영
   settlement:
     feeRate: 10                # 수수료율(%)
     payDayOfMonth: 10          # 매월 정산일
