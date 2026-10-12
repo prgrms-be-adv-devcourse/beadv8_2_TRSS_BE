@@ -76,6 +76,7 @@ custom:
   payment:
     topupUnit: 10000           # 충전 단위·최소 금액(원)
     topupMax: 1000000          # 1회 최대 충전 금액(원)
+    topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
   settlement:
     feeRate: 10                # 수수료율(%)

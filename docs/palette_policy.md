@@ -293,29 +293,33 @@
 
 | 코드 | 의미 |
 | --- | --- |
-| READY | 충전 금액·주문번호 저장, 결제창 진행 전 (일정 시간 지나면 만료) |
+| READY | 충전 금액·주문번호 저장, 결제창 진행 전 (15분 지나면 만료) |
 | PROCESSING | 토스 승인 호출 중 또는 타임아웃으로 결과 확인 대기 (스케줄러가 토스 조회로 마무리) |
 | DONE | 승인 완료, 예치금 반영 |
 | CANCELED | 미사용 충전 토스 취소 완료 |
 | FAILED_USER_CANCEL | 사용자가 결제창을 닫음 |
 | FAILED_PG_DECLINED | 카드사 승인 거절 |
 | FAILED_AMOUNT_MISMATCH | 저장한 금액과 승인 요청 금액이 다름 |
-| FAILED_EXPIRED | READY 상태로 기준 시간 초과 |
+| FAILED_EXPIRED | READY 상태로 15분 초과 |
 | FAILED_SYSTEM_ERROR | 그 외 내부 오류 |
 
 - 충전 금액: 10,000원 단위, 최소 10,000원 ~ 최대 1,000,000원.
+- READY 만료 시간은 주문 만료 시간(15분)과 같게 둔다.
 - 주문 만료와 충전 만료는 독립적으로 처리한다.
 
 ### 11. 예치금 거래 내역 유형 (wallet_transaction.type)
 
-| 코드 | 의미 | 기록 모듈 |
-| --- | --- | --- |
-| CHARGE | 충전 | 충전 |
-| CHARGE_CANCEL | 미사용 충전 취소 | 충전 |
-| PAYMENT | 결제 (지갑 → 홀딩) | 결제 |
-| REFUND | 반품 승인 환불 (홀딩 → 구매자) | 결제 |
-| SETTLEMENT | 정산 지급 (홀딩 → 판매자 지갑) | 정산 |
-| FEE | 정산 수수료 (홀딩 → 관리자) | 정산 |
+| 코드 | 의미 | 기록 모듈 | 참조 유형 (reference_type) |
+| --- | --- | --- | --- |
+| CHARGE | 충전 | 충전 | TOPUP |
+| CHARGE_CANCEL | 미사용 충전 취소 | 충전 | TOPUP |
+| PAYMENT | 결제 (지갑 → 홀딩) | 결제 | PAYMENT |
+| REFUND | 반품 승인 환불 (홀딩 → 구매자) | 결제 | REFUND |
+| SETTLEMENT | 정산 지급 (홀딩 → 판매자 지갑) | 정산 | SETTLEMENT |
+| FEE | 정산 수수료 (홀딩 → 관리자) | 정산 | SETTLEMENT |
+
+- 참조 유형은 `reference_id`가 가리키는 대상이다: TOPUP(충전 건), PAYMENT(결제 건), REFUND(환불 건, payment_refund), SETTLEMENT(정산서).
+- 참조 유형은 거래 유형에 따라 정해진다.
 
 ### 12. 정산 후보 (payout_settlement_candidate.status)
 
