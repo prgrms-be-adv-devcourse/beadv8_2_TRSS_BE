@@ -1,6 +1,6 @@
 package com.backend.boundedContext.member.in;
 
-import com.backend.boundedContext.member.app.MemberFacade;
+import com.backend.boundedContext.member.app.MemberSellerFacade;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerApplyResponse;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/sellers")
 @RequiredArgsConstructor
 public class ApiV1SellerController {
-    private final MemberFacade memberFacade;
+    private final MemberSellerFacade memberSellerFacade;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -34,12 +34,12 @@ public class ApiV1SellerController {
             @Valid @RequestBody SellerApplyRequest request
     ) {
         return RsData.of("201-1", "판매자 입점 신청이 접수되었습니다.",
-                memberFacade.applySeller(authMember.memberId(), request));
+                memberSellerFacade.applySeller(authMember.memberId(), request));
     }
 
     @GetMapping("/me")
     @Operation(summary = "내 판매자 정보·신청 상태 조회", description = "반려·철회됐으면 그 사유도 보여 준다. 계좌번호는 끝 4자리만")
     public RsData<MySellerResponse> getMySeller(@AuthenticationPrincipal AuthMember authMember) {
-        return RsData.of("200-1", "내 판매자 정보를 조회했습니다.", memberFacade.getMySeller(authMember.memberId()));
+        return RsData.of("200-1", "내 판매자 정보를 조회했습니다.", memberSellerFacade.getMySeller(authMember.memberId()));
     }
 }

@@ -27,6 +27,8 @@ public enum MemberErrorCode implements ErrorCode {
     BUSINESS_NUMBER_DUPLICATED(409, "이미 다른 판매자가 사용 중인 사업자등록번호입니다."),
     SELLER_SANCTIONED(403, "제재된 판매자는 다시 신청할 수 없습니다."),
     SELLER_STATE_INVALID(409, "현재 판매자 상태에서는 처리할 수 없습니다."),
+    SELLER_NOT_EDITABLE(403, "판매 중인 판매자만 정보를 수정할 수 있습니다."),
+    SELLER_ACCOUNT_INCOMPLETE(400, "정산 계좌는 은행·계좌번호·예금주를 함께 입력해야 합니다."),
 
     // 로그인
     LOGIN_FAILED(401, "이메일 또는 비밀번호가 올바르지 않습니다.");
