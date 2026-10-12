@@ -36,7 +36,7 @@ class SellerApplyConcurrencyTest {
     private static final int THREADS = 10;
 
     @Autowired
-    private MemberFacade memberFacade;
+    private MemberSellerFacade memberSellerFacade;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -64,7 +64,7 @@ class SellerApplyConcurrencyTest {
     void sameMember_onlyOneSaved() {
         Long memberId = createMember();
 
-        Result result = runConcurrently(i -> () -> memberFacade.applySeller(memberId, request()));
+        Result result = runConcurrently(i -> () -> memberSellerFacade.applySeller(memberId, request()));
 
         result.print("같은 회원 동시 신청");
         assertThat(result.success.get()).isEqualTo(1);
@@ -79,7 +79,7 @@ class SellerApplyConcurrencyTest {
         List<Long> applicants = new ArrayList<>();
         for (int i = 0; i < THREADS; i++) applicants.add(createMember());
 
-        Result result = runConcurrently(i -> () -> memberFacade.applySeller(applicants.get(i), request()));
+        Result result = runConcurrently(i -> () -> memberSellerFacade.applySeller(applicants.get(i), request()));
 
         result.print("같은 사업자번호 동시 신청");
         assertThat(result.success.get()).isEqualTo(1);
