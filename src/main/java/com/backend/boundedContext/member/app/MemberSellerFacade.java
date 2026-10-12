@@ -26,6 +26,7 @@ public class MemberSellerFacade {
     private final MemberApplySellerUseCase memberApplySellerUseCase;
     private final MemberGetMySellerUseCase memberGetMySellerUseCase;
     private final MemberUpdateSellerUseCase memberUpdateSellerUseCase;
+    private final MemberRequestWithdrawalUseCase memberRequestWithdrawalUseCase;
     private final MemberGetSellerUseCase memberGetSellerUseCase;
 
     // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
@@ -44,6 +45,12 @@ public class MemberSellerFacade {
     @Transactional
     public MySellerResponse updateSeller(Long memberId, SellerUpdateRequest request) {
         return memberUpdateSellerUseCase.update(memberId, request);
+    }
+
+    // 판매자 본인 철회 요청 (APPROVED → WITHDRAW_REQUESTED, 미정산 금액이 있으면 불가)
+    @Transactional
+    public MySellerResponse requestWithdrawal(Long memberId, String reason) {
+        return memberRequestWithdrawalUseCase.requestWithdrawal(memberId, reason);
     }
 
     // 회원의 판매자 정보 (다른 컨텍스트용, 없으면 empty)

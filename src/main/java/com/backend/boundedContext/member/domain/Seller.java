@@ -105,7 +105,7 @@ public class Seller extends BaseIdAndTime {
     }
 
     public SellerStatusHistory approveWithdrawal() {
-        return endWithSnapshot(SellerStatus.WITHDRAW_REQUESTED, SellerStatus.WITHDRAWN_SELF, null);
+        return endWithSnapshot(SellerStatus.WITHDRAW_REQUESTED, SellerStatus.WITHDRAWN, null);
     }
 
     public SellerStatusHistory rejectWithdrawal(String reason) {
@@ -117,7 +117,7 @@ public class Seller extends BaseIdAndTime {
         if (status != SellerStatus.APPROVED && status != SellerStatus.WITHDRAW_REQUESTED) throw stateInvalid();
 
         SellerStatus from = status;
-        status = SellerStatus.WITHDRAWN_SANCTION;
+        status = SellerStatus.SANCTIONED;
         return SellerStatusHistory.of(this, from, reason);
     }
 
@@ -148,7 +148,7 @@ public class Seller extends BaseIdAndTime {
 
     // 반려됐거나 본인 철회한 판매자만 다시 신청할 수 있다 (제재는 불가)
     public boolean canReapply() {
-        return status == SellerStatus.REJECTED || status == SellerStatus.WITHDRAWN_SELF;
+        return status == SellerStatus.REJECTED || status == SellerStatus.WITHDRAWN;
     }
 
     public SellerDto toDto() {
