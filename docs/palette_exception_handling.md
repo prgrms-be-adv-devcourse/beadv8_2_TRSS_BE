@@ -280,11 +280,6 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
 | | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
 
-SETTLEMENT_ALREADY_COMPLETED(409, "이미 정산이 완료된 달입니다."),
-SETTLEMENT_AMOUNT_MISMATCH(409, "정산 금액이 일치하지 않습니다."),
-SETTLEMENT_CANDIDATE_AMOUNT_INVALID(400, "주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없습니다."),
-SETTLEMENT_JOB_FAILED(500, "정산 작업을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-
 
 ## 9. 로그 규칙
 
