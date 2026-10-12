@@ -64,7 +64,7 @@ public class MemberFacade {
         return memberSupport.getMember(memberId).toDto();
     }
 
-    // 판매자 입점 신청 (PENDING으로 생성)
+    // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
     @Transactional
     public SellerApplyResponse applySeller(Long memberId, SellerApplyRequest request) {
         return memberApplySellerUseCase.apply(memberId, request);
@@ -76,7 +76,7 @@ public class MemberFacade {
         return memberGetMySellerUseCase.getMySeller(memberId);
     }
 
-    // 회원의 판매자 정보 (다른 컨텍스트용, 최신 1건, 없으면 empty)
+    // 회원의 판매자 정보 (다른 컨텍스트용, 없으면 empty)
     @Transactional(readOnly = true)
     public Optional<SellerDto> findSellerByMemberId(Long memberId) {
         return memberGetSellerUseCase.findSellerByMemberId(memberId);

@@ -25,6 +25,8 @@ public enum MemberErrorCode implements ErrorCode {
     SELLER_NOT_FOUND(404, "판매자 신청 내역이 없습니다."),
     SELLER_ALREADY_APPLIED(409, "이미 진행 중인 판매자 신청이 있습니다."),
     BUSINESS_NUMBER_DUPLICATED(409, "이미 다른 판매자가 사용 중인 사업자등록번호입니다."),
+    SELLER_SANCTIONED(403, "제재된 판매자는 다시 신청할 수 없습니다."),
+    SELLER_STATE_INVALID(409, "현재 판매자 상태에서는 처리할 수 없습니다."),
 
     // 로그인
     LOGIN_FAILED(401, "이메일 또는 비밀번호가 올바르지 않습니다.");

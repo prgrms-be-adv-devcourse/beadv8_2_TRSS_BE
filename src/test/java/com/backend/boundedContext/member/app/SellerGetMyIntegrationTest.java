@@ -6,6 +6,7 @@ import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
+import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +37,9 @@ class SellerGetMyIntegrationTest {
     @Autowired
     private SellerRepository sellerRepository;
 
+    @Autowired
+    private SellerStatusHistoryRepository sellerStatusHistoryRepository;
+
     private Long memberId;
 
     @BeforeEach
@@ -46,7 +50,10 @@ class SellerGetMyIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        sellerRepository.findFirstByMember_IdOrderByIdDesc(memberId).ifPresent(sellerRepository::delete);
+        sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerRepository.delete(seller);
+        });
         memberRepository.deleteById(memberId);
     }
 

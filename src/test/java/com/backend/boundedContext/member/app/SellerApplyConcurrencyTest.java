@@ -5,6 +5,7 @@ import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
+import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,7 +28,7 @@ import java.util.function.IntFunction;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 동시에 들어온 입점 신청 중 하나만 저장되는지 확인한다(부분 유니크 인덱스).
+ * 동시에 들어온 입점 신청 중 하나만 저장되는지 확인한다 (member_id·business_number UNIQUE).
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
 @SpringBootTest
@@ -43,12 +44,18 @@ class SellerApplyConcurrencyTest {
     @Autowired
     private SellerRepository sellerRepository;
 
+    @Autowired
+    private SellerStatusHistoryRepository sellerStatusHistoryRepository;
+
     private final List<Long> memberIds = new ArrayList<>();
     private final String businessNumber = randomBusinessNumber();
 
     @AfterEach
     void cleanUp() {
-        sellerRepository.deleteAll(sellersWithBusinessNumber());
+        sellersWithBusinessNumber().forEach(seller -> {
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerRepository.delete(seller);
+        });
         memberRepository.deleteAllById(memberIds);
     }
 
@@ -102,7 +109,7 @@ class SellerApplyConcurrencyTest {
                 } catch (DomainException e) {
                     result.rejectedByService.incrementAndGet();   // 먼저 조회에서 막힘 (409-SELLER_ALREADY_APPLIED / BUSINESS_NUMBER_DUPLICATED)
                 } catch (DataIntegrityViolationException e) {
-                    result.rejectedByDb.incrementAndGet();        // 조회를 통과했지만 INSERT에서 인덱스에 막힘
+                    result.rejectedByDb.incrementAndGet();        // 조회를 통과했지만 INSERT에서 UNIQUE에 막힘
                 } catch (Exception e) {
                     result.other.incrementAndGet();
                     e.printStackTrace();
@@ -139,7 +146,7 @@ class SellerApplyConcurrencyTest {
     private List<Seller> sellersWithBusinessNumber() {
         String digits = Seller.digitsOnly(businessNumber);
         return sellerRepository.findAll().stream()
-                .filter(seller -> seller.getBusinessNumber().equals(digits))
+                .filter(seller -> digits.equals(seller.getBusinessNumber()))
                 .toList();
     }
 
@@ -155,7 +162,7 @@ class SellerApplyConcurrencyTest {
         final AtomicInteger other = new AtomicInteger();
 
         void print(String title) {
-            System.out.printf("[%s] 성공 %d / 조회에서 막힘 %d / DB 인덱스에서 막힘 %d / 기타 %d%n",
+            System.out.printf("[%s] 성공 %d / 조회에서 막힘 %d / DB UNIQUE에서 막힘 %d / 기타 %d%n",
                     title, success.get(), rejectedByService.get(), rejectedByDb.get(), other.get());
         }
     }

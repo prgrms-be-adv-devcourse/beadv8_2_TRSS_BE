@@ -5,5 +5,6 @@ public enum SellerStatus {
     APPROVED,
     REJECTED,
     WITHDRAW_REQUESTED,
-    WITHDRAWN
+    WITHDRAWN_SELF,      // 본인 철회 완료
+    WITHDRAWN_SANCTION   // 관리자 제재
 }

@@ -1,5 +1,6 @@
 package com.backend.boundedContext.member.domain;
 
+import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
@@ -10,37 +11,35 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
+/**
+ * 회원의 판매자 자격. 회원 1 : 판매자 1이고, 지금 상태만 담는다.
+ * 상태가 바뀔 때마다 {@link SellerStatusHistory}를 한 줄 만들어 돌려주고, 저장은 호출한 쪽이 한다.
+ */
 @Entity
 @Table(name = "seller")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Seller extends BaseIdAndTime {
-    public static final String UQ_ONGOING_MEMBER = "uq_seller_ongoing_member";
-    public static final String UQ_ONGOING_BUSINESS_NUMBER = "uq_seller_ongoing_business_number";
 
-    // 진행 중인 신청 상태(심사 중·판매 중·철회 심사 중). 반려·철회 완료는 끝난 신청이다
-    // 중복 검사 조회와 부분 유니크 인덱스 조건이 모두 이 목록을 사용한다
-    public static final List<SellerStatus> ONGOING_STATUSES =
-            List.of(SellerStatus.PENDING, SellerStatus.APPROVED, SellerStatus.WITHDRAW_REQUESTED);
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false, unique = true)
     private Member member;
 
     @Column(nullable = false, length = 100)
     private String businessName;
 
-    // 숫자만 저장(10자리)
-    @Column(nullable = false, length = 20)
+    // 숫자만 저장(10자리). 반려·본인 철회 때 비워서 다른 회원이 쓸 수 있게 한다 (비운 번호는 이력 스냅샷에 남음)
+    // 제재는 비우지 않아서 같은 번호로 다시 신청하면 UNIQUE에 막힌다
+    @Column(unique = true, length = 20)
     private String businessNumber;
 
     @Column(nullable = false, length = 50)
@@ -64,38 +63,67 @@ public class Seller extends BaseIdAndTime {
     @Column(nullable = false, length = 30)
     private SellerStatus status;
 
-    private String rejectedReason;
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 20)
-    private WithdrawType withdrawType;
-
-    private String withdrawReason;
-
+    // 가장 최근 신청 시각 (재신청하면 갱신)
     @Column(nullable = false)
     private LocalDateTime appliedAt;
 
-    private LocalDateTime approvedAt;
-
-    private LocalDateTime withdrawRequestedAt;
-
-    private LocalDateTime withdrawnAt;
+    // 같은 행을 동시에 바꾸면 늦게 커밋한 쪽이 실패한다 (예: 철회 요청과 제재가 동시에 들어온 경우)
+    @Version
+    private Long version;
 
     public static Seller apply(Member member, String businessName, String businessNumber,
                                String representativeName, String phoneNumber,
                                String bankName, String accountNumber, String accountHolder) {
         Seller seller = new Seller();
         seller.member = member;
-        seller.businessName = businessName.strip();
-        seller.businessNumber = digitsOnly(businessNumber);
-        seller.representativeName = representativeName.strip();
-        seller.phoneNumber = digitsOnly(phoneNumber);
-        seller.bankName = bankName.strip();
-        seller.accountNumber = digitsOnly(accountNumber);
-        seller.accountHolder = accountHolder.strip();
-        seller.status = SellerStatus.PENDING;
-        seller.appliedAt = LocalDateTime.now();
+        seller.fillApplication(businessName, businessNumber, representativeName, phoneNumber,
+                bankName, accountNumber, accountHolder);
         return seller;
+    }
+
+    // 반려·본인 철회 뒤 재신청: 같은 행의 신청 정보를 새 값으로 바꾸고 다시 PENDING
+    public SellerStatusHistory reapply(String businessName, String businessNumber,
+                                       String representativeName, String phoneNumber,
+                                       String bankName, String accountNumber, String accountHolder) {
+        if (!canReapply()) throw stateInvalid();
+
+        SellerStatus fromStatus = status;
+        fillApplication(businessName, businessNumber, representativeName, phoneNumber, bankName, accountNumber, accountHolder);
+        return SellerStatusHistory.of(this, fromStatus, null);
+    }
+
+    public SellerStatusHistory approve() {
+        return changeStatus(SellerStatus.PENDING, SellerStatus.APPROVED, null);
+    }
+
+    public SellerStatusHistory reject(String reason) {
+        return endWithSnapshot(SellerStatus.PENDING, SellerStatus.REJECTED, reason);
+    }
+
+    public SellerStatusHistory requestWithdrawal(String reason) {
+        return changeStatus(SellerStatus.APPROVED, SellerStatus.WITHDRAW_REQUESTED, reason);
+    }
+
+    public SellerStatusHistory approveWithdrawal() {
+        return endWithSnapshot(SellerStatus.WITHDRAW_REQUESTED, SellerStatus.WITHDRAWN_SELF, null);
+    }
+
+    public SellerStatusHistory rejectWithdrawal(String reason) {
+        return changeStatus(SellerStatus.WITHDRAW_REQUESTED, SellerStatus.APPROVED, reason);
+    }
+
+    // 판매 중이거나 철회 심사 중일 때 바로 제재
+    public SellerStatusHistory sanction(String reason) {
+        if (status != SellerStatus.APPROVED && status != SellerStatus.WITHDRAW_REQUESTED) throw stateInvalid();
+
+        SellerStatus from = status;
+        status = SellerStatus.WITHDRAWN_SANCTION;
+        return SellerStatusHistory.of(this, from, reason);
+    }
+
+    // 반려됐거나 본인 철회한 판매자만 다시 신청할 수 있다 (제재는 불가)
+    public boolean canReapply() {
+        return status == SellerStatus.REJECTED || status == SellerStatus.WITHDRAWN_SELF;
     }
 
     public SellerDto toDto() {
@@ -104,11 +132,50 @@ public class Seller extends BaseIdAndTime {
 
     // 계좌번호는 끝 4자리만 보여 준다 (예: **********3456)
     public String getMaskedAccountNumber() {
-        int visible = Math.min(4, accountNumber.length());
-        return "*".repeat(accountNumber.length() - visible) + accountNumber.substring(accountNumber.length() - visible);
+        String last4 = getAccountLast4();
+        return "*".repeat(accountNumber.length() - last4.length()) + last4;
+    }
+
+    public String getAccountLast4() {
+        return accountNumber.substring(Math.max(0, accountNumber.length() - 4));
     }
 
     public static String digitsOnly(String value) {
         return value.replaceAll("\\D", "");
+    }
+
+    private void fillApplication(String businessName, String businessNumber,
+                                 String representativeName, String phoneNumber,
+                                 String bankName, String accountNumber, String accountHolder) {
+        this.businessName = businessName.strip();
+        this.businessNumber = digitsOnly(businessNumber);
+        this.representativeName = representativeName.strip();
+        this.phoneNumber = digitsOnly(phoneNumber);
+        this.bankName = bankName.strip();
+        this.accountNumber = digitsOnly(accountNumber);
+        this.accountHolder = accountHolder.strip();
+        this.status = SellerStatus.PENDING;
+        this.appliedAt = LocalDateTime.now();
+    }
+
+    private SellerStatusHistory changeStatus(SellerStatus expected, SellerStatus to, String reason) {
+        if (status != expected) throw stateInvalid();
+
+        status = to;
+        return SellerStatusHistory.of(this, expected, reason);
+    }
+
+    // 재신청할 수 있는 상태로 끝날 때: 다음 재신청에 덮어써지기 전에 신청서를 이력에 남기고, 사업자번호를 비운다
+    private SellerStatusHistory endWithSnapshot(SellerStatus expected, SellerStatus to, String reason) {
+        if (status != expected) throw stateInvalid();
+
+        status = to;
+        SellerStatusHistory history = SellerStatusHistory.withSnapshot(this, expected, reason);
+        businessNumber = null;
+        return history;
+    }
+
+    private static DomainException stateInvalid() {
+        return new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
     }
 }

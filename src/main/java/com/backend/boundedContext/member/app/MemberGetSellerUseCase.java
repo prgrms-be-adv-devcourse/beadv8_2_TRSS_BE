@@ -18,9 +18,9 @@ import java.util.Optional;
 public class MemberGetSellerUseCase {
     private final SellerRepository sellerRepository;
 
-    // 회원의 가장 최근 신청 1건 (상태 무관), 신청 이력이 없으면 empty
+    // 회원의 판매자 (상태 무관), 신청한 적이 없으면 empty
     public Optional<SellerDto> findSellerByMemberId(Long memberId) {
-        return sellerRepository.findFirstByMember_IdOrderByIdDesc(memberId).map(Seller::toDto);
+        return sellerRepository.findByMemberId(memberId).map(Seller::toDto);
     }
 
     // 판매자 1명 조회, 없으면 404
