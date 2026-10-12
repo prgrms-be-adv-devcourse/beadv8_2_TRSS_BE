@@ -71,6 +71,7 @@ custom:
       password: ${ACCOUNT_ENCRYPTION_PASSWORD:palette-dev-account-key}
       salt: ${ACCOUNT_ENCRYPTION_SALT:5c0744940b5c369b}
   order:
+    cartMaxQuantity: 99        # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
     autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
   payment:
