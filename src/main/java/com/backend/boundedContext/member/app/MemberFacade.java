@@ -1,10 +1,16 @@
 package com.backend.boundedContext.member.app;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
+import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
+import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
+import com.backend.shared.member.dto.MemberRole;
+import com.backend.shared.member.dto.MemberStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +30,8 @@ public class MemberFacade {
     private final MemberLoginUseCase memberLoginUseCase;
     private final MemberRefreshTokenUseCase memberRefreshTokenUseCase;
     private final MemberLogoutUseCase memberLogoutUseCase;
+    private final MemberGetMembersUseCase memberGetMembersUseCase;
+    private final MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
     private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
     private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
     private final MemberSupport memberSupport;
@@ -71,6 +79,18 @@ public class MemberFacade {
     // 로그아웃 (Refresh Token 폐기)
     public void logout(String refreshToken) {
         memberLogoutUseCase.logout(refreshToken);
+    }
+
+    // 관리자 회원 목록
+    @Transactional(readOnly = true)
+    public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberRole role, Pageable pageable) {
+        return memberGetMembersUseCase.getMembers(email, status, role, pageable);
+    }
+
+    // 관리자 회원 상세
+    @Transactional(readOnly = true)
+    public AdminMemberDetailDto getMemberDetail(Long memberId) {
+        return memberGetMemberDetailUseCase.getMemberDetail(memberId);
     }
 
     // 개발용 시드 회원 생성 (비밀번호가 없거나 회원이 이미 있으면 아무것도 하지 않음)
