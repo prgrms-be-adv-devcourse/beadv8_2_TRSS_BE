@@ -123,7 +123,7 @@ public class Seller extends BaseIdAndTime {
 
     // 판매 중인 판매자의 상호·연락처 수정. null은 그대로 둔다 (상태 변경이 아니라 이력은 남기지 않음)
     public void updateInfo(String businessName, String phoneNumber) {
-        checkEditable();
+        checkApproved();
 
         if (businessName != null) this.businessName = businessName.strip();
         if (phoneNumber != null) this.phoneNumber = digitsOnly(phoneNumber);
@@ -131,7 +131,7 @@ public class Seller extends BaseIdAndTime {
 
     // 판매 중인 판매자의 정산 계좌 변경. 은행·계좌번호·예금주는 한 묶음이라 셋 다 있어야 한다
     public void changeAccount(String bankName, String accountNumber, String accountHolder) {
-        checkEditable();
+        checkApproved();
         if (bankName == null || accountNumber == null || accountHolder == null) {
             throw new DomainException(MemberErrorCode.SELLER_ACCOUNT_INCOMPLETE);
         }
@@ -141,9 +141,9 @@ public class Seller extends BaseIdAndTime {
         this.accountHolder = accountHolder.strip();
     }
 
-    // 정보 수정은 판매 중(APPROVED)일 때만 가능
-    private void checkEditable() {
-        if (status != SellerStatus.APPROVED) throw new DomainException(MemberErrorCode.SELLER_NOT_EDITABLE);
+    // 판매자 기능(정보 수정 등)은 승인 상태(APPROVED)일 때만 가능
+    private void checkApproved() {
+        if (status != SellerStatus.APPROVED) throw new DomainException(MemberErrorCode.SELLER_NOT_APPROVED);
     }
 
     // 반려됐거나 본인 철회한 판매자만 다시 신청할 수 있다 (제재는 불가)
