@@ -15,7 +15,7 @@ public interface MemberApi {
     // 회원 조회
     MemberDto getMember(Long memberId);
 
-    // 회원의 판매자 정보. 판매자 신청 이력이 없으면 empty (상태와 관계없이 최신 1건)
+    // 회원의 판매자 정보 (회원 1 : 판매자 1, 상태와 관계없이). 신청한 적이 없으면 empty
     Optional<SellerDto> findSellerByMemberId(Long memberId);
 
     // 판매자 조회. 없으면 404 SELLER_NOT_FOUND

@@ -2,17 +2,15 @@
   "$schema": "https://raw.githubusercontent.com/dineug/erd-editor/main/json-schema/schema.json",
   "version": "3.0.0",
   "settings": {
-    "width": 2000,
-    "height": 2000,
-    "scrollTop": 0,
-    "scrollLeft": 0,
-    "originX": -1890.5045,
-    "originY": -3288.16,
-    "zoomLevel": 1.24,
+    "width": 4000,
+    "height": 5000,
+    "scrollTop": -3599.164,
+    "scrollLeft": -51.2482,
+    "zoomLevel": 0.88,
     "show": 431,
     "database": 16,
     "databaseName": "palette",
-    "canvasType": "@dineug/erd-editor/builtin-generator-code",
+    "canvasType": "ERD",
     "language": 32,
     "tableNameCase": 4,
     "columnNameCase": 2,
@@ -57,7 +55,8 @@
       "QjuXP2uKy5GEqsirtt5fj",
       "ZcDX9OkmjgPqx2-BldqCb",
       "H3c0ITepFY9fPkbd-cEgM",
-      "SP6gkcX_hb_aJQYl8u2Hm"
+      "SP6gkcX_hb_aJQYl8u2Hm",
+      "o4uPP559DfAuHOMiGGBqf"
     ],
     "relationshipIds": [
       "I66CsR4YCc4PfdBsUs4Iq",
@@ -101,7 +100,8 @@
       "03h19dtdebw13usavf9fdq13n",
       "03h19dynyb9jn2ey9oy4ag8ym",
       "03h19e2bxb7b1fh82vo5u8v0r",
-      "03h19h7fapdoutnqi0gis21uq"
+      "03h19h7fapdoutnqi0gis21uq",
+      "mCrMmhBDH16KTKdlt0kSN"
     ],
     "indexIds": [
       "YqzCVhOqVFIOv6RCJlnb9",
@@ -134,7 +134,8 @@
       "kKehKZPSiUQA7h5J95jNo",
       "EgsX8ou5g6oFTI1MfvCay",
       "XHqGsZi3CfYyM0h3U5aeO",
-      "054nAVot9tXviZCs9HokK"
+      "054nAVot9tXviZCs9HokK",
+      "u4-c2Mds6EEbzQjSOTY3A"
     ],
     "memoIds": []
   },
@@ -157,7 +158,7 @@
           "y": 50,
           "zIndex": 2,
           "widthName": 60,
-          "widthComment": 60,
+          "widthComment": 65,
           "color": ""
         },
         "meta": {
@@ -193,7 +194,7 @@
           "x": 1154.1539,
           "y": 2812.5384,
           "zIndex": 2,
-          "widthName": 62,
+          "widthName": 60,
           "widthComment": 60,
           "color": ""
         },
@@ -246,13 +247,8 @@
           "_9wRVuiR8tVHxA7EFiXjE",
           "fRNzvDSTeWinrqD74cfpV",
           "PhvPfeLgbvR85X2qY24cL",
-          "HGtDiBgHyQSSlwU5wdfSU",
-          "d8bHAdgsPvryj8jhoaYzk",
-          "ZBaNCthh6NFWuizSiW91t",
           "fc82IQktd-zwTOOrOudOh",
-          "eqAm6shwCnMc1oP4jiIqT",
-          "GooDUPot8YJ-0T1I4rnPK",
-          "MpsLjhDXRejyORNTmMG_C",
+          "74uxwUyHsjrtLxPTwb-FW",
           "0_iyM2PGULy-v-gFAt-fj",
           "UkcYLlsPA3BRa3n10wP6E"
         ],
@@ -266,7 +262,7 @@
           "color": ""
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812262217,
           "createAt": 1791793118726
         }
       },
@@ -287,8 +283,8 @@
           "x": 50,
           "y": 280,
           "zIndex": 2,
-          "widthName": 119,
-          "widthComment": 71,
+          "widthName": 108,
+          "widthComment": 81,
           "color": ""
         },
         "meta": {
@@ -314,8 +310,8 @@
           "x": 581,
           "y": 50,
           "zIndex": 2,
-          "widthName": 88,
-          "widthComment": 60,
+          "widthName": 81,
+          "widthComment": 65,
           "color": ""
         },
         "meta": {
@@ -341,7 +337,7 @@
           "x": 1181.2032,
           "y": 2044.734,
           "zIndex": 2,
-          "widthName": 89,
+          "widthName": 84,
           "widthComment": 60,
           "color": ""
         },
@@ -366,8 +362,8 @@
           "x": 1713,
           "y": 50,
           "zIndex": 2,
-          "widthName": 76,
-          "widthComment": 71,
+          "widthName": 70,
+          "widthComment": 81,
           "color": ""
         },
         "meta": {
@@ -401,12 +397,12 @@
           "x": 1383.5501,
           "y": 1521.7384,
           "zIndex": 2,
-          "widthName": 109,
+          "widthName": 101,
           "widthComment": 60,
           "color": ""
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812503698,
           "createAt": 1791793118726
         }
       },
@@ -437,7 +433,7 @@
           "x": 50,
           "y": 2826,
           "zIndex": 2,
-          "widthName": 125,
+          "widthName": 115,
           "widthComment": 60,
           "color": ""
         },
@@ -466,8 +462,8 @@
           "x": 713,
           "y": 860,
           "zIndex": 2,
-          "widthName": 106,
-          "widthComment": 81,
+          "widthName": 97,
+          "widthComment": 93,
           "color": ""
         },
         "meta": {
@@ -528,7 +524,7 @@
           "y": 280,
           "zIndex": 2,
           "widthName": 60,
-          "widthComment": 68,
+          "widthComment": 77,
           "color": ""
         },
         "meta": {
@@ -589,8 +585,8 @@
           "x": 50,
           "y": 860,
           "zIndex": 2,
-          "widthName": 128,
-          "widthComment": 71,
+          "widthName": 117,
+          "widthComment": 81,
           "color": ""
         },
         "meta": {
@@ -618,8 +614,8 @@
           "x": 50,
           "y": 1186,
           "zIndex": 2,
-          "widthName": 79,
-          "widthComment": 78,
+          "widthName": 74,
+          "widthComment": 89,
           "color": ""
         },
         "meta": {
@@ -648,7 +644,7 @@
           "x": 1091,
           "y": 558,
           "zIndex": 2,
-          "widthName": 79,
+          "widthName": 71,
           "widthComment": 60,
           "color": ""
         },
@@ -707,7 +703,7 @@
           "x": 50,
           "y": 1934,
           "zIndex": 2,
-          "widthName": 95,
+          "widthName": 88,
           "widthComment": 60,
           "color": ""
         },
@@ -739,8 +735,8 @@
           "x": 649,
           "y": 1536,
           "zIndex": 2,
-          "widthName": 84,
-          "widthComment": 60,
+          "widthName": 78,
+          "widthComment": 65,
           "color": ""
         },
         "meta": {
@@ -779,12 +775,12 @@
           "x": 1063,
           "y": 3368,
           "zIndex": 2,
-          "widthName": 78,
+          "widthName": 73,
           "widthComment": 60,
           "color": ""
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812466367,
           "createAt": 1791793118726
         }
       },
@@ -911,13 +907,45 @@
           "x": 2076.2332,
           "y": 2813.1513,
           "zIndex": 33,
-          "widthName": 160,
-          "widthComment": 71,
+          "widthName": 144,
+          "widthComment": 81,
           "color": ""
         },
         "meta": {
           "updateAt": 1791794504995,
           "createAt": 1791794161522
+        }
+      },
+      "o4uPP559DfAuHOMiGGBqf": {
+        "id": "o4uPP559DfAuHOMiGGBqf",
+        "name": "seller_status_history",
+        "comment": "판매자 상태 이력",
+        "columnIds": [
+          "FqwQnuvA7pdn1Fxp8vRtA",
+          "lqmVtcyYabB1qLGmcxq1B",
+          "8Pk8D62WS6E9n5MR9_H6y",
+          "jgZ75T8yTN7sS7Sn-D-AO",
+          "MfudURfZJby_bsMSQQ3Ph",
+          "bgL4g7Xjv-E7P1QR166xf",
+          "LhevVQWzV9JO5sSm6749S",
+          "iWOBjMRGZlmeGOuLUl6s9",
+          "GELKx8gOaS-n6zsfIt3Y3",
+          "IbKyKagb1IQ8TTDYmyZXv",
+          "5BB87DsJM_-s4Waa83cgZ",
+          "UzMcJymVo_mDgd_bkXMAz"
+        ],
+        "seqColumnIds": [],
+        "ui": {
+          "x": 50,
+          "y": 3820,
+          "zIndex": 2,
+          "widthName": 107,
+          "widthComment": 93,
+          "color": ""
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
         }
       }
     },
@@ -933,8 +961,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 73,
-          "widthDataType": 63,
+          "widthComment": 80,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -953,7 +981,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 71,
+          "widthComment": 81,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -972,9 +1000,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -992,7 +1020,7 @@
         "options": 12,
         "ui": {
           "keys": 2,
-          "widthName": 65,
+          "widthName": 61,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -1012,9 +1040,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1032,8 +1060,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 65,
-          "widthComment": 61,
+          "widthName": 61,
+          "widthComment": 69,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -1092,8 +1120,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 92,
-          "widthComment": 61,
+          "widthName": 82,
+          "widthComment": 69,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -1112,8 +1140,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
-          "widthComment": 374,
+          "widthName": 62,
+          "widthComment": 390,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -1132,9 +1160,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 77,
-          "widthComment": 335,
-          "widthDataType": 71,
+          "widthName": 69,
+          "widthComment": 368,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1152,7 +1180,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 105,
+          "widthName": 98,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -1192,8 +1220,8 @@
         "options": 0,
         "ui": {
           "keys": 2,
-          "widthName": 70,
-          "widthComment": 86,
+          "widthName": 62,
+          "widthComment": 95,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -1214,7 +1242,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -1232,9 +1260,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 72,
+          "widthName": 66,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1252,9 +1280,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1272,9 +1300,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 91,
-          "widthComment": 81,
-          "widthDataType": 90,
+          "widthName": 81,
+          "widthComment": 93,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1292,7 +1320,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 90,
+          "widthName": 85,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -1313,8 +1341,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 319,
-          "widthDataType": 83,
+          "widthComment": 299,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1332,9 +1360,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1352,9 +1380,9 @@
         "options": 4,
         "ui": {
           "keys": 0,
-          "widthName": 101,
-          "widthComment": 404,
-          "widthDataType": 89,
+          "widthName": 94,
+          "widthComment": 417,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1374,7 +1402,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1393,8 +1421,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 119,
-          "widthDataType": 90,
+          "widthComment": 124,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1414,7 +1442,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1434,7 +1462,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1452,9 +1480,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1472,9 +1500,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1494,7 +1522,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1514,7 +1542,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 89,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1534,7 +1562,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -1552,9 +1580,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 62,
-          "widthComment": 200,
-          "widthDataType": 71,
+          "widthName": 60,
+          "widthComment": 222,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1572,9 +1600,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1586,19 +1614,19 @@
         "id": "1YAz1dIwdl66tPCjVEgrq",
         "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
         "name": "business_number",
-        "comment": "사업자등록번호",
+        "comment": "사업자등록번호 - UNIQUE, 반려·본인 철회 시 비움(NULL), 제재 시 유지",
         "dataType": "VARCHAR(20)",
         "default": "",
-        "options": 8,
+        "options": 4,
         "ui": {
           "keys": 0,
-          "widthName": 102,
-          "widthComment": 75,
-          "widthDataType": 83,
+          "widthName": 93,
+          "widthComment": 376,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812262217,
           "createAt": 1791793118726
         }
       },
@@ -1612,69 +1640,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 87,
-          "widthComment": 272,
-          "widthDataType": 83,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118726,
-          "createAt": 1791793118726
-        }
-      },
-      "GooDUPot8YJ-0T1I4rnPK": {
-        "id": "GooDUPot8YJ-0T1I4rnPK",
-        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
-        "name": "withdraw_requested_at",
-        "comment": "철회 요청 일시",
-        "dataType": "TIMESTAMP",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 134,
-          "widthComment": 71,
-          "widthDataType": 71,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118726,
-          "createAt": 1791793118726
-        }
-      },
-      "HGtDiBgHyQSSlwU5wdfSU": {
-        "id": "HGtDiBgHyQSSlwU5wdfSU",
-        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
-        "name": "rejected_reason",
-        "comment": "반려 사유",
-        "dataType": "VARCHAR(255)",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 94,
-          "widthComment": 60,
-          "widthDataType": 90,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118726,
-          "createAt": 1791793118726
-        }
-      },
-      "MpsLjhDXRejyORNTmMG_C": {
-        "id": "MpsLjhDXRejyORNTmMG_C",
-        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
-        "name": "withdrawn_at",
-        "comment": "철회 일시",
-        "dataType": "TIMESTAMP",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 78,
-          "widthComment": 60,
-          "widthDataType": 71,
+          "widthName": 82,
+          "widthComment": 304,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1686,19 +1654,19 @@
         "id": "PhvPfeLgbvR85X2qY24cL",
         "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
         "name": "status",
-        "comment": "상태",
+        "comment": "상태 - PENDING/APPROVED/REJECTED/WITHDRAW_REQUESTED/WITHDRAWN/SANCTIONED",
         "dataType": "VARCHAR(30)",
         "default": "'PENDING'",
         "options": 8,
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 60,
-          "widthDataType": 83,
-          "widthDefault": 63
+          "widthComment": 498,
+          "widthDataType": 75,
+          "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812262217,
           "createAt": 1791793118726
         }
       },
@@ -1712,9 +1680,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1732,29 +1700,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118726,
-          "createAt": 1791793118726
-        }
-      },
-      "ZBaNCthh6NFWuizSiW91t": {
-        "id": "ZBaNCthh6NFWuizSiW91t",
-        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
-        "name": "withdraw_reason",
-        "comment": "철회 사유",
-        "dataType": "VARCHAR(255)",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 97,
-          "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -1766,19 +1714,19 @@
         "id": "_9wRVuiR8tVHxA7EFiXjE",
         "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
         "name": "account_number",
-        "comment": "정산 계좌번호",
-        "dataType": "VARCHAR(50)",
+        "comment": "정산 계좌번호 - 암호화 저장",
+        "dataType": "VARCHAR(255)",
         "default": "",
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 98,
-          "widthComment": 68,
-          "widthDataType": 83,
+          "widthName": 90,
+          "widthComment": 152,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812262217,
           "createAt": 1791793118726
         }
       },
@@ -1792,49 +1740,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 121,
+          "widthName": 112,
           "widthComment": 60,
-          "widthDataType": 83,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118726,
-          "createAt": 1791793118726
-        }
-      },
-      "d8bHAdgsPvryj8jhoaYzk": {
-        "id": "d8bHAdgsPvryj8jhoaYzk",
-        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
-        "name": "withdraw_type",
-        "comment": "철회 유형 - SELF(본인 철회) / SANCTION(관리자 제재)",
-        "dataType": "VARCHAR(20)",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 84,
-          "widthComment": 279,
-          "widthDataType": 83,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118726,
-          "createAt": 1791793118726
-        }
-      },
-      "eqAm6shwCnMc1oP4jiIqT": {
-        "id": "eqAm6shwCnMc1oP4jiIqT",
-        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
-        "name": "approved_at",
-        "comment": "승인 일시",
-        "dataType": "TIMESTAMP",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 73,
-          "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1852,9 +1760,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 90,
+          "widthName": 83,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -1866,19 +1774,19 @@
         "id": "fc82IQktd-zwTOOrOudOh",
         "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
         "name": "applied_at",
-        "comment": "신청 일시",
+        "comment": "최근 신청 일시 - 재신청 시 갱신",
         "dataType": "TIMESTAMP",
         "default": "",
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 61,
-          "widthComment": 60,
-          "widthDataType": 71,
+          "widthName": 60,
+          "widthComment": 171,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812262217,
           "createAt": 1791793118726
         }
       },
@@ -1892,9 +1800,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 90,
+          "widthName": 82,
           "widthComment": 60,
-          "widthDataType": 89,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1914,7 +1822,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -1926,19 +1834,19 @@
         "id": "wggBfxKudy4Dx_cxS0pNy",
         "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
         "name": "member_id",
-        "comment": "회원 ID",
+        "comment": "회원 ID - 회원 1 : 판매자 1 (UNIQUE)",
         "dataType": "BIGINT",
         "default": "",
-        "options": 8,
+        "options": 12,
         "ui": {
           "keys": 2,
-          "widthName": 65,
-          "widthComment": 60,
+          "widthName": 61,
+          "widthComment": 195,
           "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1791812262217,
           "createAt": 1791793118726
         }
       },
@@ -1974,7 +1882,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -1992,9 +1900,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2013,8 +1921,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 86,
-          "widthDataType": 63,
+          "widthComment": 95,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -2032,9 +1940,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 70,
+          "widthName": 63,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -2054,7 +1962,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -2072,9 +1980,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2092,9 +2000,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2112,9 +2020,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 68,
-          "widthComment": 188,
-          "widthDataType": 83,
+          "widthName": 63,
+          "widthComment": 187,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -2133,8 +2041,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 73,
-          "widthDataType": 63,
+          "widthComment": 80,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -2153,8 +2061,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 60,
-          "widthDataType": 90,
+          "widthComment": 62,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -2172,7 +2080,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 61,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -2192,7 +2100,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -2214,7 +2122,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -2232,7 +2140,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -2254,7 +2162,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -2292,9 +2200,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2312,9 +2220,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2332,9 +2240,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 62,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2352,7 +2260,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 68,
+          "widthName": 63,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -2372,9 +2280,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2413,8 +2321,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 86,
-          "widthDataType": 63,
+          "widthComment": 95,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -2472,8 +2380,8 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 80,
-          "widthComment": 284,
+          "widthName": 72,
+          "widthComment": 319,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2492,9 +2400,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 84,
-          "widthComment": 73,
-          "widthDataType": 89,
+          "widthName": 78,
+          "widthComment": 81,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -2532,9 +2440,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2553,8 +2461,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 62,
-          "widthDataType": 63,
+          "widthComment": 68,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -2572,9 +2480,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 70,
-          "widthComment": 73,
-          "widthDataType": 89,
+          "widthName": 64,
+          "widthComment": 81,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -2612,7 +2520,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -2632,8 +2540,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 71,
-          "widthComment": 71,
+          "widthName": 67,
+          "widthComment": 81,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2672,8 +2580,8 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 73,
-          "widthComment": 413,
+          "widthName": 65,
+          "widthComment": 456,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2712,9 +2620,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 76,
-          "widthComment": 73,
-          "widthDataType": 83,
+          "widthName": 71,
+          "widthComment": 81,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -2732,9 +2640,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2753,8 +2661,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 62,
-          "widthDataType": 63,
+          "widthComment": 68,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -2772,8 +2680,8 @@
         "options": 0,
         "ui": {
           "keys": 2,
-          "widthName": 96,
-          "widthComment": 229,
+          "widthName": 89,
+          "widthComment": 244,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2833,7 +2741,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 348,
+          "widthComment": 341,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2852,7 +2760,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 90,
+          "widthName": 85,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -2872,9 +2780,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2893,8 +2801,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 211,
-          "widthDataType": 83,
+          "widthComment": 198,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -2912,8 +2820,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 105,
-          "widthComment": 241,
+          "widthName": 98,
+          "widthComment": 250,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2932,9 +2840,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 77,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthName": 71,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -2953,7 +2861,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 218,
+          "widthComment": 246,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -2992,7 +2900,7 @@
         "options": 0,
         "ui": {
           "keys": 2,
-          "widthName": 80,
+          "widthName": 73,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -3012,8 +2920,8 @@
         "options": 12,
         "ui": {
           "keys": 2,
-          "widthName": 81,
-          "widthComment": 274,
+          "widthName": 74,
+          "widthComment": 294,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3032,9 +2940,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3052,9 +2960,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 98,
+          "widthName": 90,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3072,9 +2980,9 @@
         "options": 12,
         "ui": {
           "keys": 0,
-          "widthName": 101,
-          "widthComment": 344,
-          "widthDataType": 89,
+          "widthName": 94,
+          "widthComment": 320,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3093,8 +3001,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 97,
-          "widthDataType": 63,
+          "widthComment": 107,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -3112,8 +3020,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 80,
-          "widthComment": 61,
+          "widthName": 72,
+          "widthComment": 69,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3132,9 +3040,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 88,
+          "widthName": 80,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -3153,7 +3061,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 130,
+          "widthComment": 141,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3174,7 +3082,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -3192,7 +3100,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 73,
+          "widthName": 66,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -3232,9 +3140,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3253,8 +3161,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 169,
-          "widthDataType": 89,
+          "widthComment": 186,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3272,8 +3180,8 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 68,
-          "widthComment": 60,
+          "widthName": 63,
+          "widthComment": 65,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3294,7 +3202,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -3312,9 +3220,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 69,
-          "widthComment": 372,
-          "widthDataType": 83,
+          "widthName": 63,
+          "widthComment": 355,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -3352,9 +3260,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 62,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3372,9 +3280,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3392,7 +3300,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 65,
+          "widthName": 61,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -3412,9 +3320,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 66,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthName": 61,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3452,9 +3360,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 94,
-          "widthComment": 71,
-          "widthDataType": 90,
+          "widthName": 86,
+          "widthComment": 81,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3473,7 +3381,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 110,
+          "widthComment": 120,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3492,9 +3400,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3513,9 +3421,9 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 220,
-          "widthDataType": 83,
-          "widthDefault": 64
+          "widthComment": 204,
+          "widthDataType": 75,
+          "widthDefault": 60
         },
         "meta": {
           "updateAt": 1791793118726,
@@ -3553,7 +3461,7 @@
         "ui": {
           "keys": 2,
           "widthName": 60,
-          "widthComment": 60,
+          "widthComment": 65,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3592,9 +3500,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3612,9 +3520,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3653,8 +3561,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 83,
-          "widthDataType": 63,
+          "widthComment": 92,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -3674,7 +3582,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -3692,9 +3600,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3732,9 +3640,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 71,
+          "widthName": 64,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3754,7 +3662,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -3772,7 +3680,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 65,
+          "widthName": 61,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -3792,9 +3700,9 @@
         "options": 4,
         "ui": {
           "keys": 0,
-          "widthName": 77,
-          "widthComment": 60,
-          "widthDataType": 90,
+          "widthName": 71,
+          "widthComment": 65,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3832,8 +3740,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 107,
-          "widthComment": 274,
+          "widthName": 101,
+          "widthComment": 297,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -3852,9 +3760,9 @@
         "options": 12,
         "ui": {
           "keys": 0,
-          "widthName": 80,
-          "widthComment": 251,
-          "widthDataType": 83,
+          "widthName": 72,
+          "widthComment": 268,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -3872,9 +3780,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3892,9 +3800,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 73,
+          "widthName": 68,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3912,9 +3820,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3952,9 +3860,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -3972,9 +3880,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 80,
+          "widthName": 72,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -3992,7 +3900,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -4012,9 +3920,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4033,8 +3941,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 86,
-          "widthDataType": 63,
+          "widthComment": 95,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -4054,7 +3962,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -4072,9 +3980,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 71,
+          "widthName": 65,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4094,8 +4002,8 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
-          "widthDefault": 63
+          "widthDataType": 75,
+          "widthDefault": 60
         },
         "meta": {
           "updateAt": 1791793118726,
@@ -4112,9 +4020,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 91,
-          "widthComment": 78,
-          "widthDataType": 83,
+          "widthName": 84,
+          "widthComment": 89,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -4132,8 +4040,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 77,
-          "widthComment": 69,
+          "widthName": 71,
+          "widthComment": 77,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4152,9 +4060,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 75,
+          "widthName": 69,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4172,9 +4080,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 65,
-          "widthComment": 270,
-          "widthDataType": 89,
+          "widthName": 60,
+          "widthComment": 264,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -4193,8 +4101,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 93,
-          "widthDataType": 63,
+          "widthComment": 104,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -4212,8 +4120,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
-          "widthComment": 60,
+          "widthName": 62,
+          "widthComment": 65,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4233,7 +4141,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 68,
+          "widthComment": 77,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4252,9 +4160,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4274,8 +4182,8 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
-          "widthDefault": 63
+          "widthDataType": 75,
+          "widthDefault": 60
         },
         "meta": {
           "updateAt": 1791793118727,
@@ -4312,9 +4220,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4352,9 +4260,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 75,
-          "widthComment": 71,
-          "widthDataType": 83,
+          "widthName": 69,
+          "widthComment": 81,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -4372,8 +4280,8 @@
         "options": 0,
         "ui": {
           "keys": 2,
-          "widthName": 81,
-          "widthComment": 178,
+          "widthName": 74,
+          "widthComment": 197,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4393,8 +4301,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 62,
-          "widthDataType": 63,
+          "widthComment": 68,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -4412,8 +4320,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 66,
-          "widthComment": 61,
+          "widthName": 60,
+          "widthComment": 69,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4432,7 +4340,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 68,
+          "widthName": 62,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -4452,9 +4360,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4474,7 +4382,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -4493,8 +4401,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 62,
-          "widthDataType": 63,
+          "widthComment": 68,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -4533,7 +4441,7 @@
         "ui": {
           "keys": 2,
           "widthName": 60,
-          "widthComment": 73,
+          "widthComment": 80,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4572,9 +4480,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4592,9 +4500,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 68,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -4613,8 +4521,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 383,
-          "widthDataType": 83,
+          "widthComment": 349,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -4634,7 +4542,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -4652,9 +4560,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -4672,7 +4580,7 @@
         "options": 12,
         "ui": {
           "keys": 2,
-          "widthName": 68,
+          "widthName": 63,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -4692,9 +4600,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 71,
+          "widthName": 65,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4732,9 +4640,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4753,8 +4661,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 288,
-          "widthDataType": 83,
+          "widthComment": 295,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -4794,8 +4702,8 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
-          "widthDefault": 80
+          "widthDataType": 75,
+          "widthDefault": 71
         },
         "meta": {
           "updateAt": 1791793118727,
@@ -4812,9 +4720,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4832,8 +4740,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
-          "widthComment": 60,
+          "widthName": 62,
+          "widthComment": 65,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4854,7 +4762,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -4872,8 +4780,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 91,
-          "widthComment": 337,
+          "widthName": 84,
+          "widthComment": 354,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -4893,8 +4801,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -4912,7 +4820,7 @@
         "options": 12,
         "ui": {
           "keys": 2,
-          "widthName": 68,
+          "widthName": 63,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -4954,7 +4862,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -4972,9 +4880,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5014,7 +4922,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5032,9 +4940,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 68,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthName": 61,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5053,8 +4961,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 73,
-          "widthDataType": 63,
+          "widthComment": 80,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -5072,9 +4980,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5093,7 +5001,7 @@
         "ui": {
           "keys": 2,
           "widthName": 60,
-          "widthComment": 106,
+          "widthComment": 116,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -5114,7 +5022,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -5132,9 +5040,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 68,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthName": 63,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5153,8 +5061,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 166,
-          "widthDataType": 71,
+          "widthComment": 183,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5172,9 +5080,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 82,
+          "widthName": 75,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -5192,9 +5100,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 71,
+          "widthName": 64,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5212,9 +5120,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 71,
+          "widthName": 63,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -5232,7 +5140,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -5252,9 +5160,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 77,
-          "widthComment": 71,
-          "widthDataType": 83,
+          "widthName": 71,
+          "widthComment": 81,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -5272,9 +5180,9 @@
         "options": 12,
         "ui": {
           "keys": 0,
-          "widthName": 82,
+          "widthName": 77,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -5292,9 +5200,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 118,
-          "widthComment": 232,
-          "widthDataType": 71,
+          "widthName": 107,
+          "widthComment": 248,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5314,7 +5222,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5352,9 +5260,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 108,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthName": 97,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5372,9 +5280,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 121,
-          "widthComment": 71,
-          "widthDataType": 90,
+          "widthName": 109,
+          "widthComment": 81,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -5392,9 +5300,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5414,8 +5322,8 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
-          "widthDefault": 63
+          "widthDataType": 75,
+          "widthDefault": 60
         },
         "meta": {
           "updateAt": 1791793118727,
@@ -5432,9 +5340,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 77,
-          "widthComment": 71,
-          "widthDataType": 71,
+          "widthName": 71,
+          "widthComment": 81,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5452,9 +5360,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5472,9 +5380,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 116,
-          "widthComment": 71,
-          "widthDataType": 83,
+          "widthName": 106,
+          "widthComment": 81,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -5493,7 +5401,7 @@
         "ui": {
           "keys": 2,
           "widthName": 60,
-          "widthComment": 73,
+          "widthComment": 80,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -5512,9 +5420,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5532,9 +5440,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5553,8 +5461,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 60,
-          "widthDataType": 63,
+          "widthComment": 65,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -5594,7 +5502,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -5613,7 +5521,7 @@
         "ui": {
           "keys": 2,
           "widthName": 60,
-          "widthComment": 236,
+          "widthComment": 255,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -5632,7 +5540,7 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 61,
+          "widthName": 60,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -5654,7 +5562,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 83,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -5692,9 +5600,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5714,7 +5622,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5774,7 +5682,7 @@
           "keys": 0,
           "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 63,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -5792,9 +5700,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 64,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 90,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -5812,9 +5720,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 71,
+          "widthName": 65,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5832,9 +5740,9 @@
         "options": 12,
         "ui": {
           "keys": 0,
-          "widthName": 101,
+          "widthName": 94,
           "widthComment": 60,
-          "widthDataType": 89,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -5852,7 +5760,7 @@
         "options": 8,
         "ui": {
           "keys": 2,
-          "widthName": 65,
+          "widthName": 61,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -5872,9 +5780,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5893,8 +5801,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 60,
-          "widthDataType": 63,
+          "widthComment": 65,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -5912,7 +5820,7 @@
         "options": 12,
         "ui": {
           "keys": 2,
-          "widthName": 65,
+          "widthName": 61,
           "widthComment": 60,
           "widthDataType": 60,
           "widthDefault": 60
@@ -5932,9 +5840,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5952,9 +5860,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -5973,8 +5881,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 90,
-          "widthDataType": 63,
+          "widthComment": 99,
+          "widthDataType": 60,
           "widthDefault": 60
         },
         "meta": {
@@ -5992,9 +5900,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 68,
-          "widthComment": 212,
-          "widthDataType": 83,
+          "widthName": 62,
+          "widthComment": 203,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -6013,7 +5921,7 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 318,
+          "widthComment": 344,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -6033,8 +5941,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 471,
-          "widthDataType": 86,
+          "widthComment": 435,
+          "widthDataType": 78,
           "widthDefault": 60
         },
         "meta": {
@@ -6052,8 +5960,8 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
-          "widthComment": 219,
+          "widthName": 63,
+          "widthComment": 244,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -6072,9 +5980,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 72,
-          "widthComment": 361,
-          "widthDataType": 83,
+          "widthName": 66,
+          "widthComment": 339,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -6093,8 +6001,8 @@
         "ui": {
           "keys": 0,
           "widthName": 60,
-          "widthComment": 335,
-          "widthDataType": 83,
+          "widthComment": 309,
+          "widthDataType": 75,
           "widthDefault": 60
         },
         "meta": {
@@ -6112,9 +6020,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 64,
-          "widthComment": 313,
-          "widthDataType": 92,
+          "widthName": 60,
+          "widthComment": 297,
+          "widthDataType": 84,
           "widthDefault": 60
         },
         "meta": {
@@ -6132,9 +6040,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 64,
-          "widthComment": 191,
-          "widthDataType": 90,
+          "widthName": 60,
+          "widthComment": 215,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -6152,9 +6060,9 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 82,
-          "widthComment": 208,
-          "widthDataType": 90,
+          "widthName": 76,
+          "widthComment": 226,
+          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
@@ -6172,8 +6080,8 @@
         "options": 0,
         "ui": {
           "keys": 0,
-          "widthName": 113,
-          "widthComment": 343,
+          "widthName": 103,
+          "widthComment": 322,
           "widthDataType": 60,
           "widthDefault": 60
         },
@@ -6192,9 +6100,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 79,
+          "widthName": 71,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -6212,9 +6120,9 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 63,
+          "widthName": 60,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
@@ -6232,14 +6140,274 @@
         "options": 8,
         "ui": {
           "keys": 0,
-          "widthName": 67,
+          "widthName": 62,
           "widthComment": 60,
-          "widthDataType": 71,
+          "widthDataType": 65,
           "widthDefault": 60
         },
         "meta": {
           "updateAt": 1791794518694,
           "createAt": 1791794504995
+        }
+      },
+      "74uxwUyHsjrtLxPTwb-FW": {
+        "id": "74uxwUyHsjrtLxPTwb-FW",
+        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
+        "name": "version",
+        "comment": "낙관적 락 버전 (@Version)",
+        "dataType": "BIGINT",
+        "default": "0",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 142,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "FqwQnuvA7pdn1Fxp8vRtA": {
+        "id": "FqwQnuvA7pdn1Fxp8vRtA",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "id",
+        "comment": "판매자 상태 이력 ID",
+        "dataType": "BIGSERIAL",
+        "default": "",
+        "options": 10,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 107,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "lqmVtcyYabB1qLGmcxq1B": {
+        "id": "lqmVtcyYabB1qLGmcxq1B",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "seller_id",
+        "comment": "판매자 ID",
+        "dataType": "BIGINT",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 2,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "8Pk8D62WS6E9n5MR9_H6y": {
+        "id": "8Pk8D62WS6E9n5MR9_H6y",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "from_status",
+        "comment": "이전 상태 - 처음 신청은 NULL",
+        "dataType": "VARCHAR(30)",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 63,
+          "widthComment": 160,
+          "widthDataType": 75,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "jgZ75T8yTN7sS7Sn-D-AO": {
+        "id": "jgZ75T8yTN7sS7Sn-D-AO",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "to_status",
+        "comment": "변경 상태",
+        "dataType": "VARCHAR(30)",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 75,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "MfudURfZJby_bsMSQQ3Ph": {
+        "id": "MfudURfZJby_bsMSQQ3Ph",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "reason",
+        "comment": "사유 - 반려·철회 요청·철회 거절·제재",
+        "dataType": "VARCHAR(255)",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 196,
+          "widthDataType": 81,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "bgL4g7Xjv-E7P1QR166xf": {
+        "id": "bgL4g7Xjv-E7P1QR166xf",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "changed_at",
+        "comment": "변경 일시",
+        "dataType": "TIMESTAMP",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 63,
+          "widthComment": 60,
+          "widthDataType": 65,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "LhevVQWzV9JO5sSm6749S": {
+        "id": "LhevVQWzV9JO5sSm6749S",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "business_name",
+        "comment": "상호명 스냅샷 - REJECTED·WITHDRAWN 줄에만",
+        "dataType": "VARCHAR(100)",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 82,
+          "widthComment": 254,
+          "widthDataType": 81,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "iWOBjMRGZlmeGOuLUl6s9": {
+        "id": "iWOBjMRGZlmeGOuLUl6s9",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "business_number",
+        "comment": "사업자등록번호 스냅샷 - REJECTED·WITHDRAWN 줄에만",
+        "dataType": "VARCHAR(20)",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 93,
+          "widthComment": 302,
+          "widthDataType": 75,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "GELKx8gOaS-n6zsfIt3Y3": {
+        "id": "GELKx8gOaS-n6zsfIt3Y3",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "representative_name",
+        "comment": "대표자명 스냅샷 - REJECTED·WITHDRAWN 줄에만",
+        "dataType": "VARCHAR(50)",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 112,
+          "widthComment": 266,
+          "widthDataType": 75,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "IbKyKagb1IQ8TTDYmyZXv": {
+        "id": "IbKyKagb1IQ8TTDYmyZXv",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "account_last4",
+        "comment": "계좌번호 끝 4자리 스냅샷 - REJECTED·WITHDRAWN 줄에만",
+        "dataType": "VARCHAR(4)",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 73,
+          "widthComment": 315,
+          "widthDataType": 68,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "5BB87DsJM_-s4Waa83cgZ": {
+        "id": "5BB87DsJM_-s4Waa83cgZ",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "created_at",
+        "comment": "생성 일시",
+        "dataType": "TIMESTAMP",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 60,
+          "widthComment": 60,
+          "widthDataType": 65,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "UzMcJymVo_mDgd_bkXMAz": {
+        "id": "UzMcJymVo_mDgd_bkXMAz",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "name": "updated_at",
+        "comment": "수정 일시",
+        "dataType": "TIMESTAMP",
+        "default": "",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 62,
+          "widthComment": 60,
+          "widthDataType": 65,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
         }
       }
     },
@@ -6249,14 +6417,12 @@
         "identification": false,
         "relationshipType": 16,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "Rt2zNPaGX6D68Is0a5oMi",
           "columnIds": [
             "6yynfl69w3ejVWXfnsTx2"
           ],
-          "x": 1405.5,
+          "x": 1414.875,
           "y": 2356,
           "direction": 4
         },
@@ -6265,8 +6431,8 @@
           "columnIds": [
             "03h19a3iv4h5wqkemnfbwowzf"
           ],
-          "x": 1378.7032,
-          "y": 2242.734,
+          "x": 1372.2032,
+          "y": 2268.734,
           "direction": 8
         },
         "meta": {
@@ -6279,14 +6445,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "H3c0ITepFY9fPkbd-cEgM",
           "columnIds": [
             "03h19a01qcv37ij2natl0g4cf"
           ],
-          "x": 1318.7032,
+          "x": 1276.7032,
           "y": 2044.734,
           "direction": 4
         },
@@ -6295,8 +6459,8 @@
           "columnIds": [
             "03h19dtde0xs1d5bmtjjar0fk"
           ],
-          "x": 1358,
-          "y": 828,
+          "x": 1180.5,
+          "y": 854,
           "direction": 8
         },
         "meta": {
@@ -6309,14 +6473,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "H3c0ITepFY9fPkbd-cEgM",
           "columnIds": [
             "03h19a01qcv37ij2natl0g4cf"
           ],
-          "x": 1438.7032,
+          "x": 1467.7032,
           "y": 2044.734,
           "direction": 4
         },
@@ -6325,8 +6487,8 @@
           "columnIds": [
             "03h19dynyb9jn2ey9ousmms6s"
           ],
-          "x": 1645,
-          "y": 478,
+          "x": 1644,
+          "y": 504,
           "direction": 8
         },
         "meta": {
@@ -6339,15 +6501,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "H3c0ITepFY9fPkbd-cEgM",
           "columnIds": [
             "03h19a01qcv37ij2natl0g4cf"
           ],
-          "x": 1576.2032,
-          "y": 2143.734,
+          "x": 1563.2032,
+          "y": 2156.734,
           "direction": 2
         },
         "end": {
@@ -6355,8 +6515,8 @@
           "columnIds": [
             "03h19e2bx5rbrhpqw3gffkmx5"
           ],
-          "x": 1649.0501,
-          "y": 1911.7384,
+          "x": 1683.5501,
+          "y": 1937.7384,
           "direction": 8
         },
         "meta": {
@@ -6369,14 +6529,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 1,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
-          "x": 1580.8333333333335,
+          "x": 1463.5,
           "y": 3368,
           "direction": 4
         },
@@ -6385,8 +6543,8 @@
           "columnIds": [
             "03h19h7fapdoutnqi0e16dz89"
           ],
-          "x": 1238,
-          "y": 828,
+          "x": 1359.5,
+          "y": 854,
           "direction": 8
         },
         "meta": {
@@ -6399,15 +6557,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
           "x": 1063,
-          "y": 3623,
+          "y": 3636,
           "direction": 1
         },
         "end": {
@@ -6415,8 +6571,8 @@
           "columnIds": [
             "c38dLZUc0bPlJc1UtyAYb"
           ],
-          "x": 778,
-          "y": 3153,
+          "x": 755,
+          "y": 3192.666666666666,
           "direction": 2
         },
         "meta": {
@@ -6429,15 +6585,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
           "columnIds": [
             "sEIvPly6vtvPfzDaoWquF"
           ],
-          "x": 741,
-          "y": 3611,
+          "x": 926,
+          "y": 3694.666666666666,
           "direction": 2
         },
         "end": {
@@ -6446,7 +6600,7 @@
             "7IlfS0ei3i81UFtrQkX7G"
           ],
           "x": 1154.1539,
-          "y": 3091.5384,
+          "y": 3160.5384,
           "direction": 1
         },
         "meta": {
@@ -6459,15 +6613,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "tBD81wo9NCWO8SABXVh1q",
           "columnIds": [
             "aUuoTXNzC9UMQFQJmUB1F"
           ],
-          "x": 486,
-          "y": 1575,
+          "x": 470,
+          "y": 1593.3333333333335,
           "direction": 2
         },
         "end": {
@@ -6476,7 +6628,7 @@
             "1paa0lKKZD_WZzO2xVmHu"
           ],
           "x": 1713,
-          "y": 65,
+          "y": 94,
           "direction": 1
         },
         "meta": {
@@ -6489,15 +6641,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
           "x": 1043,
-          "y": 1272,
+          "y": 1288,
           "direction": 1
         },
         "end": {
@@ -6505,8 +6655,8 @@
           "columnIds": [
             "WhYvMWrRsKPMa2qGwjQ9Y"
           ],
-          "x": 769,
-          "y": 657,
+          "x": 721,
+          "y": 670,
           "direction": 2
         },
         "meta": {
@@ -6519,15 +6669,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "pRZa3Wy85MeQSvS5aDqE1",
           "columnIds": [
             "BDBcyVAmd5QegbGz6FmsK"
           ],
-          "x": 946.5,
-          "y": 478,
+          "x": 949.5,
+          "y": 504,
           "direction": 8
         },
         "end": {
@@ -6535,7 +6683,7 @@
           "columnIds": [
             "1dxHnW2RRfWC6oVRJRPVo"
           ],
-          "x": 1285.5,
+          "x": 1238.125,
           "y": 2356,
           "direction": 4
         },
@@ -6549,14 +6697,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 1,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "pRZa3Wy85MeQSvS5aDqE1",
           "columnIds": [
             "BDBcyVAmd5QegbGz6FmsK"
           ],
-          "x": 1202.3,
+          "x": 1218,
           "y": 280,
           "direction": 4
         },
@@ -6565,8 +6711,8 @@
           "columnIds": [
             "l75KZbPETIO2LOwNUHLlt"
           ],
-          "x": 1232,
-          "y": 309.7,
+          "x": 1238,
+          "y": 300,
           "direction": 2
         },
         "meta": {
@@ -6579,14 +6725,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
           "columnIds": [
             "HsLqULxj6j0aFTMmbMaC4"
           ],
-          "x": 378,
+          "x": 603.3333333333334,
           "y": 2356,
           "direction": 4
         },
@@ -6596,7 +6740,7 @@
             "xsljyCg-Am38YB3B_D1QM"
           ],
           "x": 1713,
-          "y": 185,
+          "y": 182,
           "direction": 1
         },
         "meta": {
@@ -6609,15 +6753,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "tBD81wo9NCWO8SABXVh1q",
           "columnIds": [
             "aUuoTXNzC9UMQFQJmUB1F"
           ],
-          "x": 486,
-          "y": 1815,
+          "x": 470,
+          "y": 1822.666666666667,
           "direction": 2
         },
         "end": {
@@ -6626,7 +6768,7 @@
             "MPaT0Vq0ufgqtTqTD2RdN"
           ],
           "x": 649,
-          "y": 1695,
+          "y": 1708,
           "direction": 1
         },
         "meta": {
@@ -6639,23 +6781,21 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "1ldAnjXabsgT6-N7U7r8m",
           "columnIds": [
             "-IJOZYcNYcQ9AkUbmVJpK"
           ],
-          "x": 1162,
-          "y": 185,
-          "direction": 1
+          "x": 1211.125,
+          "y": 226,
+          "direction": 8
         },
         "end": {
           "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
           "columnIds": [
             "EU3uM3v6sYHVfben-UWac"
           ],
-          "x": 258,
+          "x": 382,
           "y": 2356,
           "direction": 4
         },
@@ -6669,15 +6809,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
           "x": 1043,
-          "y": 1346,
+          "y": 1356,
           "direction": 1
         },
         "end": {
@@ -6685,8 +6823,8 @@
           "columnIds": [
             "yIkSNk5LJcTluWGGs9GDV"
           ],
-          "x": 486,
-          "y": 1695,
+          "x": 470,
+          "y": 1708.0000000000002,
           "direction": 2
         },
         "meta": {
@@ -6699,15 +6837,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
-          "x": 1374,
-          "y": 1432,
+          "x": 1455.5,
+          "y": 1458,
           "direction": 8
         },
         "end": {
@@ -6715,7 +6851,7 @@
           "columnIds": [
             "ykTKmzVIDDryTtChvvS3K"
           ],
-          "x": 1479.6666666666667,
+          "x": 1552.5,
           "y": 3368,
           "direction": 4
         },
@@ -6729,14 +6865,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
           "columnIds": [
             "sEIvPly6vtvPfzDaoWquF"
           ],
-          "x": 275.5,
+          "x": 488,
           "y": 3368,
           "direction": 4
         },
@@ -6745,8 +6879,8 @@
           "columnIds": [
             "DLYsZPuX5E8v29HxBmB26"
           ],
-          "x": 414,
-          "y": 3240,
+          "x": 402.5,
+          "y": 3266,
           "direction": 8
         },
         "meta": {
@@ -6759,14 +6893,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "Rt2zNPaGX6D68Is0a5oMi",
           "columnIds": [
             "6yynfl69w3ejVWXfnsTx2"
           ],
-          "x": 1525.5,
+          "x": 1591.625,
           "y": 2356,
           "direction": 4
         },
@@ -6775,8 +6907,8 @@
           "columnIds": [
             "L6F55JpzWRnPrju6FZV2s"
           ],
-          "x": 1769.0501,
-          "y": 1911.7384,
+          "x": 1883.5501,
+          "y": 1937.7384,
           "direction": 8
         },
         "meta": {
@@ -6789,15 +6921,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 1,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "YpN-oKy0szvMW5bZqB4Xw",
           "columnIds": [
             "E4Au_Ffw2-Gyy6BX5S501"
           ],
-          "x": 369,
-          "y": 1432,
+          "x": 357,
+          "y": 1458,
           "direction": 8
         },
         "end": {
@@ -6805,7 +6935,7 @@
           "columnIds": [
             "72snmGvcpKfZAIcPoCl1T"
           ],
-          "x": 414,
+          "x": 402.5,
           "y": 2826,
           "direction": 4
         },
@@ -6819,15 +6949,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "1ldAnjXabsgT6-N7U7r8m",
           "columnIds": [
             "-IJOZYcNYcQ9AkUbmVJpK"
           ],
           "x": 1162,
-          "y": 65,
+          "y": 138,
           "direction": 1
         },
         "end": {
@@ -6835,7 +6963,7 @@
           "columnIds": [
             "SmB8Nx9LtmIjK0UndEYcO"
           ],
-          "x": 268,
+          "x": 260,
           "y": 1536,
           "direction": 4
         },
@@ -6849,25 +6977,23 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
           "columnIds": [
             "sEIvPly6vtvPfzDaoWquF"
           ],
-          "x": 515.5,
-          "y": 3368,
-          "direction": 4
+          "x": 926,
+          "y": 3433.333333333333,
+          "direction": 2
         },
         "end": {
           "tableId": "QSegFe9VZoBWOwCC-GZn6",
           "columnIds": [
             "JfgVscGg07YzNv2o-PGI-"
           ],
-          "x": 1383.5501,
-          "y": 1776.7384,
-          "direction": 1
+          "x": 1483.5501,
+          "y": 1937.7384,
+          "direction": 8
         },
         "meta": {
           "updateAt": 1791793118727,
@@ -6879,15 +7005,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
-          "x": 1254,
-          "y": 1432,
+          "x": 1180.5,
+          "y": 1458,
           "direction": 8
         },
         "end": {
@@ -6895,7 +7019,7 @@
           "columnIds": [
             "wggBfxKudy4Dx_cxS0pNy"
           ],
-          "x": 395.5,
+          "x": 780,
           "y": 3368,
           "direction": 4
         },
@@ -6909,25 +7033,23 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
           "columnIds": [
             "sEIvPly6vtvPfzDaoWquF"
           ],
-          "x": 635.5,
-          "y": 3368,
-          "direction": 4
+          "x": 926,
+          "y": 3563.9999999999995,
+          "direction": 2
         },
         "end": {
           "tableId": "Rt2zNPaGX6D68Is0a5oMi",
           "columnIds": [
             "KubMOSX3LTeA_JAa91nXY"
           ],
-          "x": 973,
-          "y": 2599,
-          "direction": 1
+          "x": 1326.5,
+          "y": 2748,
+          "direction": 8
         },
         "meta": {
           "updateAt": 1791793118727,
@@ -6939,15 +7061,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 1,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "6XiIJJsxcjCp_Ydg1yRme",
           "columnIds": [
             "W7C6zQSKcqkW4vjaZVtQJ"
           ],
           "x": 1154.1539,
-          "y": 2971.5384,
+          "y": 2928.5384,
           "direction": 1
         },
         "end": {
@@ -6955,8 +7075,8 @@
           "columnIds": [
             "hiTQYVEnwrTdmoHxHr9sZ"
           ],
-          "x": 778,
-          "y": 3033,
+          "x": 755,
+          "y": 3045.9999999999995,
           "direction": 2
         },
         "meta": {
@@ -6969,14 +7089,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
-          "x": 1277.3333333333333,
+          "x": 1196.5,
           "y": 3368,
           "direction": 4
         },
@@ -6985,8 +7103,8 @@
           "columnIds": [
             "D1GoxGC2FYwQv5Zc564Da"
           ],
-          "x": 265.5,
-          "y": 454,
+          "x": 262,
+          "y": 480,
           "direction": 8
         },
         "meta": {
@@ -6999,14 +7117,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
           "columnIds": [
             "sEIvPly6vtvPfzDaoWquF"
           ],
-          "x": 155.5,
+          "x": 196,
           "y": 3368,
           "direction": 4
         },
@@ -7015,8 +7131,8 @@
           "columnIds": [
             "CR5XsRRV6JeitIeQtDleL"
           ],
-          "x": 212,
-          "y": 1106,
+          "x": 158.25,
+          "y": 1132,
           "direction": 8
         },
         "meta": {
@@ -7029,14 +7145,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
-          "x": 1176.1666666666667,
+          "x": 1107.5,
           "y": 3368,
           "direction": 4
         },
@@ -7045,8 +7159,8 @@
           "columnIds": [
             "17KbX6RATgQ1oXnbIJ1Nw"
           ],
-          "x": 328,
-          "y": 1854,
+          "x": 365,
+          "y": 1880,
           "direction": 8
         },
         "meta": {
@@ -7059,15 +7173,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "QSegFe9VZoBWOwCC-GZn6",
           "columnIds": [
             "A1sEE6HNDl3JoAHl9xtSp"
           ],
           "x": 1383.5501,
-          "y": 1656.7384,
+          "y": 1729.7384,
           "direction": 1
         },
         "end": {
@@ -7075,8 +7187,8 @@
           "columnIds": [
             "iRuQwwP5L_5HftMiwEFp-"
           ],
-          "x": 778,
-          "y": 2913,
+          "x": 755,
+          "y": 2899.333333333333,
           "direction": 2
         },
         "meta": {
@@ -7089,14 +7201,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
-          "x": 1682,
+          "x": 1641.5,
           "y": 3368,
           "direction": 4
         },
@@ -7105,8 +7215,8 @@
           "columnIds": [
             "5m0keyHHLp9OxTLt6JMgN"
           ],
-          "x": 1889.0501,
-          "y": 1911.7384,
+          "x": 2083.5501,
+          "y": 1937.7384,
           "direction": 8
         },
         "meta": {
@@ -7119,15 +7229,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
           "x": 1043,
-          "y": 1420,
+          "y": 1424,
           "direction": 1
         },
         "end": {
@@ -7135,7 +7243,7 @@
           "columnIds": [
             "KCnkzOPhfA7CkGS2nqF7Q"
           ],
-          "x": 498,
+          "x": 160.66666666666669,
           "y": 2356,
           "direction": 4
         },
@@ -7149,15 +7257,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "Rt2zNPaGX6D68Is0a5oMi",
           "columnIds": [
             "6yynfl69w3ejVWXfnsTx2"
           ],
           "x": 973,
-          "y": 2479,
+          "y": 2552,
           "direction": 1
         },
         "end": {
@@ -7165,8 +7271,8 @@
           "columnIds": [
             "Y3-BkSvoxAZcQ6C6zk2Mx"
           ],
-          "x": 332,
-          "y": 1106,
+          "x": 374.75,
+          "y": 1132,
           "direction": 8
         },
         "meta": {
@@ -7179,15 +7285,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 1,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "Rmavw4sNQsrRz4M7jkWq2",
           "columnIds": [
             "4DYjJCM3jpljfDgisPjmU"
           ],
-          "x": 1072.5,
-          "y": 1106,
+          "x": 1053,
+          "y": 1132,
           "direction": 8
         },
         "end": {
@@ -7195,7 +7299,7 @@
           "columnIds": [
             "QYvl32bmq9HQEupkrnFPg"
           ],
-          "x": 1546.1539,
+          "x": 1544.6539,
           "y": 2812.5384,
           "direction": 4
         },
@@ -7209,15 +7313,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
           "x": 1043,
-          "y": 1198,
+          "y": 1220,
           "direction": 1
         },
         "end": {
@@ -7225,7 +7327,7 @@
           "columnIds": [
             "C_3LkdRvE8GBjBenniK8m"
           ],
-          "x": 433,
+          "x": 427,
           "y": 164,
           "direction": 2
         },
@@ -7239,15 +7341,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "1ldAnjXabsgT6-N7U7r8m",
           "columnIds": [
             "-IJOZYcNYcQ9AkUbmVJpK"
           ],
-          "x": 1360,
-          "y": 200,
+          "x": 1309.375,
+          "y": 226,
           "direction": 8
         },
         "end": {
@@ -7255,7 +7355,7 @@
           "columnIds": [
             "vfAGBuxP_CHgjsWRyjPbR"
           ],
-          "x": 997,
+          "x": 998,
           "y": 1536,
           "direction": 4
         },
@@ -7269,14 +7369,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
-          "x": 1075,
+          "x": 1285.5,
           "y": 3368,
           "direction": 4
         },
@@ -7285,8 +7383,8 @@
           "columnIds": [
             "WWhM5JKiCostz_52oz8GU"
           ],
-          "x": 704,
-          "y": 2093,
+          "x": 687,
+          "y": 2106,
           "direction": 2
         },
         "meta": {
@@ -7299,14 +7397,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "nK3GFBN6fEesBrT2UbEsi",
           "columnIds": [
             "1t8uZbpBw67J58xwsq8S-"
           ],
-          "x": 1378.5,
+          "x": 1374.5,
           "y": 3368,
           "direction": 4
         },
@@ -7315,8 +7411,8 @@
           "columnIds": [
             "Pn5N-xX04xbLPBKw101HT"
           ],
-          "x": 997,
-          "y": 1854,
+          "x": 998,
+          "y": 1880,
           "direction": 8
         },
         "meta": {
@@ -7329,14 +7425,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 1,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "QSegFe9VZoBWOwCC-GZn6",
           "columnIds": [
             "A1sEE6HNDl3JoAHl9xtSp"
           ],
-          "x": 1769.0501,
+          "x": 1783.5501,
           "y": 1521.7384,
           "direction": 4
         },
@@ -7345,8 +7439,8 @@
           "columnIds": [
             "RtpvceJVADZaM8dKJjRzN"
           ],
-          "x": 1478,
-          "y": 828,
+          "x": 1538.5,
+          "y": 854,
           "direction": 8
         },
         "meta": {
@@ -7359,15 +7453,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "1ldAnjXabsgT6-N7U7r8m",
           "columnIds": [
             "-IJOZYcNYcQ9AkUbmVJpK"
           ],
-          "x": 1240,
-          "y": 200,
+          "x": 1407.625,
+          "y": 226,
           "direction": 8
         },
         "end": {
@@ -7375,7 +7467,7 @@
           "columnIds": [
             "pO3j1f010ml2_xTrp4BCM"
           ],
-          "x": 1072.5,
+          "x": 1053,
           "y": 860,
           "direction": 4
         },
@@ -7389,15 +7481,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "vq665DDLAw4Vejkg58ZME",
           "columnIds": [
             "7BIj9MA7nYV5fPioQgo29"
           ],
-          "x": 433,
-          "y": 62,
+          "x": 427,
+          "y": 88,
           "direction": 2
         },
         "end": {
@@ -7406,7 +7496,7 @@
             "5UQMbibQJnTJPkvH78xdO"
           ],
           "x": 1442,
-          "y": 379,
+          "y": 392,
           "direction": 1
         },
         "meta": {
@@ -7419,14 +7509,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "Rt2zNPaGX6D68Is0a5oMi",
           "columnIds": [
             "6yynfl69w3ejVWXfnsTx2"
           ],
-          "x": 1165.5,
+          "x": 1061.375,
           "y": 2356,
           "direction": 4
         },
@@ -7435,8 +7523,8 @@
           "columnIds": [
             "okiWhmts82V4BO5pQfxms"
           ],
-          "x": 846.5,
-          "y": 248,
+          "x": 839,
+          "y": 274,
           "direction": 8
         },
         "meta": {
@@ -7449,15 +7537,13 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "tBD81wo9NCWO8SABXVh1q",
           "columnIds": [
             "aUuoTXNzC9UMQFQJmUB1F"
           ],
-          "x": 208,
-          "y": 1854,
+          "x": 155,
+          "y": 1880,
           "direction": 8
         },
         "end": {
@@ -7465,7 +7551,7 @@
           "columnIds": [
             "C4eZVegoMxCMhou7_gA-K"
           ],
-          "x": 377,
+          "x": 368.5,
           "y": 1934,
           "direction": 4
         },
@@ -7479,14 +7565,12 @@
         "identification": false,
         "relationshipType": 4,
         "startRelationshipType": 2,
-        "onDelete": 1,
-        "onUpdate": 1,
         "start": {
           "tableId": "9hHFjVQn5zXtWxPTDrJJ-",
           "columnIds": [
             "crWhwclChFOYf8bOG6OKi"
           ],
-          "x": 1314,
+          "x": 1318,
           "y": 1186,
           "direction": 4
         },
@@ -7495,13 +7579,41 @@
           "columnIds": [
             "kJP_CY0JJnmqZyyzz1NwY"
           ],
-          "x": 1480,
-          "y": 200,
+          "x": 1505.875,
+          "y": 226,
           "direction": 8
         },
         "meta": {
           "updateAt": 1791793118727,
           "createAt": 1791793118727
+        }
+      },
+      "mCrMmhBDH16KTKdlt0kSN": {
+        "id": "mCrMmhBDH16KTKdlt0kSN",
+        "identification": false,
+        "relationshipType": 4,
+        "startRelationshipType": 2,
+        "start": {
+          "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
+          "columnIds": [
+            "sEIvPly6vtvPfzDaoWquF"
+          ],
+          "x": 488,
+          "y": 3760,
+          "direction": 8
+        },
+        "end": {
+          "tableId": "o4uPP559DfAuHOMiGGBqf",
+          "columnIds": [
+            "lqmVtcyYabB1qLGmcxq1B"
+          ],
+          "x": 396.5,
+          "y": 3820,
+          "direction": 4
+        },
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
         }
       }
     },
@@ -7732,15 +7844,15 @@
       },
       "YqzCVhOqVFIOv6RCJlnb9": {
         "id": "YqzCVhOqVFIOv6RCJlnb9",
-        "name": "idx_seller_member",
+        "name": "uq_seller_member",
         "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
         "indexColumnIds": [
           "A3xGlvQuVuiZRJ_GmUK2q"
         ],
         "seqIndexColumnIds": [],
-        "unique": false,
+        "unique": true,
         "meta": {
-          "updateAt": 1791793118727,
+          "updateAt": 1791812262217,
           "createAt": 1791793118727
         }
       },
@@ -7975,6 +8087,21 @@
         "meta": {
           "updateAt": 1791794642401,
           "createAt": 1791794592168
+        }
+      },
+      "u4-c2Mds6EEbzQjSOTY3A": {
+        "id": "u4-c2Mds6EEbzQjSOTY3A",
+        "name": "idx_seller_status_history_seller",
+        "tableId": "o4uPP559DfAuHOMiGGBqf",
+        "indexColumnIds": [
+          "83QKT2E7moxi8dwWsT7a6",
+          "r02UAOKfow8UChYgku4Rm"
+        ],
+        "seqIndexColumnIds": [],
+        "unique": false,
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
         }
       }
     },
@@ -8537,6 +8664,26 @@
         "meta": {
           "updateAt": 1791794642401,
           "createAt": 1791794642401
+        }
+      },
+      "83QKT2E7moxi8dwWsT7a6": {
+        "id": "83QKT2E7moxi8dwWsT7a6",
+        "indexId": "u4-c2Mds6EEbzQjSOTY3A",
+        "columnId": "lqmVtcyYabB1qLGmcxq1B",
+        "orderType": 1,
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
+        }
+      },
+      "r02UAOKfow8UChYgku4Rm": {
+        "id": "r02UAOKfow8UChYgku4Rm",
+        "indexId": "u4-c2Mds6EEbzQjSOTY3A",
+        "columnId": "FqwQnuvA7pdn1Fxp8vRtA",
+        "orderType": 1,
+        "meta": {
+          "updateAt": 1791812262217,
+          "createAt": 1791812262217
         }
       }
     },

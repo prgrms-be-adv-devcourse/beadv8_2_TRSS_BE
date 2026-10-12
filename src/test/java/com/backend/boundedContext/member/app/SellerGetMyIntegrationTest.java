@@ -6,6 +6,7 @@ import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
+import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -28,13 +29,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SellerGetMyIntegrationTest {
 
     @Autowired
-    private MemberFacade memberFacade;
+    private MemberSellerFacade memberSellerFacade;
 
     @Autowired
     private MemberRepository memberRepository;
 
     @Autowired
     private SellerRepository sellerRepository;
+
+    @Autowired
+    private SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
     private Long memberId;
 
@@ -46,17 +50,20 @@ class SellerGetMyIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        sellerRepository.findFirstByMember_IdOrderByIdDesc(memberId).ifPresent(sellerRepository::delete);
+        sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerRepository.delete(seller);
+        });
         memberRepository.deleteById(memberId);
     }
 
     @Test
     @DisplayName("신청한 회원은 PENDING 상태와 끝 4자리만 보이는 계좌번호를 조회한다")
     void getMySeller_afterApply() {
-        memberFacade.applySeller(memberId, new SellerApplyRequest("팔레트 뷰티", randomBusinessNumber(), "홍길동",
+        memberSellerFacade.applySeller(memberId, new SellerApplyRequest("팔레트 뷰티", randomBusinessNumber(), "홍길동",
                 "010-1234-5678", "국민은행", "123456-01-123456", "홍길동"));
 
-        MySellerResponse response = memberFacade.getMySeller(memberId);
+        MySellerResponse response = memberSellerFacade.getMySeller(memberId);
 
         assertThat(response.status()).isEqualTo(SellerStatus.PENDING);
         assertThat(response.accountNumber()).isEqualTo("**********3456");
@@ -66,7 +73,7 @@ class SellerGetMyIntegrationTest {
     @Test
     @DisplayName("신청 내역이 없으면 404 SELLER_NOT_FOUND")
     void getMySeller_notApplied() {
-        assertThatThrownBy(() -> memberFacade.getMySeller(memberId))
+        assertThatThrownBy(() -> memberSellerFacade.getMySeller(memberId))
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_NOT_FOUND.resultCode()));
     }
