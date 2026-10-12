@@ -80,6 +80,7 @@ com.backend
 - 예외적으로 별도 트랜잭션이 필요한 경우(결제 실패 기록 등)는 별도 빈에 `@Transactional(propagation = REQUIRES_NEW)`를 둡니다. 같은 클래스 안에서 호출하면 적용되지 않습니다. → [예외 처리 8.1](palette_exception_handling.md)
 - 외부 호출(토스, 메일)은 DB 트랜잭션 밖에서 합니다.
 - 경쟁이 생기는 상태 변경(결제 vs 만료)은 조건부 UPDATE(`where status in (...)`)나 `@Version`으로 막습니다.
+- 예치금 잔액을 바꿀 때는 `findByMemberIdForUpdate`로 지갑을 잠근 뒤 `WalletTransaction.record(...)`로 잔액 변경과 원장 생성을 함께 하고, 같은 트랜잭션에서 원장을 저장합니다. `Wallet.deposit()`·`withdraw()`를 직접 호출하지 않습니다.
 
 ## 6. 컨텍스트 간 통신
 
