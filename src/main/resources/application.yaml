@@ -59,6 +59,7 @@ custom:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
     refreshTokenExpireDays: 14            # Refresh Token 유효 기간(일)
+    seedPassword: ${MEMBER_SEED_PASSWORD:}   # 개발용 시드 회원 비밀번호. 비어 있으면 시드를 넣지 않는다(운영 환경)
     refreshCookieSecure: ${AUTH_COOKIE_SECURE:false}       # HTTPS 배포 시 true
     refreshCookieSameSite: ${AUTH_COOKIE_SAME_SITE:Lax}    # 프론트·백엔드 도메인이 다르면 None (Secure 필수)
     emailCodeExpireMinutes: 5             # 이메일 인증코드 유효 시간(분)
@@ -75,6 +76,7 @@ custom:
   payment:
     topupUnit: 10000           # 충전 단위·최소 금액(원)
     topupMax: 1000000          # 1회 최대 충전 금액(원)
+    topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
   settlement:
     feeRate: 10                # 수수료율(%)

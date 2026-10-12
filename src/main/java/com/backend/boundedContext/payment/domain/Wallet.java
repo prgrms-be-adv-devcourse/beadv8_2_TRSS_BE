@@ -18,7 +18,7 @@ public class Wallet extends BaseIdAndTime {
     @Column(nullable = false, unique = true)
     private Long memberId;
 
-    // 사용 가능 금액(원). 잔액 변경은 원장 기록과 함께 충전·결제 기능에서 추가
+    // 사용 가능 금액(원). 변경할 때는 지갑을 잠금 조회(findByMemberIdForUpdate)한 뒤 원장(wallet_transaction)과 함께 기록
     @Column(nullable = false)
     private long balance;
 
@@ -29,5 +29,24 @@ public class Wallet extends BaseIdAndTime {
 
     public static Wallet create(Long memberId) {
         return new Wallet(memberId);
+    }
+
+    // 잔액 증가 (충전·환불·정산 입금)
+    public void deposit(long amount) {
+        validatePositive(amount);
+        this.balance += amount;
+    }
+
+    // 잔액 차감 (결제·충전 취소). 잔액 부족 응답(402)은 호출하는 쪽에서 먼저 판단하고, 여기서는 음수 잔액만 막음
+    public void withdraw(long amount) {
+        validatePositive(amount);
+        if (balance < amount) {
+            throw new IllegalStateException("잔액이 부족합니다. balance=" + balance + ", amount=" + amount);
+        }
+        this.balance -= amount;
+    }
+
+    private static void validatePositive(long amount) {
+        if (amount <= 0) throw new IllegalArgumentException("금액은 0보다 커야 합니다: " + amount);
     }
 }

@@ -21,4 +21,8 @@ public class MemberSupport {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.MEMBER_NOT_FOUND));
     }
+
+    public long countMembers() {
+        return memberRepository.count();
+    }
 }
