@@ -1,7 +1,6 @@
 package com.backend.boundedContext.product.in;
 
-import com.backend.shared.product.dto.ProductSnapshotDto;
-import com.backend.shared.product.dto.ProductStatus;
+import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
 import com.backend.shared.product.out.ProductApi;
@@ -23,14 +22,14 @@ public class ProductApiAdapter implements ProductApi {
     private static final long STUB_PRICE = 10_000L;
     private static final int STUB_STOCK = 100;
 
-    /** 요청한 ID마다 판매 중인 임시 상품을 돌려준다. */
+    /** 요청한 옵션 ID마다 판매 중인 임시 옵션을 돌려준다. 상품 ID는 옵션 ID와 같은 값으로 둔다. */
     @Override
-    public List<ProductSnapshotDto> getProducts(Collection<Long> productIds) {
-        return productIds.stream()
+    public List<OptionSnapshotDto> getOptions(Collection<Long> optionIds) {
+        return optionIds.stream()
                 .distinct()
-                .map(id -> new ProductSnapshotDto(
-                        id, STUB_SELLER_ID, "임시 상품 " + id, STUB_PRICE, STUB_STOCK,
-                        ProductStatus.ON_SALE, true, null, null))
+                .map(id -> new OptionSnapshotDto(
+                        id, id, STUB_SELLER_ID, "임시 상품 " + id, "기본", STUB_PRICE, STUB_STOCK,
+                        true, null, null))
                 .toList();
     }
 
