@@ -1,21 +1,27 @@
 package com.backend.boundedContext.member.app;
 
 import com.backend.boundedContext.member.domain.MemberErrorCode;
+import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.out.SellerRepository;
+import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-// 내 판매자 정보 조회. 가장 최근 신청을 보여 준다 (반려·철회된 신청이면 그 상태와 사유가 보임)
+// 내 판매자 정보 조회. 반려·철회됐으면 가장 최근 이력의 사유가 같이 보인다
 @Component
 @RequiredArgsConstructor
 public class MemberGetMySellerUseCase {
     private final SellerRepository sellerRepository;
+    private final SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
     public MySellerResponse getMySeller(Long memberId) {
-        return sellerRepository.findFirstByMember_IdOrderByIdDesc(memberId)
-                .map(MySellerResponse::from)
+        Seller seller = sellerRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.SELLER_NOT_FOUND));
+        SellerStatusHistory latest = sellerStatusHistoryRepository.findFirstBySellerIdOrderByIdDesc(seller.getId())
+                .orElse(null);
+        return MySellerResponse.from(seller, latest);
     }
 }

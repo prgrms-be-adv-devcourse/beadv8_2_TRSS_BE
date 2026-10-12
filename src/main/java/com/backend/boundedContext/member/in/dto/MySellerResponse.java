@@ -1,12 +1,12 @@
 package com.backend.boundedContext.member.in.dto;
 
 import com.backend.boundedContext.member.domain.Seller;
-import com.backend.boundedContext.member.domain.WithdrawType;
+import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.shared.member.dto.SellerStatus;
 
 import java.time.LocalDateTime;
 
-// 내 판매자 정보·신청 상태. 계좌번호는 끝 4자리만
+// 내 판매자 정보·신청 상태. 계좌번호는 끝 4자리만, 반려·본인 철회 뒤에는 사업자번호가 비어 있다
 public record MySellerResponse(
         Long sellerId,
         SellerStatus status,
@@ -17,15 +17,11 @@ public record MySellerResponse(
         String bankName,
         String accountNumber,
         String accountHolder,
-        String rejectedReason,
-        WithdrawType withdrawType,
-        String withdrawReason,
+        String reason,                  // 가장 최근 상태 변경 사유 (반려·철회 요청·철회 거절·제재)
         LocalDateTime appliedAt,
-        LocalDateTime approvedAt,
-        LocalDateTime withdrawRequestedAt,
-        LocalDateTime withdrawnAt
+        LocalDateTime statusChangedAt
 ) {
-    public static MySellerResponse from(Seller seller) {
+    public static MySellerResponse from(Seller seller, SellerStatusHistory latest) {
         return new MySellerResponse(
                 seller.getId(),
                 seller.getStatus(),
@@ -36,13 +32,9 @@ public record MySellerResponse(
                 seller.getBankName(),
                 seller.getMaskedAccountNumber(),
                 seller.getAccountHolder(),
-                seller.getRejectedReason(),
-                seller.getWithdrawType(),
-                seller.getWithdrawReason(),
+                latest == null ? null : latest.getReason(),
                 seller.getAppliedAt(),
-                seller.getApprovedAt(),
-                seller.getWithdrawRequestedAt(),
-                seller.getWithdrawnAt()
+                latest == null ? null : latest.getChangedAt()
         );
     }
 }
