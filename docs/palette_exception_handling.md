@@ -275,6 +275,11 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-SETTLEMENT_MONTH_INVALID | 끝나지 않은 달 정산 시도 |
 | | 404-SETTLEMENT_CANDIDATE_NOT_FOUND | 정산 후보를 찾을 수 없는 상태 |
 | | 409-SETTLEMENT_CANDIDATE_STATE_INVALID | 정산 할 수 없는 정산 후보 상태가 정산을 시도 |
+| | 409-SETTLEMENT_ALREADY_COMPLETED | 이미 정산이 완료된 정산 건이 정산을 시도 |
+| | 409-SETTLEMENT_AMOUNT_MISMATCH | 정산 금액이 일치하지 않아서 정산할 수 없는 상태 |
+| | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
+| | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
+
 
 ## 9. 로그 규칙
 
