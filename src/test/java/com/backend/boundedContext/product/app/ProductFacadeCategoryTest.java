@@ -45,11 +45,11 @@ class ProductFacadeCategoryTest {
     }
 
     @Test
-    @DisplayName("sortOrder 없이 추가하면 같은 대분류의 마지막 순서로 들어간다")
+    @DisplayName("추가하면 같은 대분류의 마지막 순서로 들어간다")
     void createCategoryAtLast() {
         Long beautyId = rootId("뷰티");
 
-        productFacade.createCategory("향수", beautyId, null);
+        productFacade.createCategory("향수", beautyId);
 
         List<CategoryTreeDto> children = root("뷰티").children();
         assertThat(children.getLast().name()).isEqualTo("향수");
@@ -59,17 +59,17 @@ class ProductFacadeCategoryTest {
     @Test
     @DisplayName("같은 대분류 아래 같은 이름은 CATEGORY_DUPLICATED, 다른 대분류면 허용")
     void createDuplicated() {
-        assertThatThrownBy(() -> productFacade.createCategory("스킨케어", rootId("뷰티"), null))
+        assertThatThrownBy(() -> productFacade.createCategory("스킨케어", rootId("뷰티")))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-CATEGORY_DUPLICATED");
 
-        productFacade.createCategory("스킨케어", rootId("의류"), null);
+        productFacade.createCategory("스킨케어", rootId("의류"));
     }
 
     @Test
     @DisplayName("없는 부모로 추가하면 CATEGORY_NOT_FOUND")
     void createWithUnknownParent() {
-        assertThatThrownBy(() -> productFacade.createCategory("향수", Long.MAX_VALUE, null))
+        assertThatThrownBy(() -> productFacade.createCategory("향수", Long.MAX_VALUE))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-CATEGORY_NOT_FOUND");
     }
@@ -79,7 +79,7 @@ class ProductFacadeCategoryTest {
     void deactivate() {
         Long skincareId = childId("뷰티", "스킨케어");
 
-        productFacade.modifyCategory(skincareId, null, null, false);
+        productFacade.modifyCategory(skincareId, null, false);
 
         assertThat(root("뷰티").children()).extracting(CategoryTreeDto::name).doesNotContain("스킨케어");
         assertThat(productFacade.getCategoryTreeForAdmin().getFirst().children())
@@ -93,17 +93,17 @@ class ProductFacadeCategoryTest {
     void modifyDuplicated() {
         Long skincareId = childId("뷰티", "스킨케어");
 
-        assertThatThrownBy(() -> productFacade.modifyCategory(skincareId, "메이크업", null, null))
+        assertThatThrownBy(() -> productFacade.modifyCategory(skincareId, "메이크업", null))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-CATEGORY_DUPLICATED");
 
-        assertThat(productFacade.modifyCategory(skincareId, "스킨케어", 0, null).sortOrder()).isZero();
+        assertThat(productFacade.modifyCategory(skincareId, "스킨케어", null).name()).isEqualTo("스킨케어");
     }
 
     @Test
     @DisplayName("대분류를 수정하면 CATEGORY_NOT_EDITABLE")
     void modifyRoot() {
-        assertThatThrownBy(() -> productFacade.modifyCategory(rootId("뷰티"), null, null, false))
+        assertThatThrownBy(() -> productFacade.modifyCategory(rootId("뷰티"), null, false))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-CATEGORY_NOT_EDITABLE");
     }
@@ -111,7 +111,7 @@ class ProductFacadeCategoryTest {
     @Test
     @DisplayName("소분류 아래에 추가하면 CATEGORY_DEPTH_EXCEEDED")
     void createUnderChild() {
-        assertThatThrownBy(() -> productFacade.createCategory("토너", childId("뷰티", "스킨케어"), null))
+        assertThatThrownBy(() -> productFacade.createCategory("토너", childId("뷰티", "스킨케어")))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-CATEGORY_DEPTH_EXCEEDED");
     }
