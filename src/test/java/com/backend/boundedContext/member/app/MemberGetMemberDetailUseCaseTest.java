@@ -7,6 +7,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +27,9 @@ import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.order.dto.OrderSummaryDto;
+import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.payment.dto.WalletSummaryDto;
 import com.backend.shared.payment.out.PaymentApi;
 
@@ -40,6 +45,9 @@ class MemberGetMemberDetailUseCaseTest {
     @Mock
     private PaymentApi paymentApi;
 
+    @Mock
+    private OrderApi orderApi;
+
     @InjectMocks
     private MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
 
@@ -51,12 +59,14 @@ class MemberGetMemberDetailUseCaseTest {
     }
 
     @Test
-    @DisplayName("회원 기본 정보, 판매자 상태, 지갑 잔액을 함께 돌려준다")
+    @DisplayName("회원 기본 정보, 판매자 상태, 지갑 잔액, 최근 주문 5건을 함께 돌려준다")
     void getMemberDetail_withSeller() {
         given(memberSupport.getMember(3L)).willReturn(member);
         given(memberGetSellerUseCase.findSellerByMemberId(3L))
                 .willReturn(Optional.of(new SellerDto(10L, 3L, "팔레트상점", SellerStatus.PENDING)));
         given(paymentApi.getWallet(3L)).willReturn(new WalletSummaryDto(3L, 50_000L, 0L));
+        given(orderApi.getRecentOrders(3L, 5)).willReturn(List.of(
+                new OrderSummaryDto(101L, OrderStatus.PAID, 25_000L, LocalDateTime.of(2026, 10, 12, 10, 0))));
 
         AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
 
@@ -65,16 +75,24 @@ class MemberGetMemberDetailUseCaseTest {
         assertThat(detail.sellerStatus()).isEqualTo(SellerStatus.PENDING);
         assertThat(detail.wallet().balance()).isEqualTo(50_000L);
         assertThat(detail.wallet().heldAmount()).isZero();
+        assertThat(detail.recentOrders()).singleElement().satisfies(order -> {
+            assertThat(order.orderId()).isEqualTo(101L);
+            assertThat(order.status()).isEqualTo(OrderStatus.PAID);
+            assertThat(order.totalAmount()).isEqualTo(25_000L);
+        });
     }
 
     @Test
-    @DisplayName("판매자 신청 이력이 없으면 판매자 상태는 null")
+    @DisplayName("판매자 신청 이력이 없으면 판매자 상태는 null, 주문이 없으면 빈 목록")
     void getMemberDetail_noSeller() {
         given(memberSupport.getMember(3L)).willReturn(member);
         given(memberGetSellerUseCase.findSellerByMemberId(3L)).willReturn(Optional.empty());
         given(paymentApi.getWallet(3L)).willReturn(new WalletSummaryDto(3L, 0L, 0L));
+        given(orderApi.getRecentOrders(3L, 5)).willReturn(List.of());
 
-        assertThat(memberGetMemberDetailUseCase.getMemberDetail(3L).sellerStatus()).isNull();
+        AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
+        assertThat(detail.sellerStatus()).isNull();
+        assertThat(detail.recentOrders()).isEmpty();
     }
 
     @Test

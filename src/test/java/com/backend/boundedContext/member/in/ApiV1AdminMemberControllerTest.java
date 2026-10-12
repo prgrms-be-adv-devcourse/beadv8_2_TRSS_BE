@@ -29,6 +29,7 @@ import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.order.dto.OrderStatus;
 import com.backend.global.page.PageResponse;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
@@ -106,18 +107,22 @@ class ApiV1AdminMemberControllerTest {
     }
 
     @Test
-    @DisplayName("회원 상세: 판매자 상태와 지갑 잔액을 함께 돌려준다")
+    @DisplayName("회원 상세: 판매자 상태, 지갑 잔액, 최근 주문을 함께 돌려준다")
     void getMemberDetail_admin() throws Exception {
         given(memberFacade.getMemberDetail(2L)).willReturn(new AdminMemberDetailDto(
                 2L, "seller@palette.test", "판매자", MemberRole.SELLER, MemberStatus.ACTIVE,
-                LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED, new AdminMemberDetailDto.Wallet(30_000L, 0L)));
+                LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED, new AdminMemberDetailDto.Wallet(30_000L, 0L),
+                List.of(new AdminMemberDetailDto.RecentOrder(101L, OrderStatus.PAID, 25_000L, LocalDateTime.of(2026, 10, 12, 10, 0)))));
 
         mockMvc.perform(get("/api/v1/admin/users/2").header("Authorization", bearer(MemberRole.ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.memberId").value(2))
                 .andExpect(jsonPath("$.data.sellerStatus").value("APPROVED"))
                 .andExpect(jsonPath("$.data.wallet.balance").value(30000))
-                .andExpect(jsonPath("$.data.wallet.heldAmount").value(0));
+                .andExpect(jsonPath("$.data.wallet.heldAmount").value(0))
+                .andExpect(jsonPath("$.data.recentOrders[0].orderId").value(101))
+                .andExpect(jsonPath("$.data.recentOrders[0].status").value("PAID"))
+                .andExpect(jsonPath("$.data.recentOrders[0].totalAmount").value(25000));
     }
 
     @Test
