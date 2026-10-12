@@ -30,13 +30,13 @@ public class ProductFacade {
     }
 
     @Transactional
-    public Long createCategory(String name, Long parentId, Integer sortOrder) {
-        return productCreateCategoryUseCase.createCategory(name, parentId, sortOrder).getId();
+    public Long createCategory(String name, Long parentId) {
+        return productCreateCategoryUseCase.createCategory(name, parentId).getId();
     }
 
     @Transactional
-    public CategoryDto modifyCategory(Long categoryId, String name, Integer sortOrder, Boolean active) {
-        return CategoryDto.from(productModifyCategoryUseCase.modifyCategory(categoryId, name, sortOrder, active));
+    public CategoryDto modifyCategory(Long categoryId, String name, Boolean active) {
+        return CategoryDto.from(productModifyCategoryUseCase.modifyCategory(categoryId, name, active));
     }
 
     /**
@@ -50,9 +50,8 @@ public class ProductFacade {
         int rootOrder = 0;
         for (Map.Entry<String, List<String>> entry : baseCategories.entrySet()) {
             Category root = productCreateCategoryUseCase.createRootCategory(entry.getKey(), rootOrder++);
-            int childOrder = 0;
             for (String childName : entry.getValue()) {
-                productCreateCategoryUseCase.createCategory(childName, root.getId(), childOrder++);
+                productCreateCategoryUseCase.createCategory(childName, root.getId());   // 넣은 순서대로 맨 뒤에 붙음
             }
         }
     }

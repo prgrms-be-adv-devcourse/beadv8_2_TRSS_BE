@@ -34,19 +34,18 @@ public class ApiV1AdminCategoryController {
         return RsData.of("200-1", "카테고리 목록을 조회했습니다.", productFacade.getCategoryTreeForAdmin());
     }
 
-    @Operation(summary = "소분류 추가", description = "대분류 아래에 소분류를 추가합니다.")
+    @Operation(summary = "소분류 추가", description = "대분류 아래에 소분류를 추가합니다. 추가하면 맨 뒤에 붙고, 순서는 바꿀 수 없습니다.")
     @PostMapping
     public RsData<CategoryCreateResponse> createCategory(@Valid @RequestBody CategoryCreateRequest request) {
-        Long categoryId = productFacade.createCategory(request.name(), request.parentId(), request.sortOrder());
+        Long categoryId = productFacade.createCategory(request.name(), request.parentId());
         return RsData.of("200-1", "카테고리를 추가했습니다.", new CategoryCreateResponse(categoryId));
     }
 
-    @Operation(summary = "소분류 수정", description = "이름·정렬 순서·사용 여부 중 보낸 값만 바꿉니다. 대분류는 수정할 수 없습니다.")
+    @Operation(summary = "소분류 수정", description = "이름·사용 여부 중 보낸 값만 바꿉니다. 순서는 바꿀 수 없고, 대분류는 수정할 수 없습니다.")
     @PatchMapping("/{categoryId}")
     public RsData<CategoryDto> modifyCategory(@PathVariable Long categoryId,
                                               @Valid @RequestBody CategoryModifyRequest request) {
-        CategoryDto category = productFacade.modifyCategory(
-                categoryId, request.name(), request.sortOrder(), request.active());
+        CategoryDto category = productFacade.modifyCategory(categoryId, request.name(), request.active());
         return RsData.of("200-1", "카테고리를 수정했습니다.", category);
     }
 }
