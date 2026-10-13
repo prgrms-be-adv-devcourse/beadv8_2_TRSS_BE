@@ -2,8 +2,10 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.Order;
+import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.out.CartRepository;
 import com.backend.boundedContext.order.out.OrderRepository;
+import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -40,5 +42,11 @@ public class OrderSupport {
         }
 
         return new HashSet<>(orderRepository.findOptionIdsInOrders(buyerId, optionIds, Order.PAYMENT_PENDING_STATUSES));
+    }
+
+    // 주문 생성용: 장바구니를 잠가서 조회
+    public Cart getCartForUpdate(Long memberId) {
+        return cartRepository.findByMemberIdForUpdate(memberId)
+                .orElseThrow(() -> new DomainException(OrderErrorCode.CART_ITEM_NOT_FOUND));
     }
 }

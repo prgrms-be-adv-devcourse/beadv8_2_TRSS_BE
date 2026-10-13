@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.in.dto.CartItemAddResponse;
 import com.backend.boundedContext.order.in.dto.CartResponse;
+import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ public class OrderFacade {
     private final OrderUpdateCartItemUseCase orderUpdateCartItemUseCase;
     private final OrderSelectAllCartItemsUseCase orderSelectAllCartItemsUseCase;
     private final OrderDeleteCartItemsUseCase orderDeleteCartItemsUseCase;
+    private final OrderCreateOrderUseCase orderCreateOrderUseCase;
 
     @Transactional(readOnly = true)
     public CartResponse getCart(Long memberId) {
@@ -44,5 +46,10 @@ public class OrderFacade {
     @Transactional
     public void deleteCartItems(Long memberId, List<Long> itemIds) {
         orderDeleteCartItemsUseCase.delete(memberId, itemIds);
+    }
+
+    @Transactional
+    public OrderCreateResponse createOrder(Long buyerId, List<Long> cartItemIds, long expectedTotalPrice) {
+        return orderCreateOrderUseCase.create(buyerId, cartItemIds, expectedTotalPrice);
     }
 }
