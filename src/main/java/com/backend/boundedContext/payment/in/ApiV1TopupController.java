@@ -7,12 +7,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
+import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
+import com.backend.boundedContext.payment.domain.TopupStatus;
+import com.backend.boundedContext.payment.in.dto.TopupConfirmRequest;
 import com.backend.boundedContext.payment.in.dto.TopupPrepareRequest;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,5 +36,23 @@ public class ApiV1TopupController {
             @Valid @RequestBody TopupPrepareRequest request
     ) {
         return RsData.of("200-1", "충전이 준비되었습니다.", paymentFacade.prepareTopup(authMember.memberId(), request.amount()));
+    }
+
+    @Operation(summary = "충전 승인", description = """
+            토스 결제 성공 리다이렉트 후 호출한다. 금액을 검증하고 토스 승인 API를 호출해 예치금에 반영한다.
+            data.status가 DONE이면 반영 완료, PROCESSING이면 결과 확인 중(토스 응답 지연 등)이며 잠시 후 충전 내역에서 확인한다.""")
+    @ApiResponse(responseCode = "200", description = "200-1 충전 완료(data.status: DONE) 또는 결과 확인 중(data.status: PROCESSING)")
+    @ApiResponse(responseCode = "400", description = "400-AMOUNT_MISMATCH 준비 금액과 다름 / 400-TOPUP_PAYMENT_DECLINED 카드 거절 등(data: 토스 오류 코드·메시지)")
+    @ApiResponse(responseCode = "404", description = "404-TOPUP_NOT_FOUND 충전 건 없음")
+    @ApiResponse(responseCode = "409", description = "409-TOPUP_ALREADY_PROCESSED 이미 처리된 충전·결제키")
+    @ApiResponse(responseCode = "502", description = "502-EXTERNAL_SERVICE_ERROR 토스 인증 오류 등")
+    @PostMapping("/confirm")
+    public RsData<TopupConfirmDto> confirmTopup(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Valid @RequestBody TopupConfirmRequest request
+    ) {
+        TopupConfirmDto result = paymentFacade.confirmTopup(authMember.memberId(), request.paymentKey(), request.orderId(), request.amount());
+        String msg = result.status() == TopupStatus.DONE ? "충전이 완료되었습니다." : "충전 결과를 확인하고 있습니다.";
+        return RsData.of("200-1", msg, result);
     }
 }

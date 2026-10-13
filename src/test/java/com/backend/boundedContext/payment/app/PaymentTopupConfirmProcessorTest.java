@@ -135,7 +135,7 @@ class PaymentTopupConfirmProcessorTest {
         assertThat(topup.getRemainingAmount()).isEqualTo(20_000);
         assertThat(topup.getApprovedAt()).isEqualTo(LocalDateTime.of(2026, 10, 13, 10, 0));
         assertThat(result.status()).isEqualTo(TopupStatus.DONE);
-        assertThat(result.balance()).isEqualTo(25_000);
+        assertThat(result.balance()).isEqualTo(25_000L);
     }
 
     @Test
@@ -163,7 +163,7 @@ class PaymentTopupConfirmProcessorTest {
         verify(walletTransactionRepository, never()).save(any());
         assertThat(wallet.getBalance()).isEqualTo(20_000);
         assertThat(result.status()).isEqualTo(TopupStatus.DONE);
-        assertThat(result.balance()).isEqualTo(20_000);
+        assertThat(result.balance()).isEqualTo(20_000L);
     }
 
     @Test
