@@ -36,6 +36,11 @@ public class MemberApiAdapter implements MemberApi {
     }
 
     @Override
+    public SellerDto getApprovedSellerByMemberId(Long memberId) {
+        return memberSellerFacade.getApprovedSellerByMemberId(memberId);
+    }
+
+    @Override
     public SellerDto getSeller(Long sellerId) {
         return memberSellerFacade.getSeller(sellerId);
     }

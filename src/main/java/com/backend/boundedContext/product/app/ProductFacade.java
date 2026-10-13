@@ -18,6 +18,15 @@ public class ProductFacade {
     private final ProductSupport productSupport;
     private final ProductCreateCategoryUseCase productCreateCategoryUseCase;
     private final ProductModifyCategoryUseCase productModifyCategoryUseCase;
+    private final ProductCreateProductUseCase productCreateProductUseCase;
+
+    /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. */
+    @Transactional
+    public Long createProduct(Long memberId, Long categoryId, String name, String description,
+                              long price, int stock) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock).getId();
+    }
 
     @Transactional(readOnly = true)
     public List<CategoryTreeDto> getCategoryTree() {

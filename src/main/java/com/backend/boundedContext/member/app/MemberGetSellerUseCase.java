@@ -23,6 +23,13 @@ public class MemberGetSellerUseCase {
         return sellerRepository.findByMemberId(memberId).map(Seller::toDto);
     }
 
+    // 판매 기능을 쓸 수 있는(APPROVED) 판매자. 판매자 정보가 없거나 APPROVED가 아니면 403
+    public SellerDto getApprovedSellerByMemberId(Long memberId) {
+        return findSellerByMemberId(memberId)
+                .filter(SellerDto::canSell)
+                .orElseThrow(() -> new DomainException(MemberErrorCode.SELLER_NOT_APPROVED));
+    }
+
     // 판매자 1명 조회, 없으면 404
     public SellerDto getSeller(Long sellerId) {
         return sellerRepository.findById(sellerId)

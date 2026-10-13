@@ -3,6 +3,7 @@ package com.backend.boundedContext.member.in;
 import com.backend.boundedContext.member.app.MemberSellerFacade;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
+import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
@@ -82,6 +83,41 @@ class MemberApiSellerIntegrationTest {
     }
 
     @Test
+    @DisplayName("getApprovedSellerByMemberId: 승인된 판매자는 판매자 정보가 나온다")
+    void getApprovedSellerByMemberId_approved() {
+        Long memberId = createMember();
+        Long sellerId = apply(memberId);
+        approve(memberId);
+
+        SellerDto seller = memberApi.getApprovedSellerByMemberId(memberId);
+
+        assertThat(seller.sellerId()).isEqualTo(sellerId);
+        assertThat(seller.memberId()).isEqualTo(memberId);
+        assertThat(seller.status()).isEqualTo(SellerStatus.APPROVED);
+    }
+
+    @Test
+    @DisplayName("getApprovedSellerByMemberId: 승인 전(PENDING)이면 403 SELLER_NOT_APPROVED")
+    void getApprovedSellerByMemberId_pending() {
+        Long memberId = createMember();
+        apply(memberId);
+
+        assertThatThrownBy(() -> memberApi.getApprovedSellerByMemberId(memberId))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_NOT_APPROVED.resultCode()));
+    }
+
+    @Test
+    @DisplayName("getApprovedSellerByMemberId: 신청한 적이 없으면 403 SELLER_NOT_APPROVED")
+    void getApprovedSellerByMemberId_notApplied() {
+        Long memberId = createMember();
+
+        assertThatThrownBy(() -> memberApi.getApprovedSellerByMemberId(memberId))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_NOT_APPROVED.resultCode()));
+    }
+
+    @Test
     @DisplayName("getSeller: 판매자 ID로 조회한다")
     void getSeller_exists() {
         Long memberId = createMember();
@@ -123,6 +159,13 @@ class MemberApiSellerIntegrationTest {
         Long id = memberRepository.save(Member.signUp(email, "encoded-password", "판매자")).getId();
         memberIds.add(id);
         return id;
+    }
+
+    // 관리자 승인 기능 대신 도메인 메서드로 APPROVED로 바꾼다
+    private void approve(Long memberId) {
+        Seller seller = sellerRepository.findByMemberId(memberId).orElseThrow();
+        sellerStatusHistoryRepository.save(seller.approve());
+        sellerRepository.save(seller);
     }
 
     private Long apply(Long memberId) {
