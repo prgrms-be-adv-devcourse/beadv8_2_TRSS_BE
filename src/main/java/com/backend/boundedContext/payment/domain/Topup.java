@@ -100,4 +100,9 @@ public class Topup extends BaseIdAndTime {
     public boolean isCancelable() {
         return status == TopupStatus.DONE && remainingAmount == amount;
     }
+
+    // 충전 반영 원장(CHARGE)의 멱등 키. 같은 충전 건은 한 번만 예치금에 반영
+    public String chargeIdempotencyKey() {
+        return TOSS_ORDER_ID_PREFIX + getId() + "-CHARGE";
+    }
 }

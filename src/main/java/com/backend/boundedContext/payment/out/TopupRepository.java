@@ -23,4 +23,9 @@ public interface TopupRepository extends JpaRepository<Topup, Long> {
     Optional<Topup> findByTossOrderIdAndMemberIdForUpdate(@Param("tossOrderId") String tossOrderId, @Param("memberId") Long memberId);
 
     boolean existsByPaymentKey(String paymentKey);
+
+    // 승인 결과 반영 전 충전 건 행을 잠금. 승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하지 않게 함
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from Topup t where t.id = :id")
+    Optional<Topup> findByIdForUpdate(@Param("id") Long id);
 }

@@ -22,7 +22,8 @@ public record TossPaymentResponse(
 ) {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    public boolean isDone() {
+    // 토스에서 결제 승인이 완료됐는지 (토스 status가 DONE). 우리 충전 상태(TopupStatus)와는 별개
+    public boolean isApproved() {
         return "DONE".equals(status);
     }
 

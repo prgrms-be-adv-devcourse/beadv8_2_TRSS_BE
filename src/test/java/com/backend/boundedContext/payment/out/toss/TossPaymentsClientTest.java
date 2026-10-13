@@ -70,7 +70,7 @@ class TossPaymentsClientTest {
         server.verify();
         assertThat(response.paymentKey()).isEqualTo("pk_1");
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
-        assertThat(response.isDone()).isTrue();
+        assertThat(response.isApproved()).isTrue();
         assertThat(response.totalAmount()).isEqualTo(20_000);
         assertThat(response.method()).isEqualTo("카드");
         assertThat(response.approvedAtKst()).isEqualTo(LocalDateTime.of(2026, 10, 12, 15, 0));
@@ -127,7 +127,7 @@ class TossPaymentsClientTest {
 
         server.verify();
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
-        assertThat(response.isDone()).isTrue();
+        assertThat(response.isApproved()).isTrue();
     }
 
     @Test
