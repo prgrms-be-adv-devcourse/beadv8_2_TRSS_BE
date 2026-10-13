@@ -3,13 +3,19 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
+import com.backend.boundedContext.product.app.dto.ProductSampleDto;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.dto.StockChangeDto;
+import com.backend.shared.product.dto.StockRestoreReason;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 
 @Service
@@ -19,6 +25,25 @@ public class ProductFacade {
     private final ProductCreateCategoryUseCase productCreateCategoryUseCase;
     private final ProductModifyCategoryUseCase productModifyCategoryUseCase;
     private final ProductCreateProductUseCase productCreateProductUseCase;
+    private final ProductDeductStockUseCase productDeductStockUseCase;
+    private final ProductRestoreStockUseCase productRestoreStockUseCase;
+
+    // 내부 API (ProductApiAdapter). 호출한 쪽 트랜잭션에 참여한다
+
+    @Transactional(readOnly = true)
+    public List<OptionSnapshotDto> getOptions(Collection<Long> optionIds) {
+        return productSupport.getOptionSnapshots(optionIds);
+    }
+
+    @Transactional
+    public void deductStock(List<StockChangeDto> items) {
+        productDeductStockUseCase.deductStock(items);
+    }
+
+    @Transactional
+    public void restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
+        productRestoreStockUseCase.restoreStock(items, reason);
+    }
 
     /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. */
     @Transactional
@@ -63,5 +88,24 @@ public class ProductFacade {
                 productCreateCategoryUseCase.createCategory(childName, root.getId());   // 넣은 순서대로 맨 뒤에 붙음
             }
         }
+    }
+
+    /**
+     * 시드 판매자의 샘플 상품을 등록하고 등록한 개수를 돌려준다.
+     * 상품이 이미 있거나 승인된 판매자가 아니면 아무것도 하지 않고 0을 돌려준다.
+     */
+    @Transactional
+    public int createSampleProducts(Long sellerMemberId, List<ProductSampleDto> samples) {
+        if (productSupport.countProducts() > 0) return 0;
+
+        Optional<Long> sellerId = productSupport.findSellableSellerId(sellerMemberId);
+        if (sellerId.isEmpty()) return 0;
+
+        for (ProductSampleDto sample : samples) {
+            Category category = productSupport.getChildCategory(sample.parentCategoryName(), sample.categoryName());
+            productCreateProductUseCase.createProduct(sellerId.get(), category.getId(), sample.name(),
+                    sample.name() + " 샘플 상품입니다.", sample.price(), sample.stock());
+        }
+        return samples.size();
     }
 }
