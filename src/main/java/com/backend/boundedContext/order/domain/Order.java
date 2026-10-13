@@ -26,10 +26,7 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends BaseIdAndTime {
-
-    // 주문번호 고정값
     private static final String ORDER_NUMBER_PREFIX = "ORD-";
-    // 결제 대기 상태
     public static final List<OrderStatus> PAYMENT_PENDING_STATUSES = List.of(OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED);
 
     @Column(nullable = false, unique = true, length = 40)
@@ -84,6 +81,10 @@ public class Order extends BaseIdAndTime {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id asc")
+    private List<OrderStatusHistory> statusHistories = new ArrayList<>();
+
     // 주문생성
     public static Order create(Long buyerId, List<OrderItemSpec> specs, LocalDateTime now, int expireMinutes) {
         if (specs == null || specs.isEmpty()) {
@@ -94,7 +95,7 @@ public class Order extends BaseIdAndTime {
         Order order = new Order();
         order.orderNumber = generateOrderNumber(now);
         order.buyerId = buyerId;
-        order.status = OrderStatus.CREATED;
+        order.changeStatus(OrderStatus.CREATED, null);
         order.expiresAt = now.plusMinutes(expireMinutes);
 
         specs.forEach(spec -> order.items.add(OrderItem.create(order, spec)));
@@ -110,7 +111,14 @@ public class Order extends BaseIdAndTime {
         return PAYMENT_PENDING_STATUSES.contains(status);
     }
 
-    // 한 주문에 같은 옵션은 한 줄만
+    // 주문 상태가 변경이 될 때마다 이력을 만듬
+    // TODO 결제 구현 시 그 경로에서 이력(CREATED·PAYMENT_FAILED → PAID)을 직접 저장해야함
+    private void changeStatus(OrderStatus orderStatus, String reason) {
+        statusHistories.add(OrderStatusHistory.of(this, this.status, orderStatus, reason));
+        this.status = orderStatus;
+    }
+
+    // 한 주문에 같은 옵션은 하나만
     private static void validateNoDuplicateOption(List<OrderItemSpec> specs) {
         Set<Long> optionIds = new HashSet<>();
 

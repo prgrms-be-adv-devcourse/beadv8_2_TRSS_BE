@@ -70,4 +70,17 @@ class OrderTest {
         return new OrderItemSpec(optionId + 1000, optionId + 100, optionId, 7L,
                 "상품" + optionId, "기본", "테스트상점", unitPrice, quantity);
     }
+
+    @Test
+    @DisplayName("주문을 만들면 상태 이력 첫 줄(null → CREATED)이 남는다")
+    void create_statusHistory() {
+        Order order = Order.create(1L, List.of(spec(10L, 10_000, 1)), NOW, EXPIRE_MINUTES);
+
+        assertThat(order.getStatusHistories()).hasSize(1);
+        OrderStatusHistory history = order.getStatusHistories().get(0);
+        assertThat(history.getOrder()).isSameAs(order);
+        assertThat(history.getFromStatus()).isNull();
+        assertThat(history.getToStatus()).isEqualTo(OrderStatus.CREATED);
+        assertThat(history.getReason()).isNull();
+    }
 }
