@@ -60,6 +60,12 @@ public class MemberSellerFacade {
         return memberGetSellerUseCase.findSellerByMemberId(memberId);
     }
 
+    // 판매 가능한(APPROVED) 판매자 조회 (다른 컨텍스트용, 아니면 403)
+    @Transactional(readOnly = true)
+    public SellerDto getApprovedSellerByMemberId(Long memberId) {
+        return memberGetSellerUseCase.getApprovedSellerByMemberId(memberId);
+    }
+
     // 판매자 조회 (다른 컨텍스트용, 없으면 404)
     @Transactional(readOnly = true)
     public SellerDto getSeller(Long sellerId) {
