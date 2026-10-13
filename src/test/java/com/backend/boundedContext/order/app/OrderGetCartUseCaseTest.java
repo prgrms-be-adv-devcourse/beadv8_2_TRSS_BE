@@ -5,9 +5,6 @@ import com.backend.boundedContext.order.domain.CartItem;
 import com.backend.boundedContext.order.domain.UnorderableReason;
 import com.backend.boundedContext.order.in.dto.CartItemResponse;
 import com.backend.boundedContext.order.in.dto.CartResponse;
-import com.backend.shared.member.dto.SellerDto;
-import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import com.backend.shared.product.out.ProductApi;
@@ -21,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,7 +31,6 @@ class OrderGetCartUseCaseTest {
 
     @Mock OrderSupport orderSupport;
     @Mock ProductApi productApi;   // 상품 모듈 대역
-    @Mock MemberApi memberApi;     // 회원 모듈 대역 (설정하지 않으면 findSellerByMemberId는 Optional.empty() = 판매자 아님)
 
     @InjectMocks OrderGetCartUseCase useCase;
 
@@ -158,21 +155,20 @@ class OrderGetCartUseCaseTest {
     }
 
     @Test
-    @DisplayName("본인이 판매하는 상품은 SELF_PRODUCT")
-    void selfProduct() {
+    @DisplayName("결제 대기 주문에 들어 있는 옵션은 IN_PENDING_ORDER")
+    void inPendingOrder() {
         given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1, 110L, 1)));
         given(productApi.getOptions(List.of(100L, 110L))).willReturn(List.of(
                 onSale(100L, 15000, 5),
-                new OptionSnapshotDto(110L, 11L, 7L, "내 상품", "기본", 5000, 5, true, null, null)));
-        // 3번 회원은 7번 판매자
-        given(memberApi.findSellerByMemberId(BUYER_ID)).willReturn(Optional.of(
-                new SellerDto(7L, BUYER_ID, "내상점", SellerStatus.APPROVED)));
+                onSale(110L, 5000, 5)));
+        given(orderSupport.findOptionIdsInPendingOrders(BUYER_ID, List.of(100L, 110L)))
+                .willReturn(Set.of(110L));
 
         CartResponse response = useCase.getCart(BUYER_ID);
 
-        assertThat(response.items().get(0).orderable()).isTrue();    // 2번 판매자 상품
-        assertThat(response.items().get(1).unorderableReason()).isEqualTo(UnorderableReason.SELF_PRODUCT);
+        assertThat(response.items().get(0).orderable()).isTrue();
+        assertThat(response.items().get(1).unorderableReason()).isEqualTo(UnorderableReason.IN_PENDING_ORDER);
         assertThat(response.orderable()).isFalse();
-        assertThat(response.expectedTotalPrice()).isEqualTo(15000);  // 본인 상품은 금액에서 제외
+        assertThat(response.expectedTotalPrice()).isEqualTo(15000);  // 결제 대기 옵션은 금액에서 제외
     }
 }
