@@ -62,7 +62,6 @@ public class OrderCreateOrderUseCase {
                 .toList();
         Order order = Order.create(buyerId, specs, LocalDateTime.now(), orderPolicy.getExpireMinutes());
 
-        // 금액이 변경될 경우 예외를 던진다.
         if (order.getTotalPrice() != expectedTotalPrice) {
             throw new DomainException(OrderErrorCode.PRICE_CHANGED);
         }
