@@ -13,7 +13,8 @@ import lombok.NoArgsConstructor;
  * 주문 항목
  */
 @Entity
-@Table(name = "market_order_item")
+@Table(name = "market_order_item",
+        uniqueConstraints = @UniqueConstraint(name = "uk_market_order_item_option", columnNames = {"order_id", "option_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderItem extends BaseIdAndTime {
@@ -74,7 +75,7 @@ public class OrderItem extends BaseIdAndTime {
         return item;
     }
 
-    // 재고 차감·복원 요청으로 변환
+    // 재고 차감/ 복원 요청으로 변환
     public StockChangeDto toStockChangeDto() {
         return new StockChangeDto(order.getId(), getId(), optionId, quantity);
     }
