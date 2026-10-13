@@ -27,14 +27,17 @@ public class SettlementPolicy {
 
     /**
      * 재시도해도 결과가 같은 실패(ex "재시도 불가 사유")
-     * 이 resultCode로 실패하면 바로 MANUAL_REQUIRED.
-     * 금액 불일치(정산서 합계 ≠ 후보 합계, 기존 지급 내역과 금액 다름), 판매자·지갑 없음.
-     * 결제 컨텍스트의 홀딩 잔액 부족·지갑 정지 코드가 정해지면 여기에 더한다.
+     * 이 resultCode로 실패하면 바로 MANUAL_REQUIRED
+     * 금액 불일치(정산서 합계 ≠ 후보 합계, 기존 지급 내역과 금액 다름), 판매자·지갑 없음
+     * 결제 컨텍스트 코드는 PaymentApi.transfer의 "재시도해도 같은 실패" 목록과 같다
      */
     private static final Set<String> NON_RETRYABLE_CODES = Set.of(
             "409-SETTLEMENT_AMOUNT_MISMATCH",
             "404-SELLER_NOT_FOUND",
-            "404-WALLET_NOT_FOUND");
+            "404-WALLET_NOT_FOUND",
+            "404-HOLDING_NOT_FOUND",         // 결제: 주문의 HELD 홀딩 없음
+            "409-HOLDING_INSUFFICIENT",      // 결제: 홀딩 남은 금액 < 이번 지급액
+            "409-TRANSFER_AMOUNT_MISMATCH"); // 결제: 주문별 금액 합계 ≠ 지급액 + 수수료
 
     /** 수수료율(%) */
     public static int FEE_RATE;
