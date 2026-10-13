@@ -13,7 +13,8 @@ public enum ProductErrorCode implements ErrorCode {
     CATEGORY_NOT_FOUND(404, "카테고리를 찾을 수 없습니다."),
     CATEGORY_DUPLICATED(409, "같은 대분류 아래에 같은 이름의 카테고리가 있습니다."),
     CATEGORY_DEPTH_EXCEEDED(400, "소분류 아래에는 카테고리를 추가할 수 없습니다."),
-    CATEGORY_NOT_EDITABLE(400, "대분류는 수정할 수 없습니다.");
+    CATEGORY_NOT_EDITABLE(400, "대분류는 수정할 수 없습니다."),
+    CATEGORY_NOT_SELECTABLE(400, "사용 중인 소분류만 선택할 수 있습니다.");
 
     private final int status;
     private final String msg;
