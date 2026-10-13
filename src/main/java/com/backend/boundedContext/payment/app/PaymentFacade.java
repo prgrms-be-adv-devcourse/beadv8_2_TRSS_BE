@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.app;
 
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ public class PaymentFacade {
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
+    private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
 
     // 지갑 생성 (진행 중인 트랜잭션이 있으면 참여, 없으면 새로 시작)
     @Transactional
@@ -50,5 +52,11 @@ public class PaymentFacade {
     @Transactional(readOnly = true)
     public Optional<TransferResultDto> findTransfer(String idempotencyKey) {
         return paymentFindTransferUseCase.findTransfer(idempotencyKey);
+    }
+
+    // 개발용 HELD 홀딩 시드
+    @Transactional
+    public void createSeedHoldings(Long buyerMemberId, Map<Long, Long> amountByOrderId) {
+        paymentCreateSeedHoldingsUseCase.createSeedHoldings(buyerMemberId, amountByOrderId);
     }
 }

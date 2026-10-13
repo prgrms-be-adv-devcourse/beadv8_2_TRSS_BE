@@ -28,6 +28,7 @@ public class MemberSellerFacade {
     private final MemberUpdateSellerUseCase memberUpdateSellerUseCase;
     private final MemberRequestWithdrawalUseCase memberRequestWithdrawalUseCase;
     private final MemberGetSellerUseCase memberGetSellerUseCase;
+    private final MemberCreateSeedSellerUseCase memberCreateSeedSellerUseCase;
 
     // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
     @Transactional
@@ -69,5 +70,11 @@ public class MemberSellerFacade {
     @Transactional(readOnly = true)
     public List<SellerDto> getSellers(Collection<Long> sellerIds) {
         return memberGetSellerUseCase.getSellers(sellerIds);
+    }
+
+    // 개발용 시드 판매자 (시드 판매자 회원을 APPROVED 판매자로)
+    @Transactional
+    public void createSeedSeller(String sellerEmail) {
+        memberCreateSeedSellerUseCase.createSeedSeller(sellerEmail);
     }
 }

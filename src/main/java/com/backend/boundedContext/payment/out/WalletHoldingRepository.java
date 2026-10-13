@@ -14,6 +14,8 @@ import jakarta.persistence.LockModeType;
 
 public interface WalletHoldingRepository extends JpaRepository<WalletHolding, Long> {
 
+    boolean existsByOrderId(Long orderId);
+
     // 정산 지급 전에 주문들의 홀딩을 잠금. 데드락을 막기 위해 주문 ID 오름차순으로 잠근다
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select h from WalletHolding h where h.orderId in :orderIds order by h.orderId")
