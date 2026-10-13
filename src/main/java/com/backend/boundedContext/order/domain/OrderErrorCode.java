@@ -32,7 +32,8 @@ public enum OrderErrorCode implements ErrorCode {
     RETURN_ALREADY_REQUESTED(409, "이미 반품을 요청한 주문입니다."),
     ORDER_ITEM_EMPTY(400, "주문할 상품을 선택해 주세요."),
     ORDER_OPTION_DUPLICATED(400, "한 주문에 같은 옵션을 두 번 담을 수 없습니다."),
-    ORDER_QUANTITY_INVALID(400, "주문 수량은 1개 이상이어야 합니다.");
+    ORDER_QUANTITY_INVALID(400, "주문 수량은 1개 이상이어야 합니다."),
+    ORDER_PERIOD_INVALID(400, "조회 시작일은 종료일보다 늦을 수 없습니다.");
 
     private final int status;
     private final String msg;
