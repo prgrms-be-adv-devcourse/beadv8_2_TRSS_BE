@@ -1,6 +1,8 @@
 package com.backend.boundedContext.product.domain;
 
+import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
+import com.backend.shared.product.dto.ProductUnsaleableReason;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
@@ -50,5 +52,56 @@ public class ProductOption extends BaseIdAndTime {
         option.name = DEFAULT_NAME;
         option.stock = stock;
         return option;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /**
+     * 판매할 수 없는 이유. 판매할 수 있으면 null. 재고와는 무관하다.
+     * 여러 개에 해당하면 삭제 → 중지 → 카테고리 순으로 하나만 준다 (주문 모듈이 삭제된 대상을 먼저 거를 수 있게).
+     */
+    public ProductUnsaleableReason getUnsaleableReason() {
+        if (product.isDeleted()) return ProductUnsaleableReason.PRODUCT_DELETED;
+        if (isDeleted()) return ProductUnsaleableReason.OPTION_DELETED;
+        if (product.isStopped()) return ProductUnsaleableReason.PRODUCT_STOPPED;
+        if (!product.getCategory().isActive()) return ProductUnsaleableReason.CATEGORY_INACTIVE;
+        return null;
+    }
+
+    public boolean isSaleable() {
+        return getUnsaleableReason() == null;
+    }
+
+    /** 주문으로 재고를 뺀다. 판매할 수 없으면 409, 재고가 모자라면(0 포함) 400. */
+    public void deductStock(int quantity) {
+        checkQuantity(quantity);
+        if (!isSaleable()) {
+            throw new DomainException(ProductErrorCode.PRODUCT_NOT_ON_SALE);
+        }
+        if (stock < quantity) {
+            throw new DomainException(ProductErrorCode.OUT_OF_STOCK);
+        }
+        stock -= quantity;
+    }
+
+    /**
+     * 주문 취소·반품으로 재고를 되돌린다. 상품 상태는 바꾸지 않는다 (중지된 상품도 재고만 는다).
+     * 반품 복원(RETURN_RESTORE)은 삭제된 상품·옵션이면 409. 주문 취소 복원은 삭제돼도 재고를 늘린다.
+     */
+    public void restoreStock(int quantity, StockChangeType changeType) {
+        checkQuantity(quantity);
+        if (changeType == StockChangeType.RETURN_RESTORE) {
+            if (product.isDeleted()) throw new DomainException(ProductErrorCode.PRODUCT_DELETED);
+            if (isDeleted()) throw new DomainException(ProductErrorCode.OPTION_DELETED);
+        }
+        stock += quantity;
+    }
+
+    private void checkQuantity(int quantity) {
+        if (quantity < 1) {
+            throw new IllegalArgumentException("수량은 1 이상이어야 합니다. quantity=" + quantity);
+        }
     }
 }

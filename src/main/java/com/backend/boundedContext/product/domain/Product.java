@@ -74,4 +74,12 @@ public class Product extends BaseIdAndTime {
         product.status = ProductSaleStatus.ON_SALE;
         return product;
     }
+
+    public boolean isDeleted() {
+        return status == ProductSaleStatus.DELETED;
+    }
+
+    public boolean isStopped() {
+        return status == ProductSaleStatus.STOPPED;
+    }
 }
