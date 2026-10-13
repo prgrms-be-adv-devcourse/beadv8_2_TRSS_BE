@@ -2,6 +2,7 @@ package com.backend.boundedContext.payment.app;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
@@ -24,7 +25,7 @@ import lombok.extern.slf4j.Slf4j;
  * 토스 결과별 처리
  * - 승인 성공 → 예치금 반영(DONE)
  * - 4xx 오류(카드 거절·한도 초과 등) → FAILED_PG_DECLINED 기록 후 400 TOPUP_PAYMENT_DECLINED
- * - 401(시크릿 키 오류) → FAILED_SYSTEM_ERROR 기록 후 502 EXTERNAL_SERVICE_ERROR
+ * - 키 설정 오류(401, INVALID_API_KEY 등) → 우리 설정 문제이므로 FAILED_SYSTEM_ERROR 기록 후 502 EXTERNAL_SERVICE_ERROR
  * - 응답 없음 / 5xx / ALREADY_PROCESSED_PAYMENT → 승인 여부를 알 수 없으므로 PROCESSING 유지, 200 + status PROCESSING
  */
 @Slf4j
@@ -34,6 +35,10 @@ public class PaymentConfirmTopupUseCase {
 
     // 이미 승인된 결제를 다시 승인하려 할 때 토스가 주는 코드. 실패가 아니라 승인 완료일 수 있음
     private static final String ALREADY_PROCESSED_PAYMENT = "ALREADY_PROCESSED_PAYMENT";
+
+    // 시크릿 키·클라이언트 키 설정 오류 코드. 4xx라도 사용자 잘못(카드 거절)이 아니라 우리 설정 문제
+    // INVALID_API_KEY: 잘못된 시크릿키 연동 정보(키 세트 불일치 등), UNAUTHORIZED_KEY: 인증되지 않은 키
+    private static final Set<String> API_KEY_ERROR_CODES = Set.of("INVALID_API_KEY", "UNAUTHORIZED_KEY");
 
     private final PaymentTopupConfirmProcessor paymentTopupConfirmProcessor;
     private final TossPaymentsClient tossPaymentsClient;
@@ -72,7 +77,8 @@ public class PaymentConfirmTopupUseCase {
             return TopupConfirmDto.processing(topupId, orderId, amount);
         }
 
-        if (e.getHttpStatus() == 401) {
+        if (e.getHttpStatus() == 401 || API_KEY_ERROR_CODES.contains(e.getCode())) {
+            log.error("토스 API 키 설정 오류로 승인하지 못했습니다. topupId={}, status={}, code={}", topupId, e.getHttpStatus(), e.getCode());
             paymentTopupConfirmProcessor.fail(topupId, TopupStatus.FAILED_SYSTEM_ERROR, "토스 인증에 실패했습니다.");
             throw e;
         }

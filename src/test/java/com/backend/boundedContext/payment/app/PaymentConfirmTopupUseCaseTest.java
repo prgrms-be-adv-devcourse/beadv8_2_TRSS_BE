@@ -129,6 +129,20 @@ class PaymentConfirmTopupUseCaseTest {
     }
 
     @Test
+    @DisplayName("키 세트 불일치(400 INVALID_API_KEY): 카드 거절이 아니라 FAILED_SYSTEM_ERROR로 기록하고 502")
+    void confirm_invalidApiKey() {
+        started();
+        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .willThrow(tossError(400, "INVALID_API_KEY", "잘못된 시크릿키 연동 정보 입니다."));
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("502-EXTERNAL_SERVICE_ERROR");
+        verify(processor).fail(TOPUP_ID, TopupStatus.FAILED_SYSTEM_ERROR, "토스 인증에 실패했습니다.");
+        verify(processor, never()).fail(TOPUP_ID, TopupStatus.FAILED_PG_DECLINED, "잘못된 시크릿키 연동 정보 입니다.");
+    }
+
+    @Test
     @DisplayName("토스 승인 후 예치금 반영 실패: 오류로 끝내지 않고 PROCESSING으로 응답한다")
     void confirm_completeFails() {
         started();
