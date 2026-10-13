@@ -29,7 +29,10 @@ public enum OrderErrorCode implements ErrorCode {
     PRICE_CHANGED(409, "상품 가격이 변경되었습니다. 금액을 다시 확인해 주세요."),
     ORDER_STATE_INVALID(409, "현재 주문 상태에서는 처리할 수 없습니다."),
     ORDER_EXPIRED(409, "결제 가능 시간이 지난 주문입니다."),
-    RETURN_ALREADY_REQUESTED(409, "이미 반품을 요청한 주문입니다.");
+    RETURN_ALREADY_REQUESTED(409, "이미 반품을 요청한 주문입니다."),
+    ORDER_ITEM_EMPTY(400, "주문할 상품을 선택해 주세요."),
+    ORDER_OPTION_DUPLICATED(400, "한 주문에 같은 옵션을 두 번 담을 수 없습니다."),
+    ORDER_QUANTITY_INVALID(400, "주문 수량은 1개 이상이어야 합니다.");
 
     private final int status;
     private final String msg;
