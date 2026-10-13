@@ -139,12 +139,12 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     @Test
-    @DisplayName("승인 반영: 카드가 아닌 결제 수단이어도 승인된 금액이므로 반영한다")
-    void complete_notCard() {
+    @DisplayName("승인 반영: 허용하지 않은 결제 수단(가상계좌 등)이어도 승인된 금액이므로 반영한다")
+    void complete_notAllowedMethod() {
         Wallet wallet = Wallet.create(MEMBER_ID);
         Topup topup = processingTopup(wallet, 10_000);
 
-        processor.complete(TOPUP_ID, tossDone(topup, 10_000, "간편결제"));
+        processor.complete(TOPUP_ID, tossDone(topup, 10_000, "가상계좌"));
 
         assertThat(topup.getStatus()).isEqualTo(TopupStatus.DONE);
         assertThat(wallet.getBalance()).isEqualTo(10_000);

@@ -1,6 +1,7 @@
 package com.backend.boundedContext.payment.app;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +33,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class PaymentTopupConfirmProcessor {
 
-    private static final String CARD_METHOD = "카드";
+    // 충전에 허용하는 결제 수단 (토스 응답 method 값). 나중에 토스 취소로 환불하기 쉬운 수단만 허용
+    private static final Set<String> ALLOWED_METHODS = Set.of("카드", "간편결제");
 
     private final TopupRepository topupRepository;
     private final WalletRepository walletRepository;
@@ -69,7 +71,7 @@ public class PaymentTopupConfirmProcessor {
      * 1. 충전 건 행 잠금 조회. PROCESSING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환
      *    (승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하려 해도 한 번만 반영됨)
      * 2. 지갑 잠금 조회 → 원장 CHARGE 기록(잔액 증가) → 충전 건 DONE
-     * 3. 결제 수단이 카드가 아니면 경고 로그 (토스 취소가 보류되어 되돌릴 수 없으므로 반영은 그대로 진행)
+     * 3. 허용하지 않은 결제 수단(카드·간편결제 외)이면 경고 로그 (토스 취소가 보류되어 되돌릴 수 없으므로 반영은 그대로 진행)
      * 잠금 순서: 충전 건 → 지갑
      */
     @Transactional
@@ -91,8 +93,8 @@ public class PaymentTopupConfirmProcessor {
             log.error("토스 승인 금액이 충전 금액과 다릅니다. topupId={}, 충전 {}원, 토스 {}원",
                     topupId, topup.getAmount(), toss.totalAmount());
         }
-        if (!CARD_METHOD.equals(toss.method())) {
-            log.warn("카드가 아닌 결제 수단으로 충전이 승인됐습니다. topupId={}, method={}", topupId, toss.method());
+        if (!ALLOWED_METHODS.contains(toss.method())) {
+            log.warn("허용하지 않은 결제 수단으로 충전이 승인됐습니다. topupId={}, method={}", topupId, toss.method());
         }
 
         walletTransactionRepository.save(WalletTransaction.record(wallet, WalletTransactionType.CHARGE, topup.getAmount(), topup.getId(), topup.chargeIdempotencyKey()));
