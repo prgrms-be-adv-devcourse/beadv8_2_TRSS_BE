@@ -6,6 +6,7 @@ import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.out.MemberApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProductSupport {
     private final CategoryRepository categoryRepository;
+    private final MemberApi memberApi;
+
+    /**
+     * 판매 기능을 쓸 수 있는 판매자의 ID(seller.id)를 돌려준다.
+     * role이 SELLER여도 제재·철회된 판매자가 있으므로 요청마다 승인 상태를 다시 확인한다.
+     * 승인 상태가 아니면 회원 컨텍스트가 403-SELLER_NOT_APPROVED를 던진다.
+     */
+    public Long getSellableSellerId(Long memberId) {
+        return memberApi.getApprovedSellerByMemberId(memberId).sellerId();
+    }
 
     public Category getCategory(Long categoryId) {
         return categoryRepository.findById(categoryId)
