@@ -34,6 +34,7 @@ public interface ProductApi {
      *   <li>옵션 ID 오름차순으로 잠근다.</li>
      *   <li>판매 불가 (saleable = false): 409-PRODUCT_NOT_ON_SALE</li>
      *   <li>재고 부족 (재고 0 포함): 400-OUT_OF_STOCK</li>
+     *   <li>존재하지 않는 옵션 ID: 404-PRODUCT_NOT_FOUND</li>
      *   <li>하나라도 실패하면 전체가 롤백된다.</li>
      *   <li>재고만 바꾸고 상품 상태는 바꾸지 않는다. 품절은 재고로 계산한다.</li>
      *   <li>이미 차감한 주문 항목으로 다시 호출하면 아무것도 하지 않고 정상 종료한다.</li>
@@ -51,6 +52,7 @@ public interface ProductApi {
      *       (상품을 먼저 본다. 주문 모듈이 반품 승인 때 미리 걸러서 호출하지 않는다).</li>
      *   <li>같은 주문 항목·사유로 다시 호출하면 아무것도 하지 않고 정상 종료한다.</li>
      *   <li>차감한 적 없는 주문 항목이면 IllegalStateException (호출 순서 오류).</li>
+     *   <li>존재하지 않는 옵션 ID: 404-PRODUCT_NOT_FOUND</li>
      * </ul>
      */
     void restoreStock(List<StockChangeDto> items, StockRestoreReason reason);
