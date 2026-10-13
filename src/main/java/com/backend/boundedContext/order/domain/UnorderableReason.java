@@ -13,7 +13,6 @@ public enum UnorderableReason {
     CATEGORY_INACTIVE,   // 카테고리 비활성
     SOLD_OUT,            // 품절 (옵션 재고 0)
     STOCK_INSUFFICIENT,  // 재고가 담은 수량보다 적음
-    SELF_PRODUCT,        // 본인이 판매하는 상품
     IN_PENDING_ORDER;    // 결제 대기 중인 주문에 포함
 
     /**
@@ -21,15 +20,13 @@ public enum UnorderableReason {
      *
      * @param option         옵션 현재 정보 (존재하지 않으면 null)
      * @param quantity       장바구니에 담은 수량
-     * @param selfProduct    본인이 판매하는 상품인지
      * @param inPendingOrder 결제 대기 주문에 포함됐는지
      */
-    public static UnorderableReason resolve(OptionSnapshotDto option, int quantity, boolean selfProduct, boolean inPendingOrder) {
+    public static UnorderableReason resolve(OptionSnapshotDto option, int quantity, boolean inPendingOrder) {
         if (option == null) return PRODUCT_DELETED;
         if (!option.saleable()) return fromUnsaleable(option.unsaleableReason());
         if (option.stock() == 0) return SOLD_OUT;
         if (option.stock() < quantity) return STOCK_INSUFFICIENT;
-        if (selfProduct) return SELF_PRODUCT;
         if (inPendingOrder) return IN_PENDING_ORDER;
 
         return null;

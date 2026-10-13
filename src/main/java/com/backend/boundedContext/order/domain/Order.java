@@ -29,6 +29,8 @@ public class Order extends BaseIdAndTime {
 
     // 주문번호 고정값
     private static final String ORDER_NUMBER_PREFIX = "ORD-";
+    // 결제 대기 상태
+    public static final List<OrderStatus> PAYMENT_PENDING_STATUSES = List.of(OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED);
 
     @Column(nullable = false, unique = true, length = 40)
     private String orderNumber;
@@ -82,10 +84,7 @@ public class Order extends BaseIdAndTime {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
-    /**
-     * 주문 생성. 결제 대기(CREATED) 상태로 만들고 만료 시각을 정한다.
-     * 재고 차감은 저장 후 UseCase에서 ProductApi.deductStock으로 한다.
-     */
+    // 주문생성
     public static Order create(Long buyerId, List<OrderItemSpec> specs, LocalDateTime now, int expireMinutes) {
         if (specs == null || specs.isEmpty()) {
             throw new DomainException(OrderErrorCode.ORDER_ITEM_EMPTY);
@@ -106,14 +105,15 @@ public class Order extends BaseIdAndTime {
         return order;
     }
 
-    // 결제 대기 상태인지 (CREATED·PAYMENT_FAILED)
+    // 결제 대기 상태인지
     public boolean isPaymentPending() {
-        return status == OrderStatus.CREATED || status == OrderStatus.PAYMENT_FAILED;
+        return PAYMENT_PENDING_STATUSES.contains(status);
     }
 
     // 한 주문에 같은 옵션은 한 줄만
     private static void validateNoDuplicateOption(List<OrderItemSpec> specs) {
         Set<Long> optionIds = new HashSet<>();
+
         for (OrderItemSpec spec : specs) {
             if (!optionIds.add(spec.optionId())) {
                 throw new DomainException(OrderErrorCode.ORDER_OPTION_DUPLICATED);
@@ -121,7 +121,7 @@ public class Order extends BaseIdAndTime {
         }
     }
 
-    // 주문번호: ORD-yyyyMMdd-XXXXXXXX
+    // 주문번호 생성 ORD-yyyyMMdd-XXXXXXXX
     private static String generateOrderNumber(LocalDateTime now) {
         String random = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
         return ORDER_NUMBER_PREFIX + now.format(DateTimeFormatter.BASIC_ISO_DATE) + "-" + random;

@@ -36,7 +36,7 @@ public class OrderAddCartItemUseCase {
             throw new DomainException(OrderErrorCode.PRODUCT_NOT_ON_SALE);
         }
 
-        // 판매자 본인 상품은 담을 수 없다
+        // 판매자 본인 상품은 담을 수 없음
         boolean selfProduct = memberApi.findSellerByMemberId(memberId)
                 .filter(seller -> seller.sellerId().equals(option.sellerId()))
                 .isPresent();
