@@ -75,11 +75,17 @@ public class Category extends BaseIdAndTime {
         }
     }
 
-    /** null이 아닌 값만 반영한다. */
-    public void modify(String name, Integer sortOrder, Boolean active) {
+    /** 상품에 지정할 수 있는 카테고리인지 확인한다. 사용 중인 소분류만 가능하다. */
+    public void checkSelectable() {
+        if (isRoot() || !active) {
+            throw new DomainException(ProductErrorCode.CATEGORY_NOT_SELECTABLE);
+        }
+    }
+
+    /** null이 아닌 값만 반영한다. 정렬 순서는 만들 때 정해지고 바꾸지 않는다. */
+    public void modify(String name, Boolean active) {
         checkModifiable();
         if (name != null) this.name = name.strip();
-        if (sortOrder != null) this.sortOrder = sortOrder;
         if (active != null) this.active = active;
     }
 }

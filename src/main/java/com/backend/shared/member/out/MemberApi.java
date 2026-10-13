@@ -15,12 +15,15 @@ public interface MemberApi {
     // 회원 조회
     MemberDto getMember(Long memberId);
 
-    // 회원의 판매자 정보. 판매자 신청 이력이 없으면 empty (상태와 관계없이 최신 1건)
+    // 판매자 신청 정보 조회. 신청한 적이 없으면 empty
     Optional<SellerDto> findSellerByMemberId(Long memberId);
+
+    // 판매 기능을 쓸 수 있는(APPROVED) 판매자 조회. 판매 기능을 쓸 수 없는 상태면 403 SELLER_NOT_APPROVED
+    SellerDto getApprovedSellerByMemberId(Long memberId);
 
     // 판매자 조회. 없으면 404 SELLER_NOT_FOUND
     SellerDto getSeller(Long sellerId);
 
-    // 여러 판매자 조회 (주문 스냅샷·정산 목록용). 없는 ID는 결과에서 빠짐
+    // 여러 판매자 조회. 없는 ID는 결과에서 빠짐
     List<SellerDto> getSellers(Collection<Long> sellerIds);
 }

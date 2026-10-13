@@ -14,12 +14,11 @@ public class ProductCreateCategoryUseCase {
     private final CategoryRepository categoryRepository;
 
     /**
-     * 소분류를 추가한다. sortOrder가 null이면 같은 대분류 아래 마지막 순서로 넣는다.
+     * 소분류를 추가한다. 같은 대분류 아래 마지막 순서로 넣는다.
      */
-    public Category createCategory(String name, Long parentId, Integer sortOrder) {
+    public Category createCategory(String name, Long parentId) {
         Category parent = productSupport.getCategory(parentId);
-        int order = sortOrder != null ? sortOrder : nextSortOrder(parent);
-        Category category = Category.createChild(parent, name, order);   // 부모가 소분류면 예외
+        Category category = Category.createChild(parent, name, nextSortOrder(parent));   // 부모가 소분류면 예외
 
         if (categoryRepository.existsByParentAndName(parent, category.getName())) {
             throw new DomainException(ProductErrorCode.CATEGORY_DUPLICATED);

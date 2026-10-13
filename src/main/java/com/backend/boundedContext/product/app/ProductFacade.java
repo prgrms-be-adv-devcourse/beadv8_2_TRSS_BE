@@ -18,6 +18,15 @@ public class ProductFacade {
     private final ProductSupport productSupport;
     private final ProductCreateCategoryUseCase productCreateCategoryUseCase;
     private final ProductModifyCategoryUseCase productModifyCategoryUseCase;
+    private final ProductCreateProductUseCase productCreateProductUseCase;
+
+    /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. */
+    @Transactional
+    public Long createProduct(Long memberId, Long categoryId, String name, String description,
+                              long price, int stock) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock).getId();
+    }
 
     @Transactional(readOnly = true)
     public List<CategoryTreeDto> getCategoryTree() {
@@ -30,13 +39,13 @@ public class ProductFacade {
     }
 
     @Transactional
-    public Long createCategory(String name, Long parentId, Integer sortOrder) {
-        return productCreateCategoryUseCase.createCategory(name, parentId, sortOrder).getId();
+    public Long createCategory(String name, Long parentId) {
+        return productCreateCategoryUseCase.createCategory(name, parentId).getId();
     }
 
     @Transactional
-    public CategoryDto modifyCategory(Long categoryId, String name, Integer sortOrder, Boolean active) {
-        return CategoryDto.from(productModifyCategoryUseCase.modifyCategory(categoryId, name, sortOrder, active));
+    public CategoryDto modifyCategory(Long categoryId, String name, Boolean active) {
+        return CategoryDto.from(productModifyCategoryUseCase.modifyCategory(categoryId, name, active));
     }
 
     /**
@@ -50,9 +59,8 @@ public class ProductFacade {
         int rootOrder = 0;
         for (Map.Entry<String, List<String>> entry : baseCategories.entrySet()) {
             Category root = productCreateCategoryUseCase.createRootCategory(entry.getKey(), rootOrder++);
-            int childOrder = 0;
             for (String childName : entry.getValue()) {
-                productCreateCategoryUseCase.createCategory(childName, root.getId(), childOrder++);
+                productCreateCategoryUseCase.createCategory(childName, root.getId());   // 넣은 순서대로 맨 뒤에 붙음
             }
         }
     }

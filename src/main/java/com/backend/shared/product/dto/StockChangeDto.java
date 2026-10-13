@@ -6,13 +6,13 @@ package com.backend.shared.product.dto;
  *
  * @param orderId     주문 ID
  * @param orderItemId 주문 항목 ID (주문 항목을 저장한 뒤의 값)
- * @param productId   상품 ID
+ * @param optionId    옵션 ID (재고는 옵션 단위)
  * @param quantity    수량. 차감·복원 모두 1 이상의 양수로 보낸다
  */
 public record StockChangeDto(
         Long orderId,
         Long orderItemId,
-        Long productId,
+        Long optionId,
         int quantity
 ) {
 }

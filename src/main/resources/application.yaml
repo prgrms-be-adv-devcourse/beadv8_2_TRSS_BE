@@ -71,6 +71,7 @@ custom:
       password: ${ACCOUNT_ENCRYPTION_PASSWORD:palette-dev-account-key}
       salt: ${ACCOUNT_ENCRYPTION_SALT:5c0744940b5c369b}
   order:
+    cartMaxQuantity: 99        # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
     autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
   payment:
@@ -88,4 +89,6 @@ custom:
     feeRate: 10                # 수수료율(%)
     payDayOfMonth: 10          # 매월 정산일
     maxAttempts: 3             # 최초 1회 + 재시도 2회
-    retryIntervalMinutes: 10   # 재시도 간격(분)
+    retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
+    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
+    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
