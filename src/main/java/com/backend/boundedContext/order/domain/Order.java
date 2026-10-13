@@ -100,12 +100,12 @@ public class Order extends BaseIdAndTime {
         specs.forEach(spec -> order.items.add(OrderItem.create(order, spec)));
         order.totalPrice = order.items.stream()
                 .mapToLong(OrderItem::getLineAmount)
-                .reduce(0L, Math::addExact);
+                .sum();
 
         return order;
     }
 
-    // 결제 대기 상태인지
+    // 결제 대기 상태 확인
     public boolean isPaymentPending() {
         return PAYMENT_PENDING_STATUSES.contains(status);
     }
