@@ -1,0 +1,124 @@
+package com.backend.boundedContext.product.domain;
+
+import com.backend.global.exception.DomainException;
+import com.backend.shared.product.dto.ProductUnsaleableReason;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.LocalDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 판매 중지·삭제 기능은 아직 없으므로 상태는 ReflectionTestUtils로 바꿔서 준비한다.
+ */
+class ProductOptionTest {
+
+    private final Category skincare = Category.createChild(Category.createRoot("뷰티", 0), "스킨케어", 0);
+    private final Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+    private final ProductOption option = ProductOption.createDefault(product, 5);
+
+    @Test
+    @DisplayName("판매 불가 이유는 상품 삭제 > 옵션 삭제 > 상품 중지 > 카테고리 사용 중지 순으로 하나만 나온다")
+    void unsaleableReasonPriority() {
+        assertThat(option.isSaleable()).isTrue();
+        assertThat(option.getUnsaleableReason()).isNull();
+
+        skincare.modify(null, false);
+        assertThat(option.getUnsaleableReason()).isEqualTo(ProductUnsaleableReason.CATEGORY_INACTIVE);
+
+        stopProduct();
+        assertThat(option.getUnsaleableReason()).isEqualTo(ProductUnsaleableReason.PRODUCT_STOPPED);
+
+        deleteOption();
+        assertThat(option.getUnsaleableReason()).isEqualTo(ProductUnsaleableReason.OPTION_DELETED);
+
+        deleteProduct();
+        assertThat(option.getUnsaleableReason()).isEqualTo(ProductUnsaleableReason.PRODUCT_DELETED);
+    }
+
+    @Test
+    @DisplayName("차감하면 재고가 줄고, 남은 재고를 모두 차감할 수 있다")
+    void deductStock() {
+        option.deductStock(2);
+        assertThat(option.getStock()).isEqualTo(3);
+
+        option.deductStock(3);
+        assertThat(option.getStock()).isZero();
+    }
+
+    @Test
+    @DisplayName("재고보다 많이 차감하거나 재고가 0이면 OUT_OF_STOCK, 재고는 그대로다")
+    void deductStockOverStock() {
+        assertThatThrownBy(() -> option.deductStock(6))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-OUT_OF_STOCK");
+        assertThat(option.getStock()).isEqualTo(5);
+
+        option.deductStock(5);
+        assertThatThrownBy(() -> option.deductStock(1))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-OUT_OF_STOCK");
+    }
+
+    @Test
+    @DisplayName("판매할 수 없으면 재고가 있어도 PRODUCT_NOT_ON_SALE")
+    void deductStockNotSaleable() {
+        stopProduct();
+
+        assertThatThrownBy(() -> option.deductStock(1))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_ON_SALE");
+        assertThat(option.getStock()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("주문 취소 복원은 중지·삭제된 상품이어도 재고를 늘린다")
+    void orderRestore() {
+        stopProduct();
+        option.restoreStock(2, StockChangeType.ORDER_RESTORE);
+        assertThat(option.getStock()).isEqualTo(7);
+
+        deleteProduct();
+        option.restoreStock(1, StockChangeType.ORDER_RESTORE);
+        assertThat(option.getStock()).isEqualTo(8);
+        assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.DELETED);   // 상태는 바꾸지 않는다
+    }
+
+    @Test
+    @DisplayName("반품 복원은 삭제된 상품이면 PRODUCT_DELETED, 삭제된 옵션이면 OPTION_DELETED (상품을 먼저 본다)")
+    void returnRestoreDeleted() {
+        deleteOption();
+        assertThatThrownBy(() -> option.restoreStock(1, StockChangeType.RETURN_RESTORE))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-OPTION_DELETED");
+
+        deleteProduct();
+        assertThatThrownBy(() -> option.restoreStock(1, StockChangeType.RETURN_RESTORE))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_DELETED");
+        assertThat(option.getStock()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("수량이 1보다 작으면 IllegalArgumentException")
+    void invalidQuantity() {
+        assertThatThrownBy(() -> option.deductStock(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> option.restoreStock(-1, StockChangeType.ORDER_RESTORE))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private void stopProduct() {
+        ReflectionTestUtils.setField(product, "status", ProductSaleStatus.STOPPED);
+    }
+
+    private void deleteProduct() {
+        ReflectionTestUtils.setField(product, "status", ProductSaleStatus.DELETED);
+    }
+
+    private void deleteOption() {
+        ReflectionTestUtils.setField(option, "deletedAt", LocalDateTime.now());
+    }
+}
