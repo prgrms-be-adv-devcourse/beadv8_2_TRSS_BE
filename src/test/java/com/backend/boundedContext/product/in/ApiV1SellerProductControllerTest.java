@@ -1,6 +1,7 @@
 package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
+import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
 import com.backend.global.security.JwtTokenProvider;
@@ -27,6 +28,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -86,6 +88,52 @@ class ApiV1SellerProductControllerTest {
         create(MemberRole.SELLER, plainPart)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("재고 조정: 토큰의 회원 ID와 경로의 상품·옵션 ID로 조정하고 조정 후 재고를 돌려준다")
+    void adjustStock_success() throws Exception {
+        given(productFacade.adjustStock(2L, 11L, 21L, -3)).willReturn(new OptionStockDto(21L, 7));
+
+        adjust(MemberRole.SELLER, """
+                {"changeQty":-3}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.data.optionId").value(21))
+                .andExpect(jsonPath("$.data.stock").value(7));
+    }
+
+    @Test
+    @DisplayName("재고 조정: 증감량이 0이거나 없으면 400 VALIDATION_FAILED")
+    void adjustStock_invalidChangeQty() throws Exception {
+        adjust(MemberRole.SELLER, """
+                {"changeQty":0}""")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        adjust(MemberRole.SELLER, "{}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.data.fieldErrors[0].field").value("changeQty"));
+
+        verify(productFacade, never()).adjustStock(anyLong(), anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("재고 조정: SELLER가 아니면 403 FORBIDDEN")
+    void adjustStock_notSellerRole() throws Exception {
+        adjust(MemberRole.USER, """
+                {"changeQty":1}""")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+    }
+
+    private ResultActions adjust(MemberRole role, String json) throws Exception {
+        String token = jwtTokenProvider.createAccessToken(2L, role);
+        return mockMvc.perform(post("/api/v1/seller/products/11/options/21/stock-adjustments")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json)
+                .header("Authorization", "Bearer " + token));
     }
 
     private MockMultipartFile jsonPart(String json) {
