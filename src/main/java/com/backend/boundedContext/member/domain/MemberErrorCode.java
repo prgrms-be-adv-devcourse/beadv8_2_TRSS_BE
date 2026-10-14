@@ -32,7 +32,8 @@ public enum MemberErrorCode implements ErrorCode {
     UNSETTLED_AMOUNT_EXISTS(409, "아직 지급되지 않은 정산 금액이 있어 철회를 요청할 수 없습니다."),
 
     // 로그인
-    LOGIN_FAILED(401, "이메일 또는 비밀번호가 올바르지 않습니다.");
+    LOGIN_FAILED(401, "이메일 또는 비밀번호가 올바르지 않습니다."),
+    LOGIN_LOCKED(429, "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.");
 
     private final int status;
     private final String msg;

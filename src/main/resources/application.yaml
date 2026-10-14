@@ -62,6 +62,8 @@ custom:
     emailCodeResendSeconds: 60            # 인증코드 재발송 제한 간격(초)
     emailVerifiedTokenExpireMinutes: 30   # 인증 완료 토큰 유효 시간(분)
     emailCodeMaxAttempts: 5               # 인증코드 확인 최대 실패 횟수
+    loginMaxAttempts: 5                   # 로그인 최대 실패 횟수 (도달하면 잠금)
+    loginLockMinutes: 15                  # 로그인 실패를 세는 기간이자 잠금 시간(분)
     # 정산 계좌번호 암호화 키. 기본값 없이 환경변수(.env)로만 주입한다.
     accountEncryption:
       password: ${ACCOUNT_ENCRYPTION_PASSWORD}
