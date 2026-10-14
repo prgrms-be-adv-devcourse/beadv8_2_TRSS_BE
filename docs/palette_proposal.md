@@ -278,7 +278,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /topups/confirm | POST | USER | 토스 성공 리다이렉트 후 승인(`paymentKey`, `orderId`, `amount`) → 지갑 반영. 토스 응답 시간 초과 시 `200-1` + `data.status: PROCESSING`(결과 확인 중)으로 응답하고 대사 스케줄러가 확정 | 400 AMOUNT_MISMATCH, 409 TOPUP_ALREADY_PROCESSED, 502 EXTERNAL_SERVICE_ERROR |
 | /topups/{topupId}/fail | POST | USER | 토스 실패 리다이렉트 기록(사유 코드) | 409 |
 | /topups | GET | USER | 충전 목록(남은 금액, 취소 가능 여부) | - |
-| /topups/{topupId} | GET | USER | 충전 건 상세·차감 내역 | 404 |
+| /topups/{topupId} | GET | USER | 충전 건 상세 (승인 결과 재확인·새로고침용) | 404 |
 | /topups/{topupId}/cancel | POST | USER | 미사용 충전 건 전액 취소(토스 취소) | 409 TOPUP_ALREADY_USED |
 
 ### 3.5 정산

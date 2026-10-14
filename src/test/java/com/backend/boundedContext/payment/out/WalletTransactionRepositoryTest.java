@@ -44,13 +44,13 @@ class WalletTransactionRepositoryTest {
     }
 
     @Test
-    @DisplayName("원장을 저장하면 멱등 키로 존재를 확인할 수 있고, 같은 키로는 다시 저장할 수 없다")
+    @DisplayName("원장을 저장하면 멱등 키로 조회할 수 있고, 같은 키로는 다시 저장할 수 없다")
     void idempotencyKey_unique() {
         wallet = walletRepository.save(Wallet.create(memberId));
         saved = walletTransactionRepository.saveAndFlush(WalletTransaction.record(wallet,
                 WalletTransactionType.CHARGE, 10_000, 1L, idempotencyKey));
 
-        assertThat(walletTransactionRepository.existsByIdempotencyKey(idempotencyKey)).isTrue();
+        assertThat(walletTransactionRepository.findByIdempotencyKey(idempotencyKey)).isPresent();
         assertThatThrownBy(() -> walletTransactionRepository.saveAndFlush(WalletTransaction.record(wallet,
                 WalletTransactionType.CHARGE, 10_000, 1L, idempotencyKey)))
                 .isInstanceOf(DataIntegrityViolationException.class);
