@@ -1,11 +1,18 @@
 package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Cart;
+import com.backend.boundedContext.order.domain.Order;
+import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.out.CartRepository;
+import com.backend.boundedContext.order.out.OrderRepository;
+import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 여러 UseCase가 함께 쓰는 조회.
@@ -15,6 +22,7 @@ import java.util.Optional;
 public class OrderSupport {
 
     private final CartRepository cartRepository;
+    private final OrderRepository orderRepository;
 
     // 회원 장바구니
     public Optional<Cart> findCart(Long memberId) {
@@ -25,5 +33,20 @@ public class OrderSupport {
     public Cart getOrCreateCart(Long memberId) {
         return cartRepository.findByMemberId(memberId)
                 .orElseGet(() -> cartRepository.save(Cart.create(memberId)));
+    }
+
+    // 결제 대기 주문에 들어 있는 옵션 ID
+    public Set<Long> findOptionIdsInPendingOrders(Long buyerId, Collection<Long> optionIds) {
+        if (optionIds.isEmpty()) {
+            return Set.of();   // 빈 IN 절 방지
+        }
+
+        return new HashSet<>(orderRepository.findOptionIdsInOrders(buyerId, optionIds, Order.PAYMENT_PENDING_STATUSES));
+    }
+
+    // 주문 생성용: 장바구니를 잠가서 조회
+    public Cart getCartForUpdate(Long memberId) {
+        return cartRepository.findByMemberIdForUpdate(memberId)
+                .orElseThrow(() -> new DomainException(OrderErrorCode.CART_ITEM_NOT_FOUND));
     }
 }
