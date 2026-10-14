@@ -113,19 +113,21 @@ public class SettlementProcessHistory extends BaseIdAndTime {
 
     // ---------- 정산서 집계 ----------
 
-    public static SettlementProcessHistory aggregated(Long settlementId, SettlementHistoryResult result, String reason,
+    /** @param trigger 월 정산 Job을 실행한 주체(MONTHLY_JOB: 스케줄러, ADMIN: 관리자 수동 실행) */
+    public static SettlementProcessHistory aggregated(Long settlementId, SettlementTrigger trigger,
+                                                      SettlementHistoryResult result, String reason,
                                                       Long batchExecutionId, LocalDateTime now) {
         return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
-                SettlementHistoryStage.AGGREGATE, 1, SettlementTrigger.MONTHLY_JOB,
+                SettlementHistoryStage.AGGREGATE, 1, trigger,
                 result, null, reason, null, batchExecutionId, now);
     }
 
     /** 판매자 집계 실패
      * 정산서가 만들어지지 못했으므로 사유에 판매자 ID를 적는다 */
-    public static SettlementProcessHistory aggregateFailed(String errorCode, String reason, Long batchExecutionId,
-                                                           LocalDateTime now) {
+    public static SettlementProcessHistory aggregateFailed(SettlementTrigger trigger, String errorCode, String reason,
+                                                           Long batchExecutionId, LocalDateTime now) {
         return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, null,
-                SettlementHistoryStage.AGGREGATE, 1, SettlementTrigger.MONTHLY_JOB,
+                SettlementHistoryStage.AGGREGATE, 1, trigger,
                 SettlementHistoryResult.FAILED, errorCode, reason, null, batchExecutionId, now);
     }
 

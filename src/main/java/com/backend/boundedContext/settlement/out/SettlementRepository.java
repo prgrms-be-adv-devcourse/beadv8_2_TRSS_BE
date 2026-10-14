@@ -15,7 +15,7 @@ import java.util.Optional;
 
 /**
  * 정산서 저장·조회. 상태를 바꾸기 전에는 반드시 잠금 조회(findWithLock...)를 쓴다.
- * 지급 트랜잭션이 행을 잡고 있으면 나중에 들어온 작업은 기다렸다가 바뀐 상태를 보고 건너뛴다(정책 v2 동시 실행 방지).
+ * 지급 트랜잭션이 행을 잡고 있으면 나중에 들어온 작업은 기다렸다가 바뀐 상태를 보고 건너뛴다(동시 실행 방지)
  */
 public interface SettlementRepository extends JpaRepository<Settlement, Long>, JpaSpecificationExecutor<Settlement> {
 
