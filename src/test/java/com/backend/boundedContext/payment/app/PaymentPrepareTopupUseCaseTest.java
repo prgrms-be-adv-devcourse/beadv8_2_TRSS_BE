@@ -32,7 +32,7 @@ class PaymentPrepareTopupUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 1L);
+        PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
         paymentPrepareTopupUseCase = new PaymentPrepareTopupUseCase(paymentPolicy, walletRepository, topupRepository);
     }
 

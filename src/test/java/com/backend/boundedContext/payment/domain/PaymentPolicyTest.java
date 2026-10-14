@@ -16,7 +16,7 @@ import com.backend.global.exception.DomainException;
 
 class PaymentPolicyTest {
 
-    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 1L);
+    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
 
     @ParameterizedTest
     @ValueSource(longs = {10_000, 20_000, 990_000, 1_000_000})
@@ -51,5 +51,12 @@ class PaymentPolicyTest {
     @DisplayName("READY 만료 시간은 설정한 분 단위 값이다")
     void topupReadyTtl() {
         assertThat(paymentPolicy.topupReadyTtl()).isEqualTo(Duration.ofMinutes(15));
+    }
+
+    @Test
+    @DisplayName("결과 확인 대기 시간과 1회 처리 건수는 설정한 값이다")
+    void topupReconcile() {
+        assertThat(paymentPolicy.topupReconcileDelay()).isEqualTo(Duration.ofMinutes(5));
+        assertThat(paymentPolicy.topupReconcileBatchSize()).isEqualTo(100);
     }
 }

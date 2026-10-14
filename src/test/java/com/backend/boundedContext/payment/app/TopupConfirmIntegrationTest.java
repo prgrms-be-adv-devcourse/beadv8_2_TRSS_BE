@@ -49,7 +49,7 @@ import com.backend.global.exception.DomainException;
  * 잠금으로 같은 승인 요청이 한 번만 반영되는지, 금액 불일치 실패 기록이 커밋되는지 본다.
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
-@SpringBootTest
+@SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class TopupConfirmIntegrationTest {
 
     private static final long AMOUNT = 20_000;

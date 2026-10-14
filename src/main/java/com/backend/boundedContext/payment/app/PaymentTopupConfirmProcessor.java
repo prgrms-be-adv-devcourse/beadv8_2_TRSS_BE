@@ -1,8 +1,10 @@
 package com.backend.boundedContext.payment.app;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -116,5 +118,16 @@ public class PaymentTopupConfirmProcessor {
             return;
         }
         topup.fail(failStatus, reason);
+    }
+
+    /**
+     * 결과 확인 대상: 기준 시각 이전부터 PROCESSING으로 남은 충전 건 (오래된 순, 최대 limit건)
+     * 토스 조회는 트랜잭션 밖에서 하므로 엔티티 대신 ID·주문번호만 넘김
+     */
+    @Transactional(readOnly = true)
+    public List<TopupReconcileTarget> findReconcileTargets(LocalDateTime cutoff, int limit) {
+        return topupRepository.findStale(TopupStatus.PROCESSING, cutoff, PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupReconcileTarget(topup.getId(), topup.getTossOrderId()))
+                .toList();
     }
 }
