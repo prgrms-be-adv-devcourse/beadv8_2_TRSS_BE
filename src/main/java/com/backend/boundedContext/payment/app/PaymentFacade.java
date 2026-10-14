@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.app;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
@@ -29,6 +30,7 @@ public class PaymentFacade {
     private final PaymentFailTopupUseCase paymentFailTopupUseCase;
     private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
     private final PaymentGetTopupUseCase paymentGetTopupUseCase;
+    private final PaymentExpireTopupsUseCase paymentExpireTopupsUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -72,6 +74,12 @@ public class PaymentFacade {
     @Transactional(readOnly = true)
     public TopupDto getTopup(Long memberId, Long topupId) {
         return paymentGetTopupUseCase.getTopup(memberId, topupId);
+    }
+
+    // READY 충전 건 만료 (스케줄러)
+    @Transactional
+    public int expireReadyTopups() {
+        return paymentExpireTopupsUseCase.expireReadyTopups(LocalDateTime.now());
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

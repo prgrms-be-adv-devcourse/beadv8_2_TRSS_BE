@@ -1,15 +1,18 @@
 package com.backend.boundedContext.payment.out;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.domain.TopupStatus;
 
 import jakarta.persistence.LockModeType;
 
@@ -38,4 +41,20 @@ public interface TopupRepository extends JpaRepository<Topup, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Topup t where t.id = :id")
     Optional<Topup> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * READY 만료: 기준 시각 이전에 만든 READY 충전 건을 한 번에 만료 상태로 바꾸고 바뀐 건수를 반환
+     * 조건부 UPDATE라 같은 순간 승인 요청이 PROCESSING으로 선점한 건은 바뀌지 않음
+     * 벌크 UPDATE는 JPA 감사(@LastModifiedDate)를 거치지 않으므로 updatedAt을 직접 넣음
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Topup t
+               set t.status = :expiredStatus, t.failReason = :reason, t.updatedAt = :now
+             where t.status = :readyStatus and t.createdAt < :cutoff""")
+    int expireReadyTopups(@Param("readyStatus") TopupStatus readyStatus,
+                          @Param("expiredStatus") TopupStatus expiredStatus,
+                          @Param("reason") String reason,
+                          @Param("cutoff") LocalDateTime cutoff,
+                          @Param("now") LocalDateTime now);
 }
