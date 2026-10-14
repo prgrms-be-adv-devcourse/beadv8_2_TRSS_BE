@@ -27,6 +27,7 @@ public class OrderFacade {
     private final OrderGetOrdersUseCase orderGetOrdersUseCase;
     private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
     private final OrderPayOrderUseCase orderPayOrderUseCase;
+    private final OrderCancelOrderUseCase orderCancelOrderUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -80,5 +81,11 @@ public class OrderFacade {
     @Transactional
     public OrderPayResponse payOrder(Long buyerId, Long orderId) {
         return orderPayOrderUseCase.pay(buyerId, orderId);
+    }
+
+    // 주문취소
+    @Transactional
+    public OrderCancelResponse cancelOrder(Long buyerId, Long orderId) {
+        return orderCancelOrderUseCase.cancel(buyerId, orderId);
     }
 }

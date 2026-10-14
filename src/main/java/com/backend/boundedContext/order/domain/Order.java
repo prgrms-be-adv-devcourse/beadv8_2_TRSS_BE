@@ -158,4 +158,15 @@ public class Order extends BaseIdAndTime {
         this.paidAt = now;
         changeStatus(OrderStatus.PAID, null);   // 주문이력도 함께 쌓임
     }
+
+    // 주문 취소
+    public void cancel(OrderCancelType cancelType, String reason, LocalDateTime now) {
+        if (!isPaymentPending()) {
+            throw new DomainException(OrderErrorCode.ORDER_NOT_CANCELABLE);
+        }
+
+        this.canceledAt = now;
+        this.cancelType = cancelType;
+        changeStatus(OrderStatus.CANCELED, reason);   // 주문이력도 함께 쌓임
+    }
 }
