@@ -65,8 +65,9 @@ public class ApiV1TopupController {
     }
 
     @Operation(summary = "충전 실패 기록", description = """
-            토스 결제창에서 실패·취소로 돌아왔을 때(실패 리다이렉트) 호출한다. 실패 URL의 code·message를 그대로 넘긴다.
-            PAY_PROCESS_CANCELED(사용자 취소)는 FAILED_USER_CANCEL, 그 외는 FAILED_PG_DECLINED로 기록한다.
+            토스 결제창에서 실패·취소로 돌아왔을 때(실패 리다이렉트) 또는 결제 요청(requestPayment)이 USER_CANCEL 오류로 끝났을 때 호출한다.
+            실패 URL이나 SDK 오류의 code·message를 그대로 넘긴다.
+            사용자 취소(PAY_PROCESS_CANCELED, USER_CANCEL)는 FAILED_USER_CANCEL, 그 외는 FAILED_PG_DECLINED로 기록한다.
             사용자 취소 시 토스가 orderId를 주지 않으므로 충전 준비 응답의 topupId를 쓴다.""")
     @ApiResponse(responseCode = "200", description = "200-1 실패 기록 완료")
     @ApiResponse(responseCode = "404", description = "404-TOPUP_NOT_FOUND 충전 건 없음")

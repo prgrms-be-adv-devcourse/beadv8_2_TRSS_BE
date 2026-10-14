@@ -41,6 +41,17 @@ class PaymentFailTopupUseCaseTest {
     }
 
     @Test
+    @DisplayName("결제 요청이 USER_CANCEL 오류로 끝난 경우(팝업 닫기 등)도 FAILED_USER_CANCEL로 기록한다")
+    void failTopup_userCancelFromSdk() {
+        Topup topup = readyTopup();
+
+        useCase.failTopup(MEMBER_ID, TOPUP_ID, "USER_CANCEL", "취소되었습니다.");
+
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.FAILED_USER_CANCEL);
+        assertThat(topup.getFailReason()).isEqualTo("취소되었습니다.");
+    }
+
+    @Test
     @DisplayName("그 외 결제창 실패 코드는 FAILED_PG_DECLINED로 기록한다")
     void failTopup_declined() {
         Topup topup = readyTopup();
