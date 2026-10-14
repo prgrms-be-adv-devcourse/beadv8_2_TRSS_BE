@@ -36,6 +36,8 @@ public class MemberSellerFacade {
     private final MemberCreateSeedSellerUseCase memberCreateSeedSellerUseCase;
     private final MemberGetSellersUseCase memberGetSellersUseCase;
     private final MemberGetSellerDetailUseCase memberGetSellerDetailUseCase;
+    private final MemberApproveSellerUseCase memberApproveSellerUseCase;
+    private final MemberRejectSellerUseCase memberRejectSellerUseCase;
 
     // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
     @Transactional
@@ -95,6 +97,18 @@ public class MemberSellerFacade {
     @Transactional(readOnly = true)
     public AdminSellerDetailDto getSellerDetail(Long sellerId) {
         return memberGetSellerDetailUseCase.getSellerDetail(sellerId);
+    }
+
+    // 관리자 입점 승인 (PENDING → APPROVED, 회원 role을 SELLER로)
+    @Transactional
+    public AdminSellerDetailDto approveSeller(Long sellerId) {
+        return memberApproveSellerUseCase.approve(sellerId);
+    }
+
+    // 관리자 입점 반려 (PENDING → REJECTED, 사유 필수, 신청서 스냅샷 후 사업자번호 비움)
+    @Transactional
+    public AdminSellerDetailDto rejectSeller(Long sellerId, String reason) {
+        return memberRejectSellerUseCase.reject(sellerId, reason);
     }
 
     // 개발용 시드 판매자 (시드 판매자 회원을 APPROVED 판매자로)

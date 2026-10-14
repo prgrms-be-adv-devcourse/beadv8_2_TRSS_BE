@@ -4,6 +4,8 @@ import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -11,12 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.backend.boundedContext.member.app.MemberSellerFacade;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminSellerDto;
+import com.backend.boundedContext.member.in.dto.SellerReasonRequest;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import com.backend.shared.member.dto.SellerStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @Tag(name = "관리자 판매자", description = "판매자 목록·상세 조회, 입점 심사, 철회 심사, 제재")
@@ -42,5 +46,22 @@ public class ApiV1AdminSellerController {
             @PathVariable Long sellerId
     ) {
         return RsData.of("200-1", "판매자 상세를 조회했습니다.", memberSellerFacade.getSellerDetail(sellerId));
+    }
+
+    @Operation(summary = "입점 승인", description = "심사 대기(PENDING)만 승인할 수 있고, 회원에게 판매자 권한을 줍니다. 바뀐 판매자 상세를 반환합니다.")
+    @PostMapping("/{sellerId}/approve")
+    public RsData<AdminSellerDetailDto> approve(
+            @PathVariable Long sellerId
+    ) {
+        return RsData.of("200-1", "판매자 입점을 승인했습니다.", memberSellerFacade.approveSeller(sellerId));
+    }
+
+    @Operation(summary = "입점 반려", description = "심사 대기(PENDING)만 반려할 수 있고, 사유는 필수입니다. 신청 내용은 이력에 남고 사업자번호는 비워집니다.")
+    @PostMapping("/{sellerId}/reject")
+    public RsData<AdminSellerDetailDto> reject(
+            @PathVariable Long sellerId,
+            @Valid @RequestBody SellerReasonRequest request
+    ) {
+        return RsData.of("200-1", "판매자 입점을 반려했습니다.", memberSellerFacade.rejectSeller(sellerId, request.reason()));
     }
 }
