@@ -21,7 +21,7 @@ import com.backend.boundedContext.payment.domain.WalletTransactionType;
  * 같은 멱등 키로는 원장이 두 번 저장되지 않는지 확인한다(idempotency_key 유니크).
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
-@SpringBootTest
+@SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class WalletTransactionRepositoryTest {
 
     @Autowired

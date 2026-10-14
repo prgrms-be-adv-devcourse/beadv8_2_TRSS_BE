@@ -25,7 +25,7 @@ import com.backend.global.page.PageResponse;
  * 충전 내역 조회·실패 기록을 실제 DB로 확인한다 (회원별 조회, 최신순, 페이징, 남의 충전 건 404).
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
-@SpringBootTest
+@SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class TopupHistoryIntegrationTest {
 
     @Autowired
