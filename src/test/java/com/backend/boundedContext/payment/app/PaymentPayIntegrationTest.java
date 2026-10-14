@@ -1,6 +1,7 @@
 package com.backend.boundedContext.payment.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ import com.backend.boundedContext.payment.out.PaymentRepository;
 import com.backend.boundedContext.payment.out.WalletHoldingRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
+import com.backend.global.exception.DomainException;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.PayResultStatus;
@@ -121,17 +123,68 @@ class PaymentPayIntegrationTest {
         assertThat(paymentFacade.getWallet(buyerMemberId).heldAmount()).isEqualTo(25_000);
     }
 
+    @Test
+    @DisplayName("같은 멱등 키로 다시 호출하면 처음 결과를 그대로 돌려주고 돈은 한 번만 빠진다")
+    void pay_sameKey_replay() {
+        String key = "TEST-" + UUID.randomUUID();
+        PayResultDto first = pay(25_000, key);
+
+        PayResultDto second = pay(25_000, key);
+
+        assertThat(second.paymentId()).isEqualTo(first.paymentId());
+        assertThat(second.status()).isEqualTo(PayResultStatus.PAID);
+        assertThat(balance()).isEqualTo(5_000);
+        assertThat(holdingCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("같은 멱등 키로 다른 금액을 보내면 409 IDEMPOTENCY_KEY_REUSED이고 돈은 그대로다")
+    void pay_sameKey_differentRequest() {
+        String key = "TEST-" + UUID.randomUUID();
+        pay(25_000, key);
+
+        assertThatThrownBy(() -> pay(20_000, key))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-IDEMPOTENCY_KEY_REUSED");
+        assertThat(balance()).isEqualTo(5_000);
+    }
+
+    @Test
+    @DisplayName("이미 PAID인 주문에 새 멱등 키로 결제하면 409 PAYMENT_ALREADY_PAID이고 다시 결제하지 않는다")
+    void pay_alreadyPaidOrder() {
+        pay(10_000);
+
+        assertThatThrownBy(() -> pay(10_000))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PAYMENT_ALREADY_PAID");
+        assertThat(balance()).isEqualTo(20_000);
+        assertThat(holdingCount()).isEqualTo(1);
+    }
+
     private PayResultDto pay(long amount) {
+        return pay(amount, "TEST-" + UUID.randomUUID());
+    }
+
+    private PayResultDto pay(long amount, String idempotencyKey) {
         PayResultDto result = paymentFacade.pay(
                 new PayCommand(
                         orderId,
                         buyerMemberId,
                         amount,
-                    LocalDateTime.now().plusMinutes(15), "TEST-" + UUID.randomUUID()
+                        LocalDateTime.now().plusMinutes(15),
+                        idempotencyKey
                 )
         );
-        paymentIds.add(result.paymentId());
+        if (!paymentIds.contains(result.paymentId())) paymentIds.add(result.paymentId());
         return result;
+    }
+
+    private long balance() {
+        return walletRepository.findByMemberId(buyerMemberId).orElseThrow().getBalance();
+    }
+
+    private long holdingCount() {
+        return walletHoldingRepository.findAll().stream().filter(h -> h.getOrderId().equals(orderId)).count();
     }
 
     private static long randomId() {
