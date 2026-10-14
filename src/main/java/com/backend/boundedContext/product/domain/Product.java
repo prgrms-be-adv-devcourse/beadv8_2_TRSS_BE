@@ -84,6 +84,11 @@ public class Product extends BaseIdAndTime {
         return status == ProductSaleStatus.STOPPED;
     }
 
+    /** 구매자에게 보여 줄 수 있는 상품인지. 판매 중이고 카테고리가 사용 중이어야 한다. 품절은 따로 본다. */
+    public boolean isDisplayable() {
+        return status == ProductSaleStatus.ON_SALE && category.isActive();
+    }
+
     /** 판매 중지·삭제된 상품은 수정(재고 조정 포함)할 수 없다. */
     public void checkEditable() {
         if (isStopped() || isDeleted()) {
