@@ -1,6 +1,7 @@
 package com.backend.boundedContext.payment.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,10 +18,11 @@ import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
+import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
 
 /**
- * 충전 내역 조회를 실제 DB로 확인한다 (회원별 조회, 최신순, 페이징).
+ * 충전 내역 조회·실패 기록을 실제 DB로 확인한다 (회원별 조회, 최신순, 페이징, 남의 충전 건 404).
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
 @SpringBootTest
@@ -66,5 +68,21 @@ class TopupHistoryIntegrationTest {
         assertThat(page0.totalPages()).isEqualTo(2);
         assertThat(page0.items()).extracting(TopupDto::topupId).containsExactly(third, second);
         assertThat(page1.items()).extracting(TopupDto::topupId).containsExactly(first);
+    }
+
+    @Test
+    @DisplayName("내 충전 건은 상세 조회되고, 남의 충전 건은 상세 조회·실패 기록 모두 404")
+    void otherMembersTopup() {
+        wallets.add(walletRepository.save(Wallet.create(memberId)));
+        wallets.add(walletRepository.save(Wallet.create(otherMemberId)));
+        Long othersTopupId = paymentFacade.prepareTopup(otherMemberId, 20_000).topupId();
+
+        assertThat(paymentFacade.getTopup(otherMemberId, othersTopupId).topupId()).isEqualTo(othersTopupId);
+        assertThatThrownBy(() -> paymentFacade.getTopup(memberId, othersTopupId))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("404-TOPUP_NOT_FOUND");
+        assertThatThrownBy(() -> paymentFacade.failTopup(memberId, othersTopupId, "PAY_PROCESS_CANCELED", "취소"))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("404-TOPUP_NOT_FOUND");
     }
 }

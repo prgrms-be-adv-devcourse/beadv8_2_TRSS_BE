@@ -28,6 +28,7 @@ public class PaymentFacade {
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentFailTopupUseCase paymentFailTopupUseCase;
     private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
+    private final PaymentGetTopupUseCase paymentGetTopupUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -65,6 +66,12 @@ public class PaymentFacade {
     @Transactional(readOnly = true)
     public PageResponse<TopupDto> getTopups(Long memberId, Pageable pageable) {
         return paymentGetTopupsUseCase.getTopups(memberId, pageable);
+    }
+
+    // 내 충전 건 상세
+    @Transactional(readOnly = true)
+    public TopupDto getTopup(Long memberId, Long topupId) {
+        return paymentGetTopupUseCase.getTopup(memberId, topupId);
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

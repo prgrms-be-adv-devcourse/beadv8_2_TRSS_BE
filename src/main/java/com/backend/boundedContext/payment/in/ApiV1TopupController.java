@@ -88,4 +88,15 @@ public class ApiV1TopupController {
     ) {
         return RsData.of("200-1", "충전 목록을 조회했습니다.", paymentFacade.getTopups(authMember.memberId(), pageable));
     }
+
+    @Operation(summary = "내 충전 건 상세", description = "승인 결과가 PROCESSING일 때 최종 상태를 다시 확인하거나, 새로고침·목록에서 진입할 때 사용한다")
+    @ApiResponse(responseCode = "200", description = "200-1 조회 성공")
+    @ApiResponse(responseCode = "404", description = "404-TOPUP_NOT_FOUND 충전 건이 없거나 남의 충전 건")
+    @GetMapping("/{topupId}")
+    public RsData<TopupDto> getTopup(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long topupId
+    ) {
+        return RsData.of("200-1", "충전 내역을 조회했습니다.", paymentFacade.getTopup(authMember.memberId(), topupId));
+    }
 }

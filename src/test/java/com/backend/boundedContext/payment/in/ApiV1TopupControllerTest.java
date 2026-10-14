@@ -221,6 +221,32 @@ class ApiV1TopupControllerTest {
     }
 
     @Test
+    @DisplayName("충전 상세: 토큰의 회원 ID와 충전 건 ID로 조회해 돌려준다")
+    void getTopup_success() throws Exception {
+        given(paymentFacade.getTopup(3L, 5L)).willReturn(new TopupDto(5L, ORDER_ID, 20_000, 0, TopupStatus.FAILED_USER_CANCEL,
+                "사용자에 의해 결제가 취소되었습니다.", null, LocalDateTime.of(2026, 10, 14, 9, 59)));
+        String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/topups/5").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.data.topupId").value(5))
+                .andExpect(jsonPath("$.data.status").value("FAILED_USER_CANCEL"))
+                .andExpect(jsonPath("$.data.failReason").value("사용자에 의해 결제가 취소되었습니다."));
+    }
+
+    @Test
+    @DisplayName("충전 상세: 없거나 남의 충전 건이면 404 TOPUP_NOT_FOUND")
+    void getTopup_notFound() throws Exception {
+        given(paymentFacade.getTopup(3L, 99L)).willThrow(new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/topups/99").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.resultCode").value("404-TOPUP_NOT_FOUND"));
+    }
+
+    @Test
     @DisplayName("충전 목록: 토큰이 없으면 401 UNAUTHORIZED")
     void getTopups_noToken() throws Exception {
         mockMvc.perform(get("/api/v1/topups"))
