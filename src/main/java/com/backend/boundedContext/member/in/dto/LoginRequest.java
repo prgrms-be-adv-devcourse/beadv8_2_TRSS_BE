@@ -1,5 +1,7 @@
 package com.backend.boundedContext.member.in.dto;
 
+import com.backend.boundedContext.member.domain.Member;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
@@ -11,4 +13,7 @@ public record LoginRequest(
         @NotBlank
         String password
 ) {
+    public LoginRequest {
+        email = Member.normalizeEmail(email);
+    }
 }

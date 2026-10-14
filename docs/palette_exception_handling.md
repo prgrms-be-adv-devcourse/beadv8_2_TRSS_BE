@@ -242,6 +242,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-CODE_ATTEMPTS_EXCEEDED | 인증코드 5회 불일치 (코드 삭제, 재발송 필요) |
 | | 400-EMAIL_NOT_VERIFIED | 인증 없이 가입 시도 |
 | | 401-LOGIN_FAILED | 이메일·비밀번호 불일치(어느 쪽인지 알려 주지 않음) |
+| | 429-LOGIN_LOCKED | 15분 안에 로그인 5회 실패 → 15분 잠금(5번째 실패부터, 가입하지 않은 이메일도 같음) |
 | | 409-WITHDRAWAL_NOT_ALLOWED | 진행 중 주문·미정산·잔액이 남음 (`data.reasons`) |
 | | 409-SELLER_ALREADY_APPLIED | 이 회원에게 진행 중인 판매자 신청(PENDING·APPROVED·WITHDRAW_REQUESTED)이 이미 있음 |
 | | 409-BUSINESS_NUMBER_DUPLICATED | 다른 회원이 이 사업자등록번호로 진행 중인 판매자 신청이 있음 |
