@@ -218,7 +218,7 @@ if (updated == 0) throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
 HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 
 - **건별로 잡는다.** 한 건의 실패가 전체 작업을 멈추지 않게 건마다 try-catch하고, 실패 건은 로그를 남긴 뒤 다음 실행에서 다시 처리한다.
-- **실패 사유를 저장한다.** 정산서 `last_fail_reason`, 환불 `fail_reason`, Outbox `retry_count` 등에 남겨 관리자 화면에서 보이게 한다.
+- **실패 사유를 저장한다.** 정산서 `last_fail_reason`, 환불 `fail_reason` 등에 남겨 관리자 화면에서 보이게 한다.
 - **재시도할 실패와 아닌 실패를 나눈다.** 일시 장애(타임아웃, 락 경합)는 재시도하고, 데이터 문제(금액 불일치 등)는 바로 `FAILED`·`MANUAL_REQUIRED`로 둔다.
 
 ## 7. Spring Security를 추가할 때
