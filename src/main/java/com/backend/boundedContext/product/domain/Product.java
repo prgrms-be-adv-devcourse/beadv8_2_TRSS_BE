@@ -1,5 +1,6 @@
 package com.backend.boundedContext.product.domain;
 
+import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -81,5 +82,12 @@ public class Product extends BaseIdAndTime {
 
     public boolean isStopped() {
         return status == ProductSaleStatus.STOPPED;
+    }
+
+    /** 판매 중지·삭제된 상품은 수정(재고 조정 포함)할 수 없다. */
+    public void checkEditable() {
+        if (isStopped() || isDeleted()) {
+            throw new DomainException(ProductErrorCode.PRODUCT_NOT_EDITABLE);
+        }
     }
 }
