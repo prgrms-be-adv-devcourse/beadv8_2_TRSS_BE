@@ -127,15 +127,16 @@ public class Settlement extends BaseIdAndTime {
     }
 
     /**
-     * 이 경로로 지금 지급해도 되는지(지급 가능한 상태인지)
-     * 월 정산 Job·재시도 스케줄러: READY, 또는 다음 재시도 일시가 지난 FAILED
-     * 관리자 수동 재처리: MANUAL_REQUIRED만
+     * 이 경로로 지금 지급해도 되는지(지급 가능한 상태인지 확인)
+     *
+     * 자동 지급(월 정산 Job·재시도 스케줄러, 관리자가 수동 실행한 월 정산 Job 포함): READY, 또는 다음 재시도 일시가 지난 FAILED
+     * 관리자 수동 재처리(manualRetry): MANUAL_REQUIRED만
      * PAID·HOLD는 어떤 경로로도 지급하지 않는다
      * 자동 경로가 MANUAL_REQUIRED를 지급하지 않는 것은 "자동 재시도를 멈춘다"는 규칙
      * TODO 파이널 프로젝트 때 자동화 변경 예정
      */
-    public boolean isPayableBy(SettlementTrigger trigger, LocalDateTime now) {
-        if (trigger == SettlementTrigger.ADMIN) return status == SettlementStatus.MANUAL_REQUIRED;
+    public boolean isPayable(boolean manualRetry, LocalDateTime now) {
+        if (manualRetry) return status == SettlementStatus.MANUAL_REQUIRED;
         if (status == SettlementStatus.READY) return true;
         return status == SettlementStatus.FAILED && nextRetryAt != null && !nextRetryAt.isAfter(now);
     }
@@ -169,7 +170,8 @@ public class Settlement extends BaseIdAndTime {
      * 실패 횟수가 maxAttempts에 닿으면 MANUAL_REQUIRED, 아니면 FAILED + 다음 재시도 일시
      */
     public void markFailed(String reason, LocalDateTime now, int maxAttempts, int retryIntervalMinutes) {
-        requirePayableStatus();
+        // MANUAL_REQUIRED는 자동 재시도로 되돌리지 않는다(3회 실패하면 자동 재시도를 멈춘다)
+        requireStatus(SettlementStatus.READY, SettlementStatus.FAILED);
         this.retryCount += 1;
         this.lastFailReason = truncate(reason);
         if (retryCount >= maxAttempts) {
@@ -212,7 +214,7 @@ public class Settlement extends BaseIdAndTime {
     }
 
     /** 지급 가능한 상태(READY·FAILED·MANUAL_REQUIRED)인지
-     * 경로별 조건은 {@link #isPayableBy} */
+     * 경로별 조건은 {@link #isPayable} */
     public boolean isPayableStatus() {
         return status == SettlementStatus.READY || status == SettlementStatus.FAILED
                 || status == SettlementStatus.MANUAL_REQUIRED;

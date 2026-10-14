@@ -56,11 +56,14 @@ public interface SettlementCandidateRepository extends JpaRepository<SettlementC
             """)
     List<SettlementOrderAmountRow> sumSalePriceByOrder(@Param("settlementId") Long settlementId);
 
-    /** 정산서에 묶인 후보 합계 (지급 전 합계 확인용) */
+    /** 정산서에 묶인 후보 합계 (지급 전 합계 확인용)
+     *
+     * 인텔리제이 쿼리 타입 계산 오류(coalesce(sum(c.salePrice), 0L)의 결과를 int로 계산. 0L의 L(Long 표시)을 인식하지 못함)로 인해 오류 표시됨
+     * -> 0 처리를 쿼리 대신 record하는 방식으로 수정
+     * */
     @Query("""
             select new com.backend.boundedContext.settlement.out.SettlementCandidateTotalsRow(
-                       coalesce(sum(c.salePrice), 0L), coalesce(sum(c.fee), 0L),
-                       coalesce(sum(c.payoutAmount), 0L), count(c))
+                       sum(c.salePrice), sum(c.fee), sum(c.payoutAmount), count(c))
               from SettlementCandidate c
              where c.settlement.id = :settlementId
                and c.status = com.backend.boundedContext.settlement.domain.SettlementCandidateStatus.INCLUDED

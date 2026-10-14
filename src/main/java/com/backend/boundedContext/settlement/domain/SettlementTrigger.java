@@ -2,7 +2,8 @@ package com.backend.boundedContext.settlement.domain;
 
 /**
  * 처리를 시작한 경로(settlement_process_history.trigger_type)
- * 지급에서는 경로마다 지급할 수 있는 상태가 다르다(Settlement.isPayableBy 참고)
+ * 지급할 수 있는 상태는 실행 주체가 아니라 자동 지급인지 관리자 재처리인지로 정한다(Settlement.isPayable 참고)
+ * 그래서 관리자가 수동 실행한 월 정산 Job은 ADMIN으로 이력에 남지만 자동 지급과 같은 기준으로 지급한다
  */
 public enum SettlementTrigger {
     /** 구매 확정 이벤트 */
