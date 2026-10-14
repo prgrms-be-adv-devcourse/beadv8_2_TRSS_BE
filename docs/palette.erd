@@ -633,7 +633,6 @@
           "5INKqkTv-o3s7LutVSarr",
           "pg5kOFL9bjzLrZVIP5PJG",
           "mLcUgEIrex-oBcsgUKAbi",
-          "ywIcarKFy_sXPVulsY3ZG",
           "RtpvceJVADZaM8dKJjRzN",
           "y1Ziex5TtuS0SorgTX_Cf",
           "03h19eawfj1csrb15zn2jgq5j",
@@ -4363,26 +4362,6 @@
           "widthName": 60,
           "widthComment": 60,
           "widthDataType": 65,
-          "widthDefault": 60
-        },
-        "meta": {
-          "updateAt": 1791793118727,
-          "createAt": 1791793118727
-        }
-      },
-      "ywIcarKFy_sXPVulsY3ZG": {
-        "id": "ywIcarKFy_sXPVulsY3ZG",
-        "tableId": "ZI8IZ5MB-J0cvDggvqCLh",
-        "name": "reason",
-        "comment": "사유",
-        "dataType": "VARCHAR(300)",
-        "default": "",
-        "options": 0,
-        "ui": {
-          "keys": 0,
-          "widthName": 60,
-          "widthComment": 60,
-          "widthDataType": 81,
           "widthDefault": 60
         },
         "meta": {
