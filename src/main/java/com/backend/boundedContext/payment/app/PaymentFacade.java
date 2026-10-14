@@ -3,12 +3,15 @@ package com.backend.boundedContext.payment.app;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
+import com.backend.global.page.PageResponse;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
 import com.backend.shared.payment.dto.WalletSummaryDto;
@@ -24,6 +27,7 @@ public class PaymentFacade {
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentFailTopupUseCase paymentFailTopupUseCase;
+    private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -55,6 +59,12 @@ public class PaymentFacade {
     @Transactional
     public TopupFailDto failTopup(Long memberId, Long topupId, String code, String message) {
         return paymentFailTopupUseCase.failTopup(memberId, topupId, code, message);
+    }
+
+    // 내 충전 목록
+    @Transactional(readOnly = true)
+    public PageResponse<TopupDto> getTopups(Long memberId, Pageable pageable) {
+        return paymentGetTopupsUseCase.getTopups(memberId, pageable);
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

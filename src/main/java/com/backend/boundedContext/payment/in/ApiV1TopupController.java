@@ -1,6 +1,9 @@
 package com.backend.boundedContext.payment.in;
 
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -9,12 +12,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.in.dto.TopupConfirmRequest;
 import com.backend.boundedContext.payment.in.dto.TopupFailRequest;
 import com.backend.boundedContext.payment.in.dto.TopupPrepareRequest;
+import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
 
@@ -73,5 +78,14 @@ public class ApiV1TopupController {
             @Valid @RequestBody TopupFailRequest request
     ) {
         return RsData.of("200-1", "충전 실패가 기록되었습니다.", paymentFacade.failTopup(authMember.memberId(), topupId, request.code(), request.message()));
+    }
+
+    @Operation(summary = "내 충전 목록", description = "충전 준비 최신순. page(0부터)·size(기본 20, 최대 100), 정렬은 고정이라 sort는 무시한다")
+    @GetMapping
+    public RsData<PageResponse<TopupDto>> getTopups(
+            @AuthenticationPrincipal AuthMember authMember,
+            @ParameterObject Pageable pageable
+    ) {
+        return RsData.of("200-1", "충전 목록을 조회했습니다.", paymentFacade.getTopups(authMember.memberId(), pageable));
     }
 }

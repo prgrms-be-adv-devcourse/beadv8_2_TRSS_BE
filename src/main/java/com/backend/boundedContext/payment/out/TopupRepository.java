@@ -2,6 +2,8 @@ package com.backend.boundedContext.payment.out;
 
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -14,6 +16,9 @@ import jakarta.persistence.LockModeType;
 public interface TopupRepository extends JpaRepository<Topup, Long> {
 
     Optional<Topup> findByIdAndMemberId(Long id, Long memberId);
+
+    // 회원의 충전 목록 (정렬은 Pageable로 받음, idx_topup_member 사용)
+    Page<Topup> findByMemberId(Long memberId, Pageable pageable);
 
     Optional<Topup> findByTossOrderIdAndMemberId(String tossOrderId, Long memberId);
 

@@ -1,14 +1,19 @@
 package com.backend.boundedContext.payment.in;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,11 +29,13 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.global.exception.DomainException;
+import com.backend.global.page.PageResponse;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
 import com.backend.global.security.JwtTokenProvider;
@@ -192,6 +200,32 @@ class ApiV1TopupControllerTest {
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
 
         verify(paymentFacade, never()).failTopup(anyLong(), anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("충전 목록: 토큰의 회원 ID로 조회하고 페이지 형식으로 돌려준다")
+    void getTopups_success() throws Exception {
+        TopupDto item = new TopupDto(5L, ORDER_ID, 20_000, 20_000, TopupStatus.DONE, null,
+                LocalDateTime.of(2026, 10, 14, 10, 0), LocalDateTime.of(2026, 10, 14, 9, 59));
+        given(paymentFacade.getTopups(eq(3L), any(Pageable.class)))
+                .willReturn(new PageResponse<>(List.of(item), 0, 20, 1, 1));
+        String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/topups").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.data.items[0].topupId").value(5))
+                .andExpect(jsonPath("$.data.items[0].status").value("DONE"))
+                .andExpect(jsonPath("$.data.items[0].remainingAmount").value(20000))
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("충전 목록: 토큰이 없으면 401 UNAUTHORIZED")
+    void getTopups_noToken() throws Exception {
+        mockMvc.perform(get("/api/v1/topups"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
     }
 
     private ResultActions fail(Long memberId, Long topupId, String body) throws Exception {
