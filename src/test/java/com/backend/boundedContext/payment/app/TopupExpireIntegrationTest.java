@@ -26,7 +26,7 @@ import com.backend.boundedContext.payment.out.WalletRepository;
  * 로컬 DB에 남아 있는 다른 오래된 READY 건도 함께 만료되지만, 검증은 이 테스트가 만든 건만 한다.
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
-@SpringBootTest
+@SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class TopupExpireIntegrationTest {
 
     @Autowired
