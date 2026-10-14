@@ -4,19 +4,24 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
+import com.backend.boundedContext.member.app.dto.AdminSellerDto;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerApplyResponse;
 import com.backend.boundedContext.member.in.dto.SellerUpdateRequest;
+import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.member.dto.SellerStatus;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * 회원 컨텍스트의 판매자 기능 (입점 신청·조회·수정, 다른 컨텍스트용 판매자 조회).
+ * 회원 컨텍스트의 판매자 기능 (입점 신청·조회·수정, 관리자 판매자 관리, 다른 컨텍스트용 판매자 조회).
  * 회원·인증 기능은 {@link MemberFacade}
  */
 @Service
@@ -29,6 +34,8 @@ public class MemberSellerFacade {
     private final MemberRequestWithdrawalUseCase memberRequestWithdrawalUseCase;
     private final MemberGetSellerUseCase memberGetSellerUseCase;
     private final MemberCreateSeedSellerUseCase memberCreateSeedSellerUseCase;
+    private final MemberGetSellersUseCase memberGetSellersUseCase;
+    private final MemberGetSellerDetailUseCase memberGetSellerDetailUseCase;
 
     // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
     @Transactional
@@ -76,6 +83,18 @@ public class MemberSellerFacade {
     @Transactional(readOnly = true)
     public List<SellerDto> getSellers(Collection<Long> sellerIds) {
         return memberGetSellerUseCase.getSellers(sellerIds);
+    }
+
+    // 관리자 판매자 목록 (PENDING 먼저, 상태 필터, 페이징)
+    @Transactional(readOnly = true)
+    public PageResponse<AdminSellerDto> getSellersForAdmin(SellerStatus status, Pageable pageable) {
+        return memberGetSellersUseCase.getSellers(status, pageable);
+    }
+
+    // 관리자 판매자 상세 (판매자 정보 + 상태 이력, 계좌는 끝 4자리)
+    @Transactional(readOnly = true)
+    public AdminSellerDetailDto getSellerDetail(Long sellerId) {
+        return memberGetSellerDetailUseCase.getSellerDetail(sellerId);
     }
 
     // 개발용 시드 판매자 (시드 판매자 회원을 APPROVED 판매자로)

@@ -53,7 +53,7 @@ class SellerApplyConcurrencyTest {
     @AfterEach
     void cleanUp() {
         sellersWithBusinessNumber().forEach(seller -> {
-            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()));
             sellerRepository.delete(seller);
         });
         memberRepository.deleteAllById(memberIds);

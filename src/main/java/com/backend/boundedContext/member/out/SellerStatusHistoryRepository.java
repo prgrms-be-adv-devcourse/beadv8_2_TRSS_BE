@@ -12,5 +12,5 @@ public interface SellerStatusHistoryRepository extends JpaRepository<SellerStatu
     Optional<SellerStatusHistory> findFirstBySellerIdOrderByIdDesc(Long sellerId);
 
     // 판매자의 이력 전체, 오래된 순
-    List<SellerStatusHistory> findAllBySeller_IdOrderByIdAsc(Long sellerId);
+    List<SellerStatusHistory> findAllBySellerIdOrderByIdAsc(Long sellerId);
 }

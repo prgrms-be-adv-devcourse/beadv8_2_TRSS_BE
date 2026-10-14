@@ -66,7 +66,7 @@ class SellerWithdrawalIntegrationTest {
     @AfterEach
     void cleanUp() {
         sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
-            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()));
             sellerRepository.delete(seller);
         });
         memberRepository.deleteById(memberId);
@@ -98,12 +98,12 @@ class SellerWithdrawalIntegrationTest {
         approve();
         Long sellerId = sellerRepository.findByMemberId(memberId).orElseThrow().getId();
         given(settlementApi.getUnsettledAmount(sellerId)).willReturn(15_000L);
-        List<SellerStatusHistory> before = sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(sellerId);
+        List<SellerStatusHistory> before = sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId);
 
         assertError(() -> memberSellerFacade.requestWithdrawal(memberId, "폐업 예정"), MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
         assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.APPROVED);
-        assertThat(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(sellerId)).hasSameSizeAs(before);
+        assertThat(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId)).hasSameSizeAs(before);
     }
 
     @Test

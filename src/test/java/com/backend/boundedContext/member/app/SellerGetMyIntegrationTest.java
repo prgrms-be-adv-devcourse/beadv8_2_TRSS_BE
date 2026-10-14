@@ -51,7 +51,7 @@ class SellerGetMyIntegrationTest {
     @AfterEach
     void cleanUp() {
         sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
-            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()));
             sellerRepository.delete(seller);
         });
         memberRepository.deleteById(memberId);

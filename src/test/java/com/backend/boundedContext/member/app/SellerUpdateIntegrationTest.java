@@ -57,7 +57,7 @@ class SellerUpdateIntegrationTest {
     @AfterEach
     void cleanUp() {
         sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
-            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()));
             sellerRepository.delete(seller);
         });
         memberRepository.deleteById(memberId);
@@ -86,11 +86,11 @@ class SellerUpdateIntegrationTest {
     void update_noHistory() {
         approve();
         Long sellerId = sellerRepository.findByMemberId(memberId).orElseThrow().getId();
-        int before = sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(sellerId).size();
+        int before = sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId).size();
 
         memberSellerFacade.updateSeller(memberId, new SellerUpdateRequest("팔레트 뷰티 2호점", null, null, null, null));
 
-        assertThat(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(sellerId)).hasSize(before);
+        assertThat(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId)).hasSize(before);
     }
 
     @Test
