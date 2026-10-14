@@ -218,7 +218,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /auth/email/code | POST | 비회원 | 인증코드 발송 | 429 TOO_MANY_REQUESTS |
 | /auth/email/verify | POST | 비회원 | 인증코드 확인 | 400 CODE_INVALID, 400 CODE_EXPIRED |
 | /auth/signup | POST | 비회원 | 회원가입 + 지갑 생성 | 400 EMAIL_NOT_VERIFIED, 409 EMAIL_DUPLICATED |
-| /auth/login | POST | 비회원 | 로그인 → Access·Refresh | 401 LOGIN_FAILED |
+| /auth/login | POST | 비회원 | 로그인 → Access·Refresh | 401 LOGIN_FAILED, 429 LOGIN_LOCKED |
 | /auth/refresh | POST | 회원 | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
 | /auth/logout | POST | USER | 로그아웃 | 401 |
 | /users/me | GET | USER | 내 정보 조회 | 401 |
