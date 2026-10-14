@@ -44,9 +44,6 @@ public class StockHistory extends BaseIdAndTime {
     @Column(nullable = false)
     private int stockAfter;
 
-    @Column(length = 300)
-    private String reason;
-
     private Long orderId;
 
     private Long orderItemId;

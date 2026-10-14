@@ -90,15 +90,27 @@ docker compose up -d
 
 PostgreSQL 17 컨테이너(`palette-postgres`)가 `localhost:5432`에 뜹니다. 기본 계정은 DB `palette` / 사용자 `palette` / 비밀번호 `palette`입니다.
 
-### 3. 애플리케이션 실행
+DB 테이블은 앱이 시작될 때 Flyway가 `src/main/resources/db/migration`의 마이그레이션으로 만듭니다.
+
+### 3. 환경 변수 파일 만들기
 
 ```bash
-./gradlew bootRun
+cp .env.example .env
 ```
 
-Windows에서는 `gradlew.bat bootRun`을 사용합니다. IntelliJ에서는 `Application.java`를 실행해도 됩니다.
+`.env`에 `JWT_SECRET`, `ACCOUNT_ENCRYPTION_PASSWORD`, `ACCOUNT_ENCRYPTION_SALT`를 채웁니다. 값이 없으면 앱과 테스트가 시작되지 않습니다. `.env`는 Git에 올리지 않습니다.
 
-### 4. 확인
+### 4. 애플리케이션 실행
+
+IntelliJ에서는 공유된 실행 구성 `Application (local)`을 실행합니다(Active profiles: `local`). 실행 구성을 직접 만들 때도 Active profiles에 `local`을 넣습니다. 터미널에서는 실행할 때마다 아래처럼 실행합니다.
+
+```bash
+SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+```
+
+`local` 프로필은 SQL 로그 같은 로컬 전용 설정(`application-local.yaml`)을 켭니다.
+
+### 5. 확인
 
 - API 서버: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger-ui/index.html
@@ -109,9 +121,20 @@ Windows에서는 `gradlew.bat bootRun`을 사용합니다. IntelliJ에서는 `Ap
 ./gradlew test
 ```
 
+테스트도 로컬 Docker DB와 `.env`를 사용합니다.
+
+### 로컬 DB 초기화
+
+기존 DB에 Flyway 이력이 없거나 스키마가 맞지 않아 앱이 뜨지 않으면, DB 볼륨을 지우고 다시 만듭니다. **로컬 DB의 모든 데이터가 삭제됩니다.**
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
 ### 환경 변수
 
-기본값으로 로컬 Docker DB에 접속합니다. 다른 DB를 쓰려면 아래 값을 바꿉니다.
+`.env` 또는 시스템 환경변수로 넣습니다. 전체 항목은 `.env.example`을 참고합니다. DB는 기본값으로 로컬 Docker DB에 접속하고, 다른 DB를 쓰려면 아래 값을 바꿉니다.
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
