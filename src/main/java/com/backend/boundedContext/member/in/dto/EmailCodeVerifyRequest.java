@@ -1,5 +1,7 @@
 package com.backend.boundedContext.member.in.dto;
 
+import com.backend.boundedContext.member.domain.Member;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -12,4 +14,8 @@ public record EmailCodeVerifyRequest(
 
         @NotBlank @Pattern(regexp = "\\d{6}", message = "인증코드는 숫자 6자리입니다.")
         String code
-) {}
+) {
+    public EmailCodeVerifyRequest {
+        email = Member.normalizeEmail(email);
+    }
+}

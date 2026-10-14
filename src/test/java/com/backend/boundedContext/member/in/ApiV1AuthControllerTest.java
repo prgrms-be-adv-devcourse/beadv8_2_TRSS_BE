@@ -70,6 +70,35 @@ class ApiV1AuthControllerTest {
     }
 
     @Test
+    @DisplayName("이메일 정규화: 인증·가입·로그인 요청의 이메일은 앞뒤 공백을 지우고 소문자로 바꿔 넘긴다")
+    void email_normalized() throws Exception {
+        String email = " New@Palette.COM ";
+
+        postJson("/api/v1/auth/email/check", """
+                {"email": "%s"}
+                """.formatted(email)).andExpect(status().isOk());
+        postJson("/api/v1/auth/email/code", """
+                {"email": "%s"}
+                """.formatted(email)).andExpect(status().isOk());
+        postJson("/api/v1/auth/email/verify", """
+                {"email": "%s", "code": "123456"}
+                """.formatted(email)).andExpect(status().isOk());
+        postJson("/api/v1/auth/signup", """
+                {"email": "%s", "password": "palette123!", "name": "홍길동", "verificationToken": "verified-token"}
+                """.formatted(email)).andExpect(status().isOk());
+        given(memberFacade.login("new@palette.com", "palette123!")).willReturn(new AuthTokens("access-token", "refresh-token"));
+        postJson("/api/v1/auth/login", """
+                {"email": "%s", "password": "palette123!"}
+                """.formatted(email)).andExpect(status().isOk());
+
+        verify(memberFacade).checkEmail("new@palette.com");
+        verify(memberFacade).sendEmailCode("new@palette.com");
+        verify(memberFacade).verifyEmailCode("new@palette.com", "123456");
+        verify(memberFacade).signUp("new@palette.com", "palette123!", "홍길동", "verified-token");
+        verify(memberFacade).login("new@palette.com", "palette123!");
+    }
+
+    @Test
     @DisplayName("이메일 중복 확인: 이미 가입된 이메일이면 409 EMAIL_DUPLICATED")
     void checkEmail_duplicated() throws Exception {
         willThrow(new DomainException(MemberErrorCode.EMAIL_DUPLICATED)).given(memberFacade).checkEmail("used@palette.com");

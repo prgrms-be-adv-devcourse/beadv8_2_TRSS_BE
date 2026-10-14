@@ -1,5 +1,7 @@
 package com.backend.boundedContext.member.in.dto;
 
+import com.backend.boundedContext.member.domain.Member;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,4 +10,8 @@ import jakarta.validation.constraints.Size;
 public record EmailRequest(
         @Email @NotBlank @Size(max = 100)
         String email
-) {}
+) {
+    public EmailRequest {
+        email = Member.normalizeEmail(email);
+    }
+}

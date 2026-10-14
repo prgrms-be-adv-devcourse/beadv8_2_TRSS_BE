@@ -1,6 +1,7 @@
 package com.backend.boundedContext.member.domain;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import com.backend.shared.member.dto.MemberDto;
@@ -47,6 +48,11 @@ public class Member extends BaseIdAndTime {
         this.name = name;
         this.role = role;
         this.status = MemberStatus.ACTIVE;
+    }
+
+    // 이메일은 대소문자를 구분하지 않으므로 앞뒤 공백을 지우고 소문자로 맞춤 (가입·인증·로그인·중복 확인 모두 같은 값을 쓰도록)
+    public static String normalizeEmail(String email) {
+        return email == null ? null : email.strip().toLowerCase(Locale.ROOT);
     }
 
     public static Member signUp(String email, String encodedPassword, String name) {
