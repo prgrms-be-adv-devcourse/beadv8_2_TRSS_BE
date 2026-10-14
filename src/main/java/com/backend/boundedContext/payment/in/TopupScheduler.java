@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
+import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,20 @@ public class TopupScheduler {
             }
         } catch (Exception e) {
             log.error("READY 충전 건 만료 처리에 실패했습니다. 다음 실행에서 다시 처리합니다.", e);
+        }
+    }
+
+    // PROCESSING 결과 확인: 이전 실행이 끝난 뒤 topupReconcileIntervalSeconds초마다 실행
+    @Scheduled(fixedDelayString = "${custom.payment.topupReconcileIntervalSeconds}", timeUnit = TimeUnit.SECONDS)
+    public void reconcileProcessingTopups() {
+        try {
+            TopupReconcileResult result = paymentFacade.reconcileProcessingTopups();
+            if (result.total() > 0) {
+                log.info("PROCESSING 충전 건 결과 확인: 반영 {}건, 실패 {}건, 확인 대기 {}건, 오류 {}건",
+                        result.completed(), result.failed(), result.pending(), result.errors());
+            }
+        } catch (Exception e) {
+            log.error("PROCESSING 충전 건 결과 확인에 실패했습니다. 다음 실행에서 다시 처리합니다.", e);
         }
     }
 }

@@ -12,6 +12,7 @@ import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
+import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
@@ -31,6 +32,7 @@ public class PaymentFacade {
     private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
     private final PaymentGetTopupUseCase paymentGetTopupUseCase;
     private final PaymentExpireTopupsUseCase paymentExpireTopupsUseCase;
+    private final PaymentReconcileTopupsUseCase paymentReconcileTopupsUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -80,6 +82,12 @@ public class PaymentFacade {
     @Transactional
     public int expireReadyTopups() {
         return paymentExpireTopupsUseCase.expireReadyTopups(LocalDateTime.now());
+    }
+
+    // PROCESSING 충전 건 결과 확인 (스케줄러). 토스 조회를 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음
+    // (반영·실패 기록은 PaymentTopupConfirmProcessor에서 건마다 짧은 트랜잭션으로 실행)
+    public TopupReconcileResult reconcileProcessingTopups() {
+        return paymentReconcileTopupsUseCase.reconcileProcessingTopups(LocalDateTime.now());
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

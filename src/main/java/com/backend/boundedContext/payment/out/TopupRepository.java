@@ -1,6 +1,7 @@
 package com.backend.boundedContext.payment.out;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -41,6 +42,10 @@ public interface TopupRepository extends JpaRepository<Topup, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Topup t where t.id = :id")
     Optional<Topup> findByIdForUpdate(@Param("id") Long id);
+
+    // 결과 확인 대상: 기준 시각 이전부터 같은 상태로 남은 충전 건을 오래된 순으로 (건수 제한은 Pageable)
+    @Query("select t from Topup t where t.status = :status and t.updatedAt < :cutoff order by t.updatedAt, t.id")
+    List<Topup> findStale(@Param("status") TopupStatus status, @Param("cutoff") LocalDateTime cutoff, Pageable pageable);
 
     /**
      * READY 만료: 기준 시각 이전에 만든 READY 충전 건을 한 번에 만료 상태로 바꾸고 바뀐 건수를 반환
