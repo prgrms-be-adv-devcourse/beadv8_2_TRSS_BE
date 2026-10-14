@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.TopupStatus;
@@ -154,6 +155,51 @@ class ApiV1TopupControllerTest {
         mockMvc.perform(post("/api/v1/topups/confirm").contentType(MediaType.APPLICATION_JSON).content(CONFIRM_BODY))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+    }
+
+    @Test
+    @DisplayName("충전 실패 기록: 토스 실패 코드·메시지를 넘기면 기록된 상태를 돌려준다")
+    void failTopup_success() throws Exception {
+        given(paymentFacade.failTopup(3L, 5L, "PAY_PROCESS_CANCELED", "사용자에 의해 결제가 취소되었습니다."))
+                .willReturn(new TopupFailDto(5L, TopupStatus.FAILED_USER_CANCEL, "사용자에 의해 결제가 취소되었습니다."));
+
+        fail(3L, 5L, "{\"code\":\"PAY_PROCESS_CANCELED\",\"message\":\"사용자에 의해 결제가 취소되었습니다.\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.data.topupId").value(5))
+                .andExpect(jsonPath("$.data.status").value("FAILED_USER_CANCEL"));
+    }
+
+    @Test
+    @DisplayName("충전 실패 기록: 이미 처리된 충전 건이면 409 TOPUP_ALREADY_PROCESSED")
+    void failTopup_alreadyProcessed() throws Exception {
+        given(paymentFacade.failTopup(3L, 5L, "PAY_PROCESS_CANCELED", "취소"))
+                .willThrow(new DomainException(PaymentErrorCode.TOPUP_ALREADY_PROCESSED));
+
+        fail(3L, 5L, "{\"code\":\"PAY_PROCESS_CANCELED\",\"message\":\"취소\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.resultCode").value("409-TOPUP_ALREADY_PROCESSED"));
+    }
+
+    @Test
+    @DisplayName("충전 실패 기록: 코드가 없거나 메시지가 300자를 넘으면 400 VALIDATION_FAILED")
+    void failTopup_invalidRequest() throws Exception {
+        fail(3L, 5L, "{\"message\":\"취소\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        fail(3L, 5L, "{\"code\":\"PAY_PROCESS_CANCELED\",\"message\":\"" + "가".repeat(301) + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        verify(paymentFacade, never()).failTopup(anyLong(), anyLong(), anyString(), anyString());
+    }
+
+    private ResultActions fail(Long memberId, Long topupId, String body) throws Exception {
+        String token = jwtTokenProvider.createAccessToken(memberId, MemberRole.USER);
+        return mockMvc.perform(post("/api/v1/topups/" + topupId + "/fail")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     private ResultActions confirm(Long memberId, String body) throws Exception {

@@ -1,6 +1,7 @@
 package com.backend.boundedContext.payment.in;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -8,9 +9,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.in.dto.TopupConfirmRequest;
+import com.backend.boundedContext.payment.in.dto.TopupFailRequest;
 import com.backend.boundedContext.payment.in.dto.TopupPrepareRequest;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
@@ -54,5 +57,21 @@ public class ApiV1TopupController {
         TopupConfirmDto result = paymentFacade.confirmTopup(authMember.memberId(), request.paymentKey(), request.orderId(), request.amount());
         String msg = result.status() == TopupStatus.DONE ? "충전이 완료되었습니다." : "충전 결과를 확인하고 있습니다.";
         return RsData.of("200-1", msg, result);
+    }
+
+    @Operation(summary = "충전 실패 기록", description = """
+            토스 결제창에서 실패·취소로 돌아왔을 때(실패 리다이렉트) 호출한다. 실패 URL의 code·message를 그대로 넘긴다.
+            PAY_PROCESS_CANCELED(사용자 취소)는 FAILED_USER_CANCEL, 그 외는 FAILED_PG_DECLINED로 기록한다.
+            사용자 취소 시 토스가 orderId를 주지 않으므로 충전 준비 응답의 topupId를 쓴다.""")
+    @ApiResponse(responseCode = "200", description = "200-1 실패 기록 완료")
+    @ApiResponse(responseCode = "404", description = "404-TOPUP_NOT_FOUND 충전 건 없음")
+    @ApiResponse(responseCode = "409", description = "409-TOPUP_ALREADY_PROCESSED 결제창 진행 전(READY)이 아닌 충전 건")
+    @PostMapping("/{topupId}/fail")
+    public RsData<TopupFailDto> failTopup(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long topupId,
+            @Valid @RequestBody TopupFailRequest request
+    ) {
+        return RsData.of("200-1", "충전 실패가 기록되었습니다.", paymentFacade.failTopup(authMember.memberId(), topupId, request.code(), request.message()));
     }
 }
