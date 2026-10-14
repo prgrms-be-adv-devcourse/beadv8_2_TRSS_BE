@@ -28,7 +28,7 @@ public class OrderStatusHistory extends BaseIdAndTime {
     @Column(nullable = false, length = 30)
     private OrderStatus toStatus;
 
-    // 취소·반품·반품 거절 등 사유 (없으면 null)
+    // 주문취소,반품,반품 거절사유
     @Column(length = 300)
     private String reason;
 

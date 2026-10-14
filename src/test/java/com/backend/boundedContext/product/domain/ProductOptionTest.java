@@ -173,6 +173,36 @@ class ProductOptionTest {
         assertThatThrownBy(() -> option.adjustStock(0)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    @DisplayName("남은 수량은 재고가 1 ~ 5개일 때만 주고, 0이면 품절이다")
+    void lowStockRemaining() {
+        assertThat(option.getLowStockRemaining()).isEqualTo(5);
+        assertThat(option.isSoldOut()).isFalse();
+
+        option.adjustStock(1);
+        assertThat(option.getLowStockRemaining()).isNull();
+
+        option.adjustStock(-6);
+        assertThat(option.getLowStockRemaining()).isNull();
+        assertThat(option.isSoldOut()).isTrue();
+    }
+
+    @Test
+    @DisplayName("구매자에게 보여 줄 수 있는 상품은 판매 중이고 카테고리가 사용 중인 상품뿐이다")
+    void displayable() {
+        assertThat(product.isDisplayable()).isTrue();
+
+        skincare.modify(null, false);
+        assertThat(product.isDisplayable()).isFalse();
+
+        skincare.modify(null, true);
+        stopProduct();
+        assertThat(product.isDisplayable()).isFalse();
+
+        deleteProduct();
+        assertThat(product.isDisplayable()).isFalse();
+    }
+
     private void stopProduct() {
         ReflectionTestUtils.setField(product, "status", ProductSaleStatus.STOPPED);
     }

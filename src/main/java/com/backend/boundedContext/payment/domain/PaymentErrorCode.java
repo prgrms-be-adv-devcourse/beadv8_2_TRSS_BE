@@ -22,7 +22,10 @@ public enum PaymentErrorCode implements ErrorCode {
     TOPUP_ALREADY_PROCESSED(409, "이미 처리된 충전입니다."),
     TOPUP_ALREADY_USED(409, "사용한 금액이 있는 충전 건은 취소할 수 없습니다."),
 
-    // 홀딩·정산 지급 (정산 컨텍스트는 이 코드들을 재시도 불가로 처리)
+    // 결제
+    PAYMENT_ALREADY_PAID(409, "이미 결제된 주문입니다."),
+
+    // 홀딩·정산 지급
     HOLDING_NOT_FOUND(404, "보관 중인 홀딩 내역을 찾을 수 없습니다."),
     HOLDING_INSUFFICIENT(409, "홀딩의 남은 금액이 지급액보다 적습니다."),
     TRANSFER_AMOUNT_MISMATCH(409, "주문별 지급 금액 합계가 지급액과 수수료의 합과 다릅니다.");

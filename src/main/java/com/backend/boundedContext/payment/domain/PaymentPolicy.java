@@ -40,6 +40,13 @@ public class PaymentPolicy {
         }
     }
 
+    // 잔액 부족 시 충전 권장액: 부족액을 충전 단위로 올린 금액 (예: 18,000 → 20,000, 20,000 → 20,000)
+    // 정수 나눗셈만으로 올림: (부족액 + 단위 - 1) / 단위 * 단위
+    public long recommendedChargeAmount(long shortage) {
+        if (shortage <= 0) return 0;
+        return (shortage + topupUnit - 1) / topupUnit * topupUnit;
+    }
+
     // READY 충전 건이 만료되기까지의 시간
     public Duration topupReadyTtl() {
         return topupReadyTtl;

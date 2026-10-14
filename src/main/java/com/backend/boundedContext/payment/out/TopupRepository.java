@@ -38,6 +38,16 @@ public interface TopupRepository extends JpaRepository<Topup, Long> {
     @Query("select t from Topup t where t.id = :id and t.memberId = :memberId")
     Optional<Topup> findByIdAndMemberIdForUpdate(@Param("id") Long id, @Param("memberId") Long memberId);
 
+    // 결제 시 차감할 충전 건: 승인 완료(DONE)이고 남은 금액이 있는 것을 오래된 순(승인 시각, ID)으로 잠금
+    // 결제는 지갑을 먼저 잠근 뒤 호출한다. 승인 반영(complete)은 PROCESSING 충전 건을 잠그므로 서로 다른 행이라 교착이 생기지 않음
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select t from Topup t
+            where t.memberId = :memberId and t.status = :status and t.remainingAmount > 0
+            order by t.approvedAt, t.id
+            """)
+    List<Topup> findUsableForUpdate(@Param("memberId") Long memberId, @Param("status") TopupStatus status);
+
     // 승인 결과 반영 전 충전 건 행을 잠금. 승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하지 않게 함
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Topup t where t.id = :id")
