@@ -76,6 +76,21 @@ public class Product extends BaseIdAndTime {
         return product;
     }
 
+    /**
+     * 상품 정보를 수정한다. null이 아닌 값만 반영하고, 재고는 여기서 바꾸지 않는다.
+     * 판매 중지·삭제된 상품이면 409, 바꿀 카테고리가 사용 중인 소분류가 아니면 400.
+     */
+    public void modify(String name, Long price, Category category, String description) {
+        checkEditable();
+        if (category != null) {
+            category.checkSelectable();
+            this.category = category;
+        }
+        if (name != null) this.name = name.strip();
+        if (price != null) this.price = price;
+        if (description != null) this.description = description.strip();
+    }
+
     public boolean isDeleted() {
         return status == ProductSaleStatus.DELETED;
     }
