@@ -34,6 +34,7 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_OPTION_DUPLICATED(400, "한 주문에 같은 옵션을 두 번 담을 수 없습니다."),
     ORDER_QUANTITY_INVALID(400, "주문 수량은 1개 이상이어야 합니다."),
     ORDER_PERIOD_INVALID(400, "조회 시작일은 종료일보다 늦을 수 없습니다."),
+    ORDER_NOT_CANCELABLE(409, "결제 전 주문만 취소할 수 있습니다."),
 
     // 결제
     INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다.");

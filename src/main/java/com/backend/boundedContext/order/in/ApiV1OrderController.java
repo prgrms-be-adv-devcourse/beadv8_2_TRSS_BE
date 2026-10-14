@@ -82,4 +82,17 @@ public class ApiV1OrderController {
         return RsData.of("200-1", "결제를 완료했습니다.",
                 orderFacade.payOrder(authMember.memberId(), orderId));
     }
+
+    @Operation(summary = "주문 취소", description = "결제 전(결제 대기·결제 실패) 주문만 전체 취소하고 재고를 복원한다.")
+    @ApiResponse(responseCode = "200", description = "200-1 취소 완료")
+    @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND")
+    @ApiResponse(responseCode = "409", description = "409-ORDER_NOT_CANCELABLE 결제 후이거나 이미 취소된 주문")
+    @PostMapping("/{orderId}/cancel")
+    public RsData<OrderCancelResponse> cancelOrder(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long orderId
+    ) {
+        return RsData.of("200-1", "주문을 취소했습니다.",
+                orderFacade.cancelOrder(authMember.memberId(), orderId));
+    }
 }
