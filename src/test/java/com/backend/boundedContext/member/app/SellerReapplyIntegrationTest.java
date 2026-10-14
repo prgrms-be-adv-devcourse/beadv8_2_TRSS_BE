@@ -54,7 +54,7 @@ class SellerReapplyIntegrationTest {
     @AfterEach
     void cleanUp() {
         memberIds.forEach(memberId -> sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
-            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(seller.getId()));
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()));
             sellerRepository.delete(seller);
         }));
         memberRepository.deleteAllById(memberIds);
@@ -76,7 +76,7 @@ class SellerReapplyIntegrationTest {
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.PENDING);
         assertThat(seller.getBusinessNumber()).isEqualTo(secondNumber);
 
-        List<SellerStatusHistory> histories = sellerStatusHistoryRepository.findAllBySeller_IdOrderByIdAsc(sellerId);
+        List<SellerStatusHistory> histories = sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId);
         assertThat(histories)
                 .extracting(SellerStatusHistory::getFromStatus, SellerStatusHistory::getToStatus, SellerStatusHistory::getReason)
                 .containsExactly(

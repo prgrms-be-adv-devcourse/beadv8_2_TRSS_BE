@@ -68,6 +68,13 @@ public class Member extends BaseIdAndTime {
         return new Member(email, encodedPassword, name, MemberRole.SELLER);
     }
 
+    // 판매자 승인 때 판매자 권한을 준다. 철회 뒤 재승인처럼 이미 SELLER면 그대로 둔다 (관리자는 판매자 신청 대상이 아님)
+    public void grantSeller() {
+        if (role == MemberRole.USER) {
+            role = MemberRole.SELLER;
+        }
+    }
+
     public boolean isActive() {
         return status == MemberStatus.ACTIVE;
     }

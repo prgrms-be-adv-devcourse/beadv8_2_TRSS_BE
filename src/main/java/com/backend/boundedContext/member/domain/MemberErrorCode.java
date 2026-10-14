@@ -29,7 +29,8 @@ public enum MemberErrorCode implements ErrorCode {
     SELLER_STATE_INVALID(409, "현재 판매자 상태에서는 처리할 수 없습니다."),
     SELLER_NOT_APPROVED(403, "승인된 판매자만 이용할 수 있습니다."),   // 판매자 기능은 APPROVED일 때만 가능하다 (정보 수정, 상품 등록 등에서 쓰인다)
     SELLER_ACCOUNT_INCOMPLETE(400, "정산 계좌는 은행·계좌번호·예금주를 함께 입력해야 합니다."),
-    UNSETTLED_AMOUNT_EXISTS(409, "아직 지급되지 않은 정산 금액이 있어 철회를 요청할 수 없습니다."),
+    UNSETTLED_AMOUNT_EXISTS(409, "아직 지급되지 않은 정산 금액이 있어 철회할 수 없습니다."),     // 철회 요청·철회 승인
+    ACTIVE_SALES_EXIST(409, "진행 중인 판매 주문이 있어 철회를 승인할 수 없습니다."),
 
     // 로그인
     LOGIN_FAILED(401, "이메일 또는 비밀번호가 올바르지 않습니다."),
