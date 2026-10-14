@@ -44,6 +44,14 @@ spring:
   batch:
     jdbc:
       initialize-schema: always
+    job:
+      enabled: false           # 앱 시작 시 Job 자동 실행 금지. 정산 Job은 스케줄러·관리자 요청으로만 실행한다
+
+  task:
+    scheduling:
+      pool:
+        size: 3          # 월 정산 Job이 오래 돌아도 충전·재시도 스케줄러가 멈추지 않게 조정
+
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
 custom:
@@ -76,6 +84,10 @@ custom:
     topupUnit: 10000           # 충전 단위·최소 금액(원)
     topupMax: 1000000          # 1회 최대 충전 금액(원)
     topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
+    topupExpireIntervalSeconds: 60      # READY 만료 스케줄러 실행 간격(초)
+    topupReconcileIntervalSeconds: 300  # PROCESSING 결과 확인 스케줄러 실행 간격(초)
+    topupReconcileDelayMinutes: 5       # PROCESSING이 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
+    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
   # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
   toss:
@@ -90,3 +102,5 @@ custom:
     retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
     batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
     retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+  scheduling:
+    enabled: true        # false면 모든 스케줄러가 멈춘다(통합 테스트용)

@@ -21,7 +21,7 @@ import com.backend.boundedContext.payment.domain.Wallet;
  * 잠금 조회한 지갑에 동시에 입금해도 잔액이 빠짐없이 반영되는지 확인한다.
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
-@SpringBootTest
+@SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class WalletRepositoryLockTest {
 
     private static final int THREADS = 10;
