@@ -3,6 +3,8 @@ package com.backend.boundedContext.settlement.domain;
 import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -52,6 +54,7 @@ public class SettlementCandidate extends BaseIdAndTime {
     @Column(nullable = false)
     private LocalDateTime confirmedAt;
 
+    @JdbcTypeCode(SqlTypes.CHAR)   // CHAR(7) 컬럼과 맞춤 (없으면 ddl-auto validate가 VARCHAR를 기대해 실패)
     @Column(nullable = false, columnDefinition = "CHAR(7)")
     private String settlementMonth;
 
