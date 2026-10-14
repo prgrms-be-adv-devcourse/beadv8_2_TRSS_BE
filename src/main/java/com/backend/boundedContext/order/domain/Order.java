@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.BatchSize;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -136,5 +137,13 @@ public class Order extends BaseIdAndTime {
     private static String generateOrderNumber(LocalDateTime now) {
         String random = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
         return ORDER_NUMBER_PREFIX + now.format(DateTimeFormatter.BASIC_ISO_DATE) + "-" + random;
+    }
+
+    // 결제 가능 남은 시간(초). 결제 대기가 아니거나 만료됐으면 0
+    public long remainingPaymentSeconds(LocalDateTime now) {
+        if (!isPaymentPending() || !now.isBefore(expiresAt)) {
+            return 0;
+        }
+        return Duration.between(now, expiresAt).getSeconds();
     }
 }

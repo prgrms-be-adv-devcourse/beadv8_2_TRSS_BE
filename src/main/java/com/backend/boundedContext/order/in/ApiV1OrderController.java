@@ -3,6 +3,7 @@ package com.backend.boundedContext.order.in;
 import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.boundedContext.order.in.dto.OrderCreateRequest;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
+import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
 import com.backend.boundedContext.order.in.dto.OrderSummaryResponse;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
@@ -45,7 +46,7 @@ public class ApiV1OrderController {
         return RsData.of("201-1", "주문을 생성했습니다.", response);
     }
 
-    @Operation(summary = "내 주문 목록", description = "최신주문일을 기준으로 내 주문 목록을 조회합니다.")
+    @Operation(summary = "내 주문 목록", description = "최신주문일을 기준으로 내 주문 목록을 조회한다.")
     @GetMapping
     public RsData<PageResponse<OrderSummaryResponse>> getOrders(
             @AuthenticationPrincipal AuthMember authMember,
@@ -58,5 +59,15 @@ public class ApiV1OrderController {
     ) {
         return RsData.of("200-1", "주문 목록을 조회했습니다.",
                 orderFacade.getOrders(authMember.memberId(), status, from, to, pageable));
+    }
+
+    @Operation(summary = "주문 상세", description = "주문 항목 스냅샷과 결제 남은 시간을 조회한다.")
+    @GetMapping("/{orderId}")
+    public RsData<OrderDetailResponse> getOrder(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long orderId
+    ) {
+        return RsData.of("200-1", "주문 상세를 조회했습니다.",
+                orderFacade.getOrderDetail(authMember.memberId(), orderId));
     }
 }

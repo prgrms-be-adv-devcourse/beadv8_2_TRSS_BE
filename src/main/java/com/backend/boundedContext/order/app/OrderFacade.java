@@ -1,9 +1,6 @@
 package com.backend.boundedContext.order.app;
 
-import com.backend.boundedContext.order.in.dto.CartItemAddResponse;
-import com.backend.boundedContext.order.in.dto.CartResponse;
-import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
-import com.backend.boundedContext.order.in.dto.OrderSummaryResponse;
+import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderStatus;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +25,7 @@ public class OrderFacade {
     private final OrderDeleteCartItemsUseCase orderDeleteCartItemsUseCase;
     private final OrderCreateOrderUseCase orderCreateOrderUseCase;
     private final OrderGetOrdersUseCase orderGetOrdersUseCase;
+    private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
 
     @Transactional(readOnly = true)
     public CartResponse getCart(Long memberId) {
@@ -62,5 +60,10 @@ public class OrderFacade {
     @Transactional(readOnly = true)
     public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, OrderStatus status, LocalDate from, LocalDate to, Pageable pageable) {
         return orderGetOrdersUseCase.getOrders(buyerId, status, from, to, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderDetailResponse getOrderDetail(Long buyerId, Long orderId) {
+        return orderGetOrderDetailUseCase.getOrderDetail(buyerId, orderId);
     }
 }
