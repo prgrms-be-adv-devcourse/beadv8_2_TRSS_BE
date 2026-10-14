@@ -12,7 +12,6 @@ import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.OptionSnapshotDto;
-import com.backend.shared.product.dto.ProductUnsaleableReason;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.out.ProductApi;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,9 +23,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -84,6 +86,13 @@ class OrderCreateOrderUseCaseTest {
         });
     }
 
+    /** 판매 가능 옵션 조회 결과 (판매 가능 여부 검사는 OrderSupportTest에서 확인) */
+    private void givenOptions(OptionSnapshotDto... options) {
+        List<Long> optionIds = Arrays.stream(options).map(OptionSnapshotDto::optionId).toList();
+        given(orderSupport.getSaleableOptions(optionIds)).willReturn(Arrays.stream(options)
+                .collect(Collectors.toMap(OptionSnapshotDto::optionId, Function.identity())));
+    }
+
     private void givenSeller() {
         given(memberApi.getSellers(List.of(SELLER_ID))).willReturn(List.of(
                 new SellerDto(SELLER_ID, 20L, "테스트상점", SellerStatus.APPROVED)));
@@ -93,8 +102,7 @@ class OrderCreateOrderUseCaseTest {
     @DisplayName("주문을 저장하고, 저장된 주문 항목 ID로 재고를 차감한다")
     void create() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 2, 110L, 1));
-        given(productApi.getOptions(List.of(100L, 110L))).willReturn(List.of(
-                onSale(100L, 15000), onSale(110L, 5000)));
+        givenOptions(onSale(100L, 15000), onSale(110L, 5000));
         givenSeller();
         givenSaveAssignsIds();
 
@@ -121,34 +129,10 @@ class OrderCreateOrderUseCaseTest {
     }
 
     @Test
-    @DisplayName("옵션이 없으면 PRODUCT_NOT_FOUND")
-    void optionNotFound() {
-        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
-        given(productApi.getOptions(List.of(100L))).willReturn(List.of());
-
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
-                .isInstanceOf(DomainException.class)
-                .hasFieldOrPropertyWithValue("resultCode", "404-PRODUCT_NOT_FOUND");
-    }
-
-    @Test
-    @DisplayName("판매 불가 옵션이면 PRODUCT_NOT_ON_SALE")
-    void notOnSale() {
-        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
-        given(productApi.getOptions(List.of(100L))).willReturn(List.of(
-                new OptionSnapshotDto(100L, 10L, SELLER_ID, "상품", "기본", 15000, 10,
-                        false, ProductUnsaleableReason.PRODUCT_STOPPED, null)));
-
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
-                .isInstanceOf(DomainException.class)
-                .hasFieldOrPropertyWithValue("resultCode", "409-PRODUCT_NOT_ON_SALE");
-    }
-
-    @Test
     @DisplayName("본인이 판매하는 상품이면 SELF_PURCHASE_NOT_ALLOWED")
     void selfProduct() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
-        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000)));
+        givenOptions(onSale(100L, 15000));
         // 3번 회원이 2번 판매자
         given(memberApi.findSellerByMemberId(BUYER_ID)).willReturn(Optional.of(
                 new SellerDto(SELLER_ID, BUYER_ID, "내상점", SellerStatus.APPROVED)));
@@ -162,7 +146,7 @@ class OrderCreateOrderUseCaseTest {
     @DisplayName("결제 대기 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER")
     void inPendingOrder() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
-        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000)));
+        givenOptions(onSale(100L, 15000));
         given(orderSupport.findOptionIdsInPendingOrders(BUYER_ID, List.of(100L))).willReturn(Set.of(100L));
 
         assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
@@ -174,7 +158,7 @@ class OrderCreateOrderUseCaseTest {
     @DisplayName("예상 금액과 현재 금액이 다르면 PRICE_CHANGED, 저장·재고 차감을 하지 않는다")
     void priceChanged() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
-        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 16000)));   // 15000 → 16000
+        givenOptions(onSale(100L, 16000));   // 15000 → 16000
         givenSeller();
 
         assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
