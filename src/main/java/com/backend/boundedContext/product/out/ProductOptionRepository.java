@@ -15,6 +15,9 @@ public interface ProductOptionRepository extends JpaRepository<ProductOption, Lo
     @Query("select o from ProductOption o join fetch o.product p join fetch p.category where o.id in :ids")
     List<ProductOption> findAllWithProductByIdIn(Collection<Long> ids);
 
+    /** 상품들의 삭제되지 않은 옵션 (ID 순) */
+    List<ProductOption> findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(Collection<Long> productIds);
+
     /** 옵션들이 속한 상품 ID (잠그기 전에 상품부터 잠그려고 쓴다) */
     @Query("select distinct o.product.id from ProductOption o where o.id in :ids")
     List<Long> findProductIdsByIdIn(Collection<Long> ids);
