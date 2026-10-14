@@ -1,12 +1,15 @@
 package com.backend.boundedContext.payment.in;
 
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,8 +22,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
+import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.global.exception.DomainException;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
@@ -85,6 +90,78 @@ class ApiV1TopupControllerTest {
         mockMvc.perform(post("/api/v1/topups").contentType(MediaType.APPLICATION_JSON).content("{\"amount\":20000}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+    }
+
+    private static final String CONFIRM_BODY =
+            "{\"paymentKey\":\"pk_1\",\"orderId\":\"" + ORDER_ID + "\",\"amount\":20000}";
+
+    @Test
+    @DisplayName("충전 승인: 반영되면 충전 완료 메시지와 DONE·반영 후 잔액을 돌려준다")
+    void confirmTopup_done() throws Exception {
+        given(paymentFacade.confirmTopup(3L, "pk_1", ORDER_ID, 20_000))
+                .willReturn(new TopupConfirmDto(5L, ORDER_ID, TopupStatus.DONE, 20_000, 25_000L));
+
+        confirm(3L, CONFIRM_BODY)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.msg").value("충전이 완료되었습니다."))
+                .andExpect(jsonPath("$.data.topupId").value(5))
+                .andExpect(jsonPath("$.data.status").value("DONE"))
+                .andExpect(jsonPath("$.data.balance").value(25000));
+    }
+
+    @Test
+    @DisplayName("충전 승인: 결과 확인 중이면 200-1에 status PROCESSING, 잔액은 null")
+    void confirmTopup_processing() throws Exception {
+        given(paymentFacade.confirmTopup(3L, "pk_1", ORDER_ID, 20_000))
+                .willReturn(TopupConfirmDto.processing(5L, ORDER_ID, 20_000));
+
+        confirm(3L, CONFIRM_BODY)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.msg").value("충전 결과를 확인하고 있습니다."))
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.data.balance").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("충전 승인: 카드 거절이면 400 TOPUP_PAYMENT_DECLINED와 토스 코드·메시지")
+    void confirmTopup_declined() throws Exception {
+        given(paymentFacade.confirmTopup(3L, "pk_1", ORDER_ID, 20_000))
+                .willThrow(new DomainException(PaymentErrorCode.TOPUP_PAYMENT_DECLINED,
+                        Map.of("code", "REJECT_CARD_PAYMENT", "message", "한도초과 혹은 잔액부족으로 결제에 실패했습니다.")));
+
+        confirm(3L, CONFIRM_BODY)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-TOPUP_PAYMENT_DECLINED"))
+                .andExpect(jsonPath("$.data.code").value("REJECT_CARD_PAYMENT"))
+                .andExpect(jsonPath("$.data.message").value("한도초과 혹은 잔액부족으로 결제에 실패했습니다."));
+    }
+
+    @Test
+    @DisplayName("충전 승인: 결제키가 없으면 400 VALIDATION_FAILED")
+    void confirmTopup_missingPaymentKey() throws Exception {
+        confirm(3L, "{\"orderId\":\"" + ORDER_ID + "\",\"amount\":20000}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        verify(paymentFacade, never()).confirmTopup(anyLong(), anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("충전 승인: 토큰이 없으면 401 UNAUTHORIZED")
+    void confirmTopup_noToken() throws Exception {
+        mockMvc.perform(post("/api/v1/topups/confirm").contentType(MediaType.APPLICATION_JSON).content(CONFIRM_BODY))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+    }
+
+    private ResultActions confirm(Long memberId, String body) throws Exception {
+        String token = jwtTokenProvider.createAccessToken(memberId, MemberRole.USER);
+        return mockMvc.perform(post("/api/v1/topups/confirm")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
     }
 
     private ResultActions prepare(Long memberId, String body) throws Exception {

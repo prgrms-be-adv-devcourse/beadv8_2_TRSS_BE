@@ -266,6 +266,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족 (`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`) |
 | | 400-TOPUP_AMOUNT_INVALID | 1만 원 단위·1만~100만 원 위반 |
 | | 400-AMOUNT_MISMATCH | 저장 금액 ≠ 승인 요청 금액 |
+| | 400-TOPUP_PAYMENT_DECLINED | 토스가 결제를 승인하지 않음(카드 거절·한도 초과 등) (`data.code`·`message`: 토스 오류 코드·메시지) |
 | | 409-TOPUP_ALREADY_PROCESSED | 이미 승인된 충전·같은 결제키 |
 | | 409-TOPUP_ALREADY_USED | 남은 금액 ≠ 충전 금액이라 취소 불가 |
 | | 404-TOPUP_NOT_FOUND / 404-WALLET_NOT_FOUND | |
