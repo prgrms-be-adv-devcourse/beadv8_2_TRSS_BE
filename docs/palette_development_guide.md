@@ -59,7 +59,7 @@ com.backend
 | 시간 | `LocalDateTime`만 사용(`Instant`·`ZonedDateTime`·`Date`는 쓰지 않음), **KST(Asia/Seoul) 기준**. JVM 기본 시간대를 `Asia/Seoul`로 고정(`Application.main`, `build.gradle.kts`의 `-Duser.timezone`). 배포 서버·Docker·CI는 기본이 UTC라서, 설정하지 않으면 정산월 경계와 `@Scheduled` 실행 시각이 9시간 어긋남 |
 | 상태값 | enum + `@Enumerated(EnumType.STRING)`. 값은 [정책 상태 코드](palette_policy.md)와 같은 이름 |
 | 컬럼·필드 이름 | 컬럼은 snake_case, 필드는 camelCase. 생성·수정 시각은 필드 `createdAt` · `updatedAt` → 컬럼 `created_at` · `updated_at` |
-| 테이블 생성 | `ddl-auto: update` (JPA가 엔티티 기준으로 생성·변경). 부분 유니크 인덱스·CHECK 제약은 만들어지지 않으므로, 꼭 필요한 중복 방지는 서비스 코드에서 먼저 검사합니다 |
+| 스키마 관리 | Flyway 마이그레이션(`src/main/resources/db/migration`)으로만 만들고 바꿉니다. `ddl-auto: validate`라서 엔티티와 DB가 다르면 앱이 시작되지 않습니다. 규칙은 [4.1 마이그레이션](#41-마이그레이션) |
 
 ## 4. 엔티티 규칙
 
@@ -71,6 +71,18 @@ com.backend
 - 상태 변경은 엔티티 메서드로만 합니다(`order.cancel(CancelType.USER)`). 메서드 안에서 현재 상태를 검사하고, 잘못된 전이면 `DomainException`을 던집니다.
 - `@Setter`는 쓰지 않습니다. 생성은 생성자 또는 정적 팩토리(`Order.create(...)`)로 합니다.
 - 다른 컨텍스트에 넘길 때는 엔티티에 `toDto()`를 두고 DTO로 변환합니다.
+
+### 4.1 마이그레이션
+
+엔티티의 테이블·컬럼·인덱스·제약을 바꾸면 같은 PR에 마이그레이션 파일을 함께 넣습니다.
+
+- 위치와 이름: `src/main/resources/db/migration/V{번호}__{설명}.sql` (예: `V2__add_member_phone.sql`). 번호는 develop 기준 다음 번호입니다.
+- **develop에 머지된 마이그레이션 파일은 고치지 않습니다.** 이미 실행된 DB가 있어서, 고치면 Flyway 체크섬 검증에 실패합니다. 바꿀 내용은 새 파일로 추가합니다. 머지 전 내 브랜치에만 있는 파일은 고쳐도 됩니다.
+- 두 PR이 같은 번호를 쓰면 나중에 머지하는 쪽이 번호를 올립니다.
+- 마이그레이션을 빠뜨리면 `Schema validation: missing column ...` 같은 오류로 앱과 테스트가 시작되지 않습니다.
+- enum 컬럼에는 허용 값 CHECK 제약을 두지 않습니다. 값 검증은 `@Enumerated(STRING)`이 맡고, enum 값을 추가할 때마다 마이그레이션이 필요해지는 것을 피합니다.
+- `columnDefinition = "CHAR(7)"`처럼 `String` 필드를 VARCHAR가 아닌 타입에 매핑하면 `@JdbcTypeCode(SqlTypes.CHAR)`도 함께 붙입니다. 없으면 `validate`가 VARCHAR를 기대해 실패합니다.
+- Spring Batch 메타 테이블은 마이그레이션에 넣지 않고 `spring.batch.jdbc.initialize-schema`가 만듭니다.
 
 ## 5. 트랜잭션 규칙
 
@@ -246,6 +258,20 @@ public class SettlementEventListener {
 
 ## 9. 설정과 정책 값
 
+### 9.1 설정 파일과 환경변수
+
+| 위치 | 넣는 것 | Git |
+| --- | --- | --- |
+| `application.yaml` | 모든 환경 공통 설정, 정책 값(`custom.*`). 비밀값은 `${환경변수}`로만 참조 | 올림 |
+| `application-local.yaml` | 팀 공통 로컬 전용 설정(SQL 로그 등). `local` 프로필에서만 적용 | 올림 |
+| `.env` | 비밀값과 개인 환경 값. 형식은 `.env.example` 참고 | **올리지 않음** |
+
+- 비밀값(키, 비밀번호)은 `application.yaml`·`application-local.yaml`에 기본값으로도 쓰지 않습니다. 저장소가 공개 상태입니다.
+- `.env` 필수 항목: `JWT_SECRET`, `ACCOUNT_ENCRYPTION_PASSWORD`, `ACCOUNT_ENCRYPTION_SALT`. 로컬 값은 팀에 따로 공유된 값을 쓰고, 없으면 `Could not resolve placeholder '...'` 오류로 앱과 테스트가 시작되지 않습니다.
+- 로컬 실행은 공유된 IntelliJ 실행 구성 `Application (local)`(`.run/Application.run.xml`, Active profiles: `local`)을 씁니다. Spring Boot 실행 구성이라 IntelliJ Ultimate가 필요하고, 직접 만들 때도 Active profiles에 `local`을 넣습니다. 터미널에서는 실행할 때마다 `SPRING_PROFILES_ACTIVE=local ./gradlew bootRun`으로 실행합니다.
+
+### 9.2 정책 값
+
 정책 숫자는 코드에 직접 쓰지 않고 `application.yaml`의 `custom.*`에 둔 뒤 `<Ctx>Policy`로 읽습니다.
 
 ```yaml
@@ -301,21 +327,21 @@ custom:
 
 - 도메인 규칙(상태 전이, 금액 계산)은 스프링 없이 단위 테스트로 검증합니다.
 - UseCase 테스트에서 다른 컨텍스트 Api는 Mockito mock 또는 테스트용 Fake로 대신합니다.
-- 컨텍스트를 넘나드는 흐름(주문 → 결제 → 확정 → 정산)은 `@SpringBootTest` 통합 테스트로 확인합니다. 로컬 Docker PostgreSQL을 씁니다.
+- 컨텍스트를 넘나드는 흐름(주문 → 결제 → 확정 → 정산)은 `@SpringBootTest` 통합 테스트로 확인합니다. 로컬 Docker PostgreSQL을 쓰고, 스키마는 앱과 같이 Flyway로 만들어집니다. `.env`의 필수 항목이 있어야 합니다.
 - 동시성(결제 vs 만료, 재고 차감)은 `ExecutorService`로 동시에 요청하는 테스트를 하나 이상 둡니다.
 
 ## 13. 협업 규칙
 
 - 브랜치: `main` ← `develop` ← `{type}/TRSS-{이슈번호}-{설명}`
 - PR을 올리기 전에 최신 `develop`을 가져오고(`git merge origin/develop`) `./gradlew build`가 통과하는지 확인합니다.
-- `global`, `shared`, `application.yaml`을 바꾸는 PR은 팀 전체 리뷰를 받습니다. 모두가 의존하는 파일이기 때문입니다.
+- `global`, `shared`, `application.yaml`, 마이그레이션 파일을 바꾸는 PR은 팀 전체 리뷰를 받습니다. 모두가 의존하는 파일이기 때문입니다.
 - `shared` 계약을 바꿀 때는 그 Api를 호출하는 사람에게 먼저 알립니다.
 
 ## 14. 결정 사항과 남은 것
 
 **결정함**
 
-- [x] 테이블 생성: `ddl-auto: update`
+- [x] 스키마 관리: Flyway 마이그레이션 + `ddl-auto: validate` (4.1)
 - [x] 시간대: KST(`Asia/Seoul`)
 - [x] ID 생성: `IDENTITY`
 - [x] 생성·수정 시각 필드: `createdAt`, `updatedAt`
