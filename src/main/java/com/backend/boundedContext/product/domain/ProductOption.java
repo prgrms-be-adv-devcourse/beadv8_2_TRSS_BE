@@ -29,6 +29,9 @@ public class ProductOption extends BaseIdAndTime {
     /** 옵션이 하나뿐인 상품의 옵션 이름. 화면에서는 옵션이 하나면 이름을 숨긴다. */
     public static final String DEFAULT_NAME = "기본";
 
+    /** 재고가 이 수 이하면 구매자에게 남은 수량을 보여 준다. */
+    public static final int LOW_STOCK_THRESHOLD = 5;
+
     @ManyToOne(fetch = LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
@@ -72,6 +75,15 @@ public class ProductOption extends BaseIdAndTime {
 
     public boolean isSaleable() {
         return getUnsaleableReason() == null;
+    }
+
+    public boolean isSoldOut() {
+        return stock == 0;
+    }
+
+    /** 구매자에게 보여 줄 남은 수량. 재고가 1 ~ {@value #LOW_STOCK_THRESHOLD}개일 때만 주고, 그 외에는 null. */
+    public Integer getLowStockRemaining() {
+        return (stock > 0 && stock <= LOW_STOCK_THRESHOLD) ? stock : null;
     }
 
     /** 주문으로 재고를 뺀다. 판매할 수 없으면 409, 재고가 모자라면(0 포함) 400. */

@@ -98,6 +98,55 @@ public class ProductSupport {
                 .orElseThrow(() -> new DomainException(ProductErrorCode.CATEGORY_NOT_FOUND));
     }
 
+    /**
+     * 검색에 쓸 사용 중인 소분류 ID. 없으면 전체, 대분류면 그 아래 소분류, 소분류면 그것 하나.
+     * 사용 중지된 소분류는 빠지므로 결과가 비어 있을 수 있다. 없는 카테고리면 404.
+     */
+    public List<Long> getDisplayableCategoryIds(Long categoryId) {
+        List<Category> activeChildren = categoryRepository.findAll().stream()
+                .filter(category -> !category.isRoot() && category.isActive())
+                .toList();
+        if (categoryId == null) {
+            return activeChildren.stream().map(Category::getId).toList();
+        }
+
+        Category category = getCategory(categoryId);
+        return activeChildren.stream()
+                .filter(child -> category.isRoot()
+                        ? child.getParent().getId().equals(categoryId)
+                        : child.getId().equals(categoryId))
+                .map(Category::getId)
+                .toList();
+    }
+
+    /** 상품 ID → 삭제되지 않은 옵션 목록 (ID 순). 옵션이 없는 상품은 키가 없다. */
+    public Map<Long, List<ProductOption>> getOptionsByProductId(Collection<Long> productIds) {
+        if (productIds.isEmpty()) return Map.of();
+
+        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(productIds).stream()
+                .collect(Collectors.groupingBy(option -> option.getProduct().getId()));
+    }
+
+    /** 판매자 ID → 상호명. 회원 컨텍스트에 한 번만 묻는다. 없는 판매자는 키가 없다. */
+    public Map<Long, String> getBusinessNames(Collection<Long> sellerIds) {
+        if (sellerIds.isEmpty()) return Map.of();
+
+        return memberApi.getSellers(sellerIds).stream()
+                .collect(Collectors.toMap(SellerDto::sellerId, SellerDto::businessName));
+    }
+
+    /** 구매자에게 보여 줄 수 있는 상품. 없거나, 판매 중이 아니거나, 카테고리가 사용 중지면 404. */
+    public Product getDisplayableProduct(Long productId) {
+        return productRepository.findById(productId)
+                .filter(Product::isDisplayable)
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /** 삭제되지 않은 옵션이 없거나 모두 재고 0이면 품절 */
+    public static boolean isSoldOut(List<ProductOption> options) {
+        return options.stream().allMatch(ProductOption::isSoldOut);
+    }
+
     public long countProducts() {
         return productRepository.count();
     }
