@@ -4,6 +4,11 @@ import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
+import com.backend.boundedContext.product.app.dto.ProductDetailDto;
+import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
+import com.backend.boundedContext.product.domain.ProductSort;
+import com.backend.global.page.PageResponse;
+import org.springframework.data.domain.Pageable;
 import com.backend.boundedContext.product.app.dto.ProductSampleDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.shared.product.dto.OptionSnapshotDto;
@@ -29,6 +34,8 @@ public class ProductFacade {
     private final ProductDeductStockUseCase productDeductStockUseCase;
     private final ProductRestoreStockUseCase productRestoreStockUseCase;
     private final ProductAdjustStockUseCase productAdjustStockUseCase;
+    private final ProductSearchProductsUseCase productSearchProductsUseCase;
+    private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
 
     // 내부 API (ProductApiAdapter). 호출한 쪽 트랜잭션에 참여한다
 
@@ -45,6 +52,17 @@ public class ProductFacade {
     @Transactional
     public void restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
         productRestoreStockUseCase.restoreStock(items, reason);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ProductSummaryDto> searchProducts(String keyword, Long categoryId, ProductSort sort,
+                                                          boolean excludeSoldOut, Pageable pageable) {
+        return productSearchProductsUseCase.searchProducts(keyword, categoryId, sort, excludeSoldOut, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductDetailDto getProductDetail(Long productId) {
+        return productGetProductDetailUseCase.getProductDetail(productId);
     }
 
     /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. */
