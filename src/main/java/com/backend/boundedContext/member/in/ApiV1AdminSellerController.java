@@ -81,4 +81,13 @@ public class ApiV1AdminSellerController {
     ) {
         return RsData.of("200-1", "판매자 철회를 거절했습니다.", memberSellerFacade.rejectWithdrawal(sellerId, request.reason()));
     }
+
+    @Operation(summary = "제재", description = "판매 중(APPROVED)이거나 철회 심사 중(WITHDRAW_REQUESTED)인 판매자를 바로 제재(SANCTIONED)합니다. 사유는 필수입니다. 정산은 보류(HOLD)되고, 다시 신청할 수 없습니다.")
+    @PostMapping("/{sellerId}/sanction")
+    public RsData<AdminSellerDetailDto> sanction(
+            @PathVariable Long sellerId,
+            @Valid @RequestBody SellerReasonRequest request
+    ) {
+        return RsData.of("200-1", "판매자를 제재했습니다.", memberSellerFacade.sanctionSeller(sellerId, request.reason()));
+    }
 }

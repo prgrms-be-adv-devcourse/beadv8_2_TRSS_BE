@@ -259,6 +259,49 @@ class ApiV1AdminSellerControllerTest {
         verify(memberSellerFacade, never()).rejectWithdrawal(any(), any());
     }
 
+    @Test
+    @DisplayName("제재: 관리자는 사유와 함께 제재하고 바뀐 판매자 상세를 받는다")
+    void sanction_admin() throws Exception {
+        given(memberSellerFacade.sanctionSeller(5L, "위조 상품 판매")).willReturn(detail(SellerStatus.SANCTIONED));
+
+        mockMvc.perform(post("/api/v1/admin/sellers/5/sanction").header("Authorization", bearer(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": "위조 상품 판매"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SANCTIONED"));
+    }
+
+    @Test
+    @DisplayName("제재: 사유가 비어 있으면 400 VALIDATION_FAILED")
+    void sanction_blankReason() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/sellers/5/sanction").header("Authorization", bearer(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": " "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        verify(memberSellerFacade, never()).sanctionSeller(any(), any());
+    }
+
+    @Test
+    @DisplayName("제재: 관리자가 아니면 403 FORBIDDEN")
+    void sanction_forbidden() throws Exception {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+            mockMvc.perform(post("/api/v1/admin/sellers/5/sanction").header("Authorization", bearer(role))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"reason": "사유"}
+                                    """))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+        }
+        verify(memberSellerFacade, never()).sanctionSeller(any(), any());
+    }
+
     private static AdminSellerDetailDto detail(SellerStatus status) {
         return new AdminSellerDetailDto(
                 5L, 7L, "seller@palette.test", "판매자", status,
