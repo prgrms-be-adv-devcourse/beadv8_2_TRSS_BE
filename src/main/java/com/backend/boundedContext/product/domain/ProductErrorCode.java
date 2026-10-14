@@ -19,7 +19,9 @@ public enum ProductErrorCode implements ErrorCode {
     // 상품·재고
     PRODUCT_NOT_FOUND(404, "상품을 찾을 수 없습니다."),
     PRODUCT_NOT_ON_SALE(409, "판매 중인 상품이 아닙니다."),
+    PRODUCT_NOT_EDITABLE(409, "판매 중지되었거나 삭제된 상품은 수정할 수 없습니다."),
     OUT_OF_STOCK(400, "재고가 부족합니다."),
+    STOCK_NEGATIVE(400, "재고는 0 미만이 될 수 없습니다."),
     PRODUCT_DELETED(409, "삭제된 상품입니다."),
     OPTION_DELETED(409, "삭제된 옵션입니다.");
 

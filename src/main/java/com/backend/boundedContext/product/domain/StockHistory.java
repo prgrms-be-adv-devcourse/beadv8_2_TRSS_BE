@@ -58,6 +58,16 @@ public class StockHistory extends BaseIdAndTime {
         return history;
     }
 
+    /** 판매자 재고 조정 이력. 재고를 바꾼 뒤에 만든다. 줄였으면 changeQty가 음수다. */
+    public static StockHistory ofAdjust(ProductOption option, int changeQty) {
+        StockHistory history = new StockHistory();
+        history.option = option;
+        history.changeType = StockChangeType.ADJUST;
+        history.changeQty = changeQty;
+        history.stockAfter = option.getStock();
+        return history;
+    }
+
     /** 주문으로 인한 재고 변경 이력. 재고를 바꾼 뒤에 만든다. 차감이면 changeQty가 음수다. */
     public static StockHistory ofOrder(ProductOption option, StockChangeType changeType, int changeQty,
                                        Long orderId, Long orderItemId) {

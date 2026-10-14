@@ -110,6 +110,69 @@ class ProductOptionTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    @DisplayName("재고 조정: 증감량만큼 늘리거나 줄이고, 0까지 줄일 수 있다")
+    void adjustStock() {
+        option.adjustStock(10);
+        assertThat(option.getStock()).isEqualTo(15);
+
+        option.adjustStock(-15);
+        assertThat(option.getStock()).isZero();
+    }
+
+    @Test
+    @DisplayName("재고 조정: 결과가 0 미만이면 STOCK_NEGATIVE, 재고는 그대로다")
+    void adjustStockNegative() {
+        assertThatThrownBy(() -> option.adjustStock(-6))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-STOCK_NEGATIVE");
+        assertThat(option.getStock()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("재고 조정: 판매 중지·삭제된 상품이면 PRODUCT_NOT_EDITABLE")
+    void adjustStockNotEditableProduct() {
+        stopProduct();
+        assertThatThrownBy(() -> option.adjustStock(1))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
+
+        deleteProduct();
+        assertThatThrownBy(() -> option.adjustStock(1))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
+        assertThat(option.getStock()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("재고 조정: 삭제된 옵션이면 OPTION_DELETED, 상품도 삭제됐으면 상품을 먼저 본다")
+    void adjustStockDeletedOption() {
+        deleteOption();
+        assertThatThrownBy(() -> option.adjustStock(1))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-OPTION_DELETED");
+
+        deleteProduct();
+        assertThatThrownBy(() -> option.adjustStock(1))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
+    }
+
+    @Test
+    @DisplayName("재고 조정: 판매 중이 아닌 카테고리여도 조정할 수 있다")
+    void adjustStockInactiveCategory() {
+        skincare.modify(null, false);
+
+        option.adjustStock(3);
+        assertThat(option.getStock()).isEqualTo(8);
+    }
+
+    @Test
+    @DisplayName("재고 조정: 증감량이 0이면 IllegalArgumentException")
+    void adjustStockZero() {
+        assertThatThrownBy(() -> option.adjustStock(0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     private void stopProduct() {
         ReflectionTestUtils.setField(product, "status", ProductSaleStatus.STOPPED);
     }

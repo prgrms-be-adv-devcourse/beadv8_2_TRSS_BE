@@ -99,6 +99,24 @@ public class ProductOption extends BaseIdAndTime {
         stock += quantity;
     }
 
+    /**
+     * 판매자가 재고를 증감량만큼 조정한다. 늘리면 양수, 줄이면 음수.
+     * 판매 중지·삭제된 상품이면 409(상품을 먼저 본다), 삭제된 옵션이면 409, 결과가 0 미만이면 400.
+     */
+    public void adjustStock(int changeQty) {
+        if (changeQty == 0) {
+            throw new IllegalArgumentException("증감량은 0일 수 없습니다.");
+        }
+        product.checkEditable();
+        if (isDeleted()) {
+            throw new DomainException(ProductErrorCode.OPTION_DELETED);
+        }
+        if (stock + changeQty < 0) {
+            throw new DomainException(ProductErrorCode.STOCK_NEGATIVE);
+        }
+        stock += changeQty;
+    }
+
     private void checkQuantity(int quantity) {
         if (quantity < 1) {
             throw new IllegalArgumentException("수량은 1 이상이어야 합니다. quantity=" + quantity);

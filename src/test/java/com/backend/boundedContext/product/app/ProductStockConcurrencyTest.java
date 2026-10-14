@@ -7,6 +7,9 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
+import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
@@ -27,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
 
 /**
  * 잠금이 실제로 동작하는지 확인하려면 각 요청이 따로 커밋돼야 하므로 @Transactional을 붙이지 않는다.
@@ -37,6 +42,8 @@ class ProductStockConcurrencyTest {
 
     private static final long ORDER_ID = 900_002L;
     private static final long ORDER_ITEM_ID_BASE = 9_000_000L;
+    private static final long SELLER_MEMBER_ID = 100L;
+    private static final long SELLER_ID = 10L;
 
     @Autowired
     private ProductFacade productFacade;
@@ -56,6 +63,9 @@ class ProductStockConcurrencyTest {
     @Autowired
     private TransactionTemplate transactionTemplate;
 
+    @MockitoBean
+    private MemberApi memberApi;
+
     private Long productId;
     private Long optionId;
 
@@ -63,7 +73,7 @@ class ProductStockConcurrencyTest {
     void setUp() {
         transactionTemplate.executeWithoutResult(status -> {
             Product product = productRepository.save(Product.create(
-                    10L, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "동시성 테스트 크림", "설명", 10_000));
+                    SELLER_ID, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "동시성 테스트 크림", "설명", 10_000));
             productId = product.getId();
             optionId = productOptionRepository.save(ProductOption.createDefault(product, 10)).getId();
         });
@@ -93,6 +103,26 @@ class ProductStockConcurrencyTest {
         assertThat(success.get()).isEqualTo(10);
         assertThat(stock()).isZero();
         assertThat(historyCount(StockChangeType.ORDER_DEDUCT)).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("주문 10건 차감과 판매자의 +5 조정이 동시에 와도 최종 재고는 10 + 5 - 10 = 5다")
+    void concurrentDeductAndAdjust() throws Exception {
+        given(memberApi.getApprovedSellerByMemberId(SELLER_MEMBER_ID))
+                .willReturn(new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트 상점", SellerStatus.APPROVED));
+
+        int orders = 10;
+        AtomicInteger success = new AtomicInteger();
+        runConcurrently(orders + 1, i -> {
+            if (i == orders) productFacade.adjustStock(SELLER_MEMBER_ID, productId, optionId, 5);
+            else productFacade.deductStock(List.of(item(ORDER_ITEM_ID_BASE + i, 1)));
+            success.incrementAndGet();
+        });
+
+        assertThat(success.get()).isEqualTo(orders + 1);
+        assertThat(stock()).isEqualTo(5);
+        assertThat(historyCount(StockChangeType.ORDER_DEDUCT)).isEqualTo(orders);
+        assertThat(historyCount(StockChangeType.ADJUST)).isEqualTo(1);
     }
 
     @Test
