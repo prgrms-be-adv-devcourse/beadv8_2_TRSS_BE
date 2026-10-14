@@ -1,16 +1,14 @@
 package com.backend.boundedContext.order.in;
 
 import com.backend.boundedContext.order.app.OrderFacade;
-import com.backend.boundedContext.order.in.dto.OrderCreateRequest;
-import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
-import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
-import com.backend.boundedContext.order.in.dto.OrderSummaryResponse;
+import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
 import com.backend.shared.order.dto.OrderStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -69,5 +67,19 @@ public class ApiV1OrderController {
     ) {
         return RsData.of("200-1", "주문 상세를 조회했습니다.",
                 orderFacade.getOrderDetail(authMember.memberId(), orderId));
+    }
+
+    @Operation(summary = "주문 결제", description = "결제 대기상태이고 만료 전인 주문만 예치금 결제가 가능하다.")
+    @ApiResponse(responseCode = "200", description = "200-1 결제 완료")
+    @ApiResponse(responseCode = "402", description = "402-INSUFFICIENT_BALANCE 잔액 부족(data: 부족액·추천 충전액·남은 시간)")
+    @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND")
+    @ApiResponse(responseCode = "409", description = "409-ORDER_EXPIRED / 409-ORDER_STATE_INVALID / 409-PRODUCT_NOT_ON_SALE")
+    @PostMapping("/{orderId}/payment")
+    public RsData<OrderPayResponse> payOrder(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long orderId
+    ) {
+        return RsData.of("200-1", "결제를 완료했습니다.",
+                orderFacade.payOrder(authMember.memberId(), orderId));
     }
 }

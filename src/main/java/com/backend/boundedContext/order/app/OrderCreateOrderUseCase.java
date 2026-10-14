@@ -22,12 +22,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * 주문 생성
- * 장바구니에서 고른 항목으로 결제 대기(CREATED) 주문을 만들고 재고를 차감한다.
+ * 장바구니에서 고른 항목으로 결제 대기 주문을 만들고 재고를 차감한다.
  */
 @Component
 @RequiredArgsConstructor
@@ -50,7 +49,7 @@ public class OrderCreateOrderUseCase {
         cartItems.forEach(item -> validateQuantity(item.getQuantity()));
 
         List<Long> optionIds = cartItems.stream().map(CartItem::getOptionId).toList();
-        Map<Long, OptionSnapshotDto> options = getSaleableOptions(optionIds);
+        Map<Long, OptionSnapshotDto> options = orderSupport.getSaleableOptions(optionIds);
 
         validateNotSelfProduct(buyerId, options.values());
         validateNotInPendingOrder(buyerId, optionIds);
@@ -79,25 +78,6 @@ public class OrderCreateOrderUseCase {
         if (quantity > orderPolicy.getCartMaxQuantity()) {
             throw new DomainException(OrderErrorCode.CART_QUANTITY_INVALID);
         }
-    }
-
-    // 옵션이 없거나 판매 불가면 주문할 수 없다
-    private Map<Long, OptionSnapshotDto> getSaleableOptions(List<Long> optionIds) {
-        Map<Long, OptionSnapshotDto> options = productApi.getOptions(optionIds).stream()
-                .collect(Collectors.toMap(OptionSnapshotDto::optionId, Function.identity()));
-
-        for (Long optionId : optionIds) {
-            OptionSnapshotDto option = options.get(optionId);
-
-            if (option == null) {
-                throw new DomainException(OrderErrorCode.PRODUCT_NOT_FOUND);
-            }
-            if (!option.saleable()) {
-                throw new DomainException(OrderErrorCode.PRODUCT_NOT_ON_SALE);
-            }
-        }
-
-        return options;
     }
 
     // 판매자 본인 상품은 주문할 수 없음

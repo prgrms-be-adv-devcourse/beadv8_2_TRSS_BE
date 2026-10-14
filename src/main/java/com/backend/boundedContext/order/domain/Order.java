@@ -116,7 +116,6 @@ public class Order extends BaseIdAndTime {
     }
 
     // 주문 상태가 변경이 될 때마다 이력을 만듬
-    // TODO 결제 구현 시 그 경로에서 이력(CREATED·PAYMENT_FAILED → PAID)을 직접 저장해야함
     private void changeStatus(OrderStatus orderStatus, String reason) {
         statusHistories.add(OrderStatusHistory.of(this, this.status, orderStatus, reason));
         this.status = orderStatus;
@@ -139,11 +138,24 @@ public class Order extends BaseIdAndTime {
         return ORDER_NUMBER_PREFIX + now.format(DateTimeFormatter.BASIC_ISO_DATE) + "-" + random;
     }
 
-    // 결제 가능 남은 시간(초). 결제 대기가 아니거나 만료됐으면 0
+    // 결제 가능 남은 시간(초)- 결제 대기가 아니거나 만료됐으면 0
     public long remainingPaymentSeconds(LocalDateTime now) {
         if (!isPaymentPending() || !now.isBefore(expiresAt)) {
             return 0;
         }
         return Duration.between(now, expiresAt).getSeconds();
+    }
+
+    // 결제 완료 처리
+    public void pay(LocalDateTime now) {
+        if (!isPaymentPending()) {
+            throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
+        }
+        if (!now.isBefore(expiresAt)) {
+            throw new DomainException(OrderErrorCode.ORDER_EXPIRED);
+        }
+
+        this.paidAt = now;
+        changeStatus(OrderStatus.PAID, null);   // 주문이력도 함께 쌓임
     }
 }
