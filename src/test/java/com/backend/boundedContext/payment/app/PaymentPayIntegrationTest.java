@@ -168,10 +168,13 @@ class PaymentPayIntegrationTest {
     @Test
     @DisplayName("잔액이 부족하면 예외가 아니라 FAILED_INSUFFICIENT_BALANCE를 돌려주고, 돈은 그대로이며 실패 건이 남는다")
     void pay_insufficientBalance() {
-        PayResultDto result = pay(40_000);
+        PayResultDto result = pay(48_000);
 
         assertThat(result.status()).isEqualTo(PayResultStatus.FAILED_INSUFFICIENT_BALANCE);
         assertThat(result.isPaid()).isFalse();
+        // 잔액 30,000으로 48,000 결제 → 18,000 부족, 1만 원 단위로 올려 20,000 충전 권장
+        assertThat(result.shortage()).isEqualTo(18_000);
+        assertThat(result.chargeAmount()).isEqualTo(20_000);
         assertThat(balance()).isEqualTo(30_000);
         assertThat(holdingCount()).isZero();
 
@@ -203,6 +206,8 @@ class PaymentPayIntegrationTest {
 
         assertThat(second.paymentId()).isEqualTo(first.paymentId());
         assertThat(second.status()).isEqualTo(PayResultStatus.FAILED_INSUFFICIENT_BALANCE);
+        assertThat(second.shortage()).isEqualTo(10_000);
+        assertThat(second.chargeAmount()).isEqualTo(10_000);
     }
 
     @Test

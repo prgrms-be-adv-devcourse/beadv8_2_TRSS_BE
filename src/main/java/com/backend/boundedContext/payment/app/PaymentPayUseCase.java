@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.domain.PaymentPolicy;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletHolding;
@@ -33,6 +34,7 @@ public class PaymentPayUseCase {
     private final WalletTransactionRepository walletTransactionRepository;
     private final WalletHoldingRepository walletHoldingRepository;
     private final PaymentFailureRecorder paymentFailureRecorder;
+    private final PaymentPolicy paymentPolicy;
 
     /**
      * 주문 결제: 구매자 지갑 → 홀딩
@@ -51,7 +53,7 @@ public class PaymentPayUseCase {
 
         Optional<Payment> processed = paymentRepository.findByIdempotencyKey(command.idempotencyKey());
         if (processed.isPresent()) {
-            return replay(processed.get(), command);
+            return replay(processed.get(), command, wallet);
         }
 
         if (paymentRepository.existsByOrderIdAndStatus(command.orderId(), PaymentStatus.PAID)) {
@@ -101,18 +103,18 @@ public class PaymentPayUseCase {
                 )
         );
 
-        return toResult(payment);
+        return toResult(payment, wallet);
     }
 
     // 같은 멱등 키로 다시 온 요청: 처음 결과를 그대로 돌려준다
     // 키는 같은데 주문·구매자·금액이 다르면 다른 요청에 키를 재사용한 것이라 409
-    private PayResultDto replay(Payment payment, PayCommand command) {
+    private PayResultDto replay(Payment payment, PayCommand command, Wallet wallet) {
         if (!payment.getOrderId().equals(command.orderId())
                 || !payment.getMemberId().equals(command.buyerId())
                 || payment.getAmount() != command.amount()) {
             throw new DomainException(GlobalErrorCode.IDEMPOTENCY_KEY_REUSED);
         }
-        return toResult(payment);
+        return toResult(payment, wallet);
     }
 
     // 실패 기록은 별도 트랜잭션으로 먼저 커밋 → 주문 쪽이 롤백해도 남는다
@@ -123,23 +125,26 @@ public class PaymentPayUseCase {
                 failStatus,
                 reason
         );
-        return toResult(failed);
+        return toResult(failed, wallet);
     }
 
     // 저장된 결제 건의 상태를 결과로 바꾼다
-    // TODO 5단계: 잔액 부족이면 부족액·충전 권장액을 채운다
-    private PayResultDto toResult(Payment payment) {
-        PayResultStatus status = switch (payment.getStatus()) {
-            case PAID -> PayResultStatus.PAID;
-            case FAILED_INSUFFICIENT_BALANCE -> PayResultStatus.FAILED_INSUFFICIENT_BALANCE;
-            case FAILED_ORDER_EXPIRED -> PayResultStatus.FAILED_ORDER_EXPIRED;
+    // 잔액 부족이면 부족액(결제 금액 - 현재 잔액)과 충전 권장액(부족액을 충전 단위로 올림)을 채운다
+    // 같은 키로 다시 조회할 때도 현재 잔액으로 다시 계산한다 (부족액은 저장하지 않음)
+    private PayResultDto toResult(Payment payment, Wallet wallet) {
+        return switch (payment.getStatus()) {
+            case PAID -> new PayResultDto(payment.getId(), PayResultStatus.PAID, 0, 0);
+            case FAILED_ORDER_EXPIRED -> new PayResultDto(payment.getId(), PayResultStatus.FAILED_ORDER_EXPIRED, 0, 0);
+            case FAILED_INSUFFICIENT_BALANCE -> {
+                long shortage = Math.max(0, payment.getAmount() - wallet.getBalance());
+                yield new PayResultDto(
+                        payment.getId(),
+                        PayResultStatus.FAILED_INSUFFICIENT_BALANCE,
+                        shortage,
+                        paymentPolicy.recommendedChargeAmount(shortage)
+                );
+            }
             default -> throw new IllegalStateException("결제 결과로 돌려줄 수 없는 상태입니다: " + payment.getStatus());
         };
-        return new PayResultDto(
-                payment.getId(),
-                status,
-                0,   // shortage: 5단계에서 채움
-                0    // chargeAmount: 5단계에서 채움
-        );
     }
 }
