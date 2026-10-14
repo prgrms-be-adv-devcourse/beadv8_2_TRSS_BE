@@ -6,6 +6,9 @@ import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
+import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
+import com.backend.boundedContext.product.app.dto.SellerProductListDto;
+import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.global.page.PageResponse;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +39,8 @@ public class ProductFacade {
     private final ProductAdjustStockUseCase productAdjustStockUseCase;
     private final ProductSearchProductsUseCase productSearchProductsUseCase;
     private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
+    private final ProductGetSellerProductsUseCase productGetSellerProductsUseCase;
+    private final ProductModifyProductUseCase productModifyProductUseCase;
 
     // 내부 API (ProductApiAdapter). 호출한 쪽 트랜잭션에 참여한다
 
@@ -71,6 +76,29 @@ public class ProductFacade {
                               long price, int stock) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock).getId();
+    }
+
+    /** 승인된 판매자의 본인 상품 목록과 탭별 개수 */
+    @Transactional(readOnly = true)
+    public SellerProductListDto getSellerProducts(Long memberId, ProductDisplayStatus status, String keyword,
+                                                  Pageable pageable) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productGetSellerProductsUseCase.getSellerProducts(sellerId, status, keyword, pageable);
+    }
+
+    /** 승인된 판매자의 본인 상품 수정 폼 값 */
+    @Transactional(readOnly = true)
+    public SellerProductFormDto getSellerProductForm(Long memberId, Long productId) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productSupport.getSellerProductForm(sellerId, productId);
+    }
+
+    /** 승인된 판매자가 본인 상품 정보를 수정한다. null인 항목은 그대로 둔다. */
+    @Transactional
+    public void modifyProduct(Long memberId, Long productId, String name, Long price, Long categoryId,
+                              String description) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productModifyProductUseCase.modifyProduct(sellerId, productId, name, price, categoryId, description);
     }
 
     /** 승인된 판매자가 자기 상품 옵션의 재고를 증감량만큼 조정하고, 조정 후 재고를 돌려준다. */
