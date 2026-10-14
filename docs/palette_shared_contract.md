@@ -20,15 +20,15 @@
 
 | 시나리오 | 시작 | 호출 순서 | 방식 |
 | --- | --- | --- | --- |
-| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로). Outbox 도입 시 별도 Tx |
+| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로) |
 | 장바구니 조회 | order | `ProductApi.getProducts(ids)` → 현재 가격·상태로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | `ProductApi.getProducts` → `MemberApi.getSellers`(판매자명 스냅샷) → `ProductApi.deductStock` | 동기, 같은 Tx |
 | 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
 | 주문 취소·15분 만료 | order | 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
-| 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + Outbox |
+| 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
 | 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) | 이벤트 |
-| 구매 확정 (수동·7일 자동·반품 거절 시 즉시) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | Outbox |
+| 구매 확정 (수동·7일 자동·반품 거절 시 즉시) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신 → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 판매 중지 승인·상품 삭제 | product | 상품 STOPPED/DELETED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
@@ -87,7 +87,6 @@ public record MemberSignedUpEvent(Long memberId) { }
 ```
 
 - 지금은 `@EventListener`로 가입 트랜잭션 안에서 처리해, 지갑 생성이 실패하면 가입도 롤백된다.
-- Outbox 도입 후에는 폴러가 트랜잭션 밖에서 발행하고, 결제의 `PaymentFacade.createWallet`이 새 트랜잭션에서 지갑을 만든다. 리스너 코드는 바뀌지 않는다.
 
 ## 3. product
 
@@ -184,7 +183,7 @@ public interface OrderApi {
 }
 ```
 
-### 이벤트 (Outbox 대상)
+### 이벤트
 
 ```java
 package com.backend.shared.order.event;
@@ -335,7 +334,10 @@ public interface SettlementApi {
 | 결제 후 7일 자동 확정 (RETURN_REQUESTED 제외) | `AUTO` |
 | 반품 거절 시 결제 후 7일이 이미 지났으면 즉시 확정 | `RETURN_REJECTED` |
 
-한 경로라도 이벤트를 빠뜨리면 정산 후보가 만들어지지 않아 판매자에게 정산되지 않습니다. 확정 처리는 엔티티의 메서드 하나(`order.confirm(type)`)로 모으고, 그 안에서 이벤트를 발행합니다.
+한 경로라도 이벤트를 빠뜨리면 정산 후보가 만들어지지 않아 판매자에게 정산되지 않습니다. 구매 확정(`order.confirm(type)`)과 `OrderConfirmedEvent` 발행(`EventPublisher.publish`)은 주문 컨텍스트의 메서드 하나로 묶고, 세 경로 모두 그 메서드를 호출합니다.
+
+- 7일 자동 확정은 벌크 UPDATE를 쓰지 않고, 대상 주문을 조회해 한 건씩 위 메서드로 확정합니다(이벤트·상태 이력 누락 방지).
+- 세 경로의 UseCase 테스트에서 이벤트 발행을 검증합니다.
 
 ## 8. 진행 순서
 

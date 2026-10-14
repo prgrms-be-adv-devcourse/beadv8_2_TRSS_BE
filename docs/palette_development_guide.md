@@ -102,7 +102,6 @@ com.backend
 | --- | --- | --- |
 | **동기 Api** | 결과가 바로 필요하거나 같은 트랜잭션이어야 할 때 | `shared/<ctx>/out/<Ctx>Api` 인터페이스 → 제공 컨텍스트의 `<Ctx>ApiAdapter`가 구현 |
 | **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record + `@TransactionalEventListener(AFTER_COMMIT)` |
-| **Outbox 이벤트** | 유실되면 돈이 틀어지는 이벤트 (`OrderConfirmed`, `OrderReturned`) | `outbox_event` 테이블에 같은 트랜잭션으로 기록 → 폴러가 발행 |
 
 기획서가 같은 트랜잭션을 요구하므로(주문 생성 + 재고 차감, 결제 + 주문 PAID) 동기 호출은 Java 인터페이스로 합니다. MSA로 나눌 때는 `<Ctx>Api` 구현체만 `RestClient` 기반으로 바꾸면 됩니다.
 
@@ -158,7 +157,7 @@ flowchart LR
     member -. MemberSignedUpEvent .-> payment
 ```
 
-실선은 동기 Api, 점선은 이벤트입니다(주문 이벤트는 Outbox 대상, `MemberSignedUpEvent`는 Outbox 도입 전까지 같은 트랜잭션에서 처리). 결제(payment)는 다른 컨텍스트를 호출하지 않습니다.
+실선은 동기 Api, 점선은 이벤트입니다(이번 범위는 Outbox 없이 모두 일반 이벤트, `MemberSignedUpEvent`는 같은 트랜잭션에서 처리). 결제(payment)는 다른 컨텍스트를 호출하지 않습니다.
 
 ### 6.4 이벤트 규칙
 
@@ -183,16 +182,14 @@ public class SettlementEventListener {
 
 - 이벤트는 불변 record로 만들고, 받는 쪽이 다시 조회하지 않아도 되도록 필요한 값을 모두 담습니다.
 - 리스너는 `AFTER_COMMIT` + `REQUIRES_NEW`를 쓰고 Facade 한 줄만 호출합니다.
-  - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다. Outbox 도입 후에도 리스너는 그대로 둡니다.
+  - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
 - **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, `payment_refund.payment_id`)으로 중복을 막습니다.
-- 발행은 엔티티의 `publishEvent(...)` 또는 `EventPublisher.publish(...)`로 합니다.
+- 발행은 UseCase에서 `EventPublisher.publish(...)`로 합니다. 엔티티에서 스프링 빈을 꺼내 쓰지 않습니다.
 
-### 6.5 Outbox 도입 순서
+### 6.5 Outbox (이번 범위 제외)
 
-1. **1단계 (개발 초반):** `OrderConfirmedEvent`, `OrderReturnedEvent`를 일반 이벤트(`AFTER_COMMIT`)로 발행해 주문 → 정산·결제 흐름을 먼저 연결합니다.
-2. **2단계:** 주문 UseCase가 이벤트 대신 `outbox_event`에 같은 트랜잭션으로 기록합니다. 공통 폴러(`global`)가 PENDING 행을 읽어 같은 이벤트 record로 발행하고 PUBLISHED로 바꿉니다.
-
-리스너 코드는 두 단계에서 바뀌지 않습니다. 2단계에서는 리스너를 `@EventListener` + `@Transactional`로 바꾸는 것만 확인합니다(폴러는 트랜잭션 밖에서 발행하므로).
+- 이번 범위에서는 Outbox를 쓰지 않습니다. `OrderConfirmedEvent`, `OrderReturnedEvent`도 일반 이벤트로 발행합니다.
+- 구매 확정과 `OrderConfirmedEvent` 발행은 주문 컨텍스트의 메서드 하나로 묶고, 확정 경로 3개(수동·7일 자동·반품 거절)가 모두 그 메서드를 호출합니다 → [공유 계약 7.3](palette_shared_contract.md)
 
 ## 7. API·컨트롤러 규칙
 
@@ -348,7 +345,7 @@ custom:
 - [x] Adapter `@Lazy` 주입: `lombok.config`에 한 줄 추가
 - [x] 시드 계정: 1 관리자, 2 판매자, 3 구매자
 - [x] Facade는 DTO를 반환
-- [x] Outbox: 1주차는 일반 이벤트, 2주차 초에 Outbox로 전환
+- [x] Outbox: 이번 범위에서는 쓰지 않고 일반 이벤트로 발행
 - [x] 미정산 금액: 구매 확정된 금액만 (확정 전 주문은 포함하지 않음)
 - [x] 목록 조회 형식: 10장
 - [x] 결제 `PROCESSING`: 일단 두고, 개발하면서 쓰지 않으면 2주차에 제거

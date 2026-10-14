@@ -1,5 +1,7 @@
 package com.backend.boundedContext.member.in.dto;
 
+import com.backend.boundedContext.member.domain.Member;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -22,6 +24,7 @@ public record SignUpRequest(
         String verificationToken
 ) {
     public SignUpRequest {
+        email = Member.normalizeEmail(email);
         name = name == null ? null : name.trim();
     }
 }

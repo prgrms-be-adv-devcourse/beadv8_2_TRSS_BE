@@ -3,11 +3,15 @@ package com.backend.boundedContext.payment.app;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupDto;
+import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
+import com.backend.global.page.PageResponse;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
@@ -25,6 +29,9 @@ public class PaymentFacade {
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentPayUseCase paymentPayUseCase;
+    private final PaymentFailTopupUseCase paymentFailTopupUseCase;
+    private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
+    private final PaymentGetTopupUseCase paymentGetTopupUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -56,6 +63,24 @@ public class PaymentFacade {
     @Transactional
     public PayResultDto pay(PayCommand command) {
         return paymentPayUseCase.pay(command);
+    }
+
+    // 충전 실패 기록 (토스 결제창에서 실패·취소)
+    @Transactional
+    public TopupFailDto failTopup(Long memberId, Long topupId, String code, String message) {
+        return paymentFailTopupUseCase.failTopup(memberId, topupId, code, message);
+    }
+
+    // 내 충전 목록
+    @Transactional(readOnly = true)
+    public PageResponse<TopupDto> getTopups(Long memberId, Pageable pageable) {
+        return paymentGetTopupsUseCase.getTopups(memberId, pageable);
+    }
+
+    // 내 충전 건 상세
+    @Transactional(readOnly = true)
+    public TopupDto getTopup(Long memberId, Long topupId) {
+        return paymentGetTopupUseCase.getTopup(memberId, topupId);
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

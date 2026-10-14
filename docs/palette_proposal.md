@@ -188,8 +188,8 @@ v1은 Spring Boot 단일 애플리케이션이지만 모듈 경계를 서비스 
 - 클라이언트 요청은 모두 보안 필터(JWT·역할 검사)를 거쳐 각 모듈 컨트롤러로 들어간다
 - 주문이 중심이다. 주문 생성 때 상품 모듈에 재고 차감을 요청하고(같은 트랜잭션), 결제 때 결제 모듈을 호출해 지갑 → 홀딩 이동과 주문 PAID 변경을 한 트랜잭션으로 처리한다
 - 잔액이 모자라면 결제 모듈이 402 INSUFFICIENT_BALANCE로 응답하고 결제 건을 FAILED_INSUFFICIENT_BALANCE로 남긴다. 주문은 CREATED로 유지되고 구매자는 충전 후 같은 주문을 다시 결제한다. 충전 승인·취소는 토스페이먼츠를 쓴다
-- 반품 승인은 Outbox에 OrderReturned로 기록되고, 결제 모듈이 이를 받아 홀딩 금액을 구매자 지갑으로 환불한다
-- 구매 확정은 Outbox에 OrderConfirmed로 기록되고, 정산 모듈이 이를 받아 주문 항목별 정산 후보를 만든 뒤 매월 10일 판매자 정산 대금과 관리자 수수료를 각 지갑에 입금한다
+- 반품 승인은 OrderReturned 이벤트로 발행되고, 결제 모듈이 이를 받아 홀딩 금액을 구매자 지갑으로 환불한다
+- 구매 확정은 OrderConfirmed 이벤트로 발행되고, 정산 모듈이 이를 받아 주문 항목별 정산 후보를 만든 뒤 매월 10일 판매자 정산 대금과 관리자 수수료를 각 지갑에 입금한다
 - 상품 판매 중지·삭제와 판매자 제재는 주문 모듈에 결제 대기 주문 취소를 요청한다
 - 외부 호출(토스, 메일)은 DB 트랜잭션 밖에서 하고, 실패는 스케줄러의 복구·대사 작업이 마무리한다
 
@@ -218,7 +218,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /auth/email/code | POST | 비회원 | 인증코드 발송 | 429 TOO_MANY_REQUESTS |
 | /auth/email/verify | POST | 비회원 | 인증코드 확인 | 400 CODE_INVALID, 400 CODE_EXPIRED |
 | /auth/signup | POST | 비회원 | 회원가입 + 지갑 생성 | 400 EMAIL_NOT_VERIFIED, 409 EMAIL_DUPLICATED |
-| /auth/login | POST | 비회원 | 로그인 → Access·Refresh | 401 LOGIN_FAILED |
+| /auth/login | POST | 비회원 | 로그인 → Access·Refresh | 401 LOGIN_FAILED, 429 LOGIN_LOCKED |
 | /auth/refresh | POST | 회원 | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
 | /auth/logout | POST | USER | 로그아웃 | 401 |
 | /users/me | GET | USER | 내 정보 조회 | 401 |
@@ -345,6 +345,6 @@ PostgreSQL 기준 테이블 23개로 설계했다. 상세 ERD와 정책을 테�
 | order | cart, cart_item, market_order, market_order_item, order_status_history |
 | payment | wallet, wallet_transaction, topup, topup_usage, payment, wallet_holding, payment_refund |
 | settlement | settlement_candidate, settlement |
-| 공통 | outbox_event, audit_log |
+| 공통 | audit_log (outbox_event는 이번 범위 제외) |
 
 이메일 인증코드(5분)와 Refresh Token(14일)은 Redis에 저장하고, 월 정산 Job 실행 결과는 Spring Batch 메타 테이블을 쓴다.
