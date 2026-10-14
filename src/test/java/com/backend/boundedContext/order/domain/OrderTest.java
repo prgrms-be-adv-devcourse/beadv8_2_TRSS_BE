@@ -1,6 +1,7 @@
 package com.backend.boundedContext.order.domain;
 
 import com.backend.global.exception.DomainException;
+import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,10 @@ class OrderTest {
                 .hasFieldOrPropertyWithValue("resultCode", "400-ORDER_QUANTITY_INVALID");
     }
 
+    private Order createOrder() {
+        return Order.create(1L, List.of(spec(10L, 10_000, 1)), NOW, EXPIRE_MINUTES);
+    }
+
     private OrderItemSpec spec(Long optionId, long unitPrice, int quantity) {
         return new OrderItemSpec(optionId + 1000, optionId + 100, optionId, 7L,
                 "상품" + optionId, "기본", "테스트상점", unitPrice, quantity);
@@ -82,5 +87,41 @@ class OrderTest {
         assertThat(history.getFromStatus()).isNull();
         assertThat(history.getToStatus()).isEqualTo(OrderStatus.CREATED);
         assertThat(history.getReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("결제 대기 주문을 취소하면 CANCELED가 되고 취소 정보와 이력이 남는다")
+    void cancel_pending() {
+        Order order = createOrder();
+        LocalDateTime now = NOW.plusMinutes(1);
+
+        order.cancel(OrderCancelType.USER, "구매자 취소", now);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+        assertThat(order.getCancelType()).isEqualTo(OrderCancelType.USER);
+        assertThat(order.getCanceledAt()).isEqualTo(now);
+        assertThat(order.getStatusHistories()).last()
+                .extracting(OrderStatusHistory::getToStatus).isEqualTo(OrderStatus.CANCELED);
+    }
+
+    @Test
+    @DisplayName("결제 완료 주문은 취소할 수 없다")
+    void cancel_paid_fail() {
+        Order order = createOrder();
+        order.pay(NOW.plusMinutes(1));
+
+        assertThatThrownBy(() -> order.cancel(OrderCancelType.USER, "구매자 취소", NOW.plusMinutes(1)))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CANCELABLE");
+    }
+
+    @Test
+    @DisplayName("이미 취소된 주문은 다시 취소할 수 없다")
+    void cancel_twice_fail() {
+        Order order = createOrder();
+        order.cancel(OrderCancelType.USER, "구매자 취소", NOW.plusMinutes(1));
+
+        assertThatThrownBy(() -> order.cancel(OrderCancelType.USER, "구매자 취소", NOW.plusMinutes(1)))
+                .isInstanceOf(DomainException.class);
     }
 }
