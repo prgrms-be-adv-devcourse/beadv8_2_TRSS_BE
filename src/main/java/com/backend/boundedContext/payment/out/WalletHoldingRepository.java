@@ -9,12 +9,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.backend.boundedContext.payment.domain.WalletHolding;
+import com.backend.boundedContext.payment.domain.WalletHoldingStatus;
 
 import jakarta.persistence.LockModeType;
 
 public interface WalletHoldingRepository extends JpaRepository<WalletHolding, Long> {
 
     boolean existsByOrderId(Long orderId);
+
+    // 지갑의 홀딩 중 남은 금액(홀딩 금액 - 정산 누적 금액) 합계. 홀딩이 없으면 0
+    @Query("""
+            select coalesce(sum(h.amount - h.settledAmount), 0) from WalletHolding h
+            where h.wallet.id = :walletId 
+                and h.status = :status
+            """)
+    long sumRemainingAmount(@Param("walletId") Long walletId, @Param("status") WalletHoldingStatus status);
 
     // 정산 지급 전에 주문들의 홀딩을 잠금. 데드락을 막기 위해 주문 ID 오름차순으로 잠근다
     @Lock(LockModeType.PESSIMISTIC_WRITE)

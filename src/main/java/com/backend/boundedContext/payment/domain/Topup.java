@@ -96,6 +96,16 @@ public class Topup extends BaseIdAndTime {
         this.status = failStatus;
     }
 
+    // 결제에 쓰인 만큼 남은 금액 차감 (차감 내역은 TopupUsage로 남김)
+    public void use(long usedAmount) {
+        if (usedAmount <= 0) throw new IllegalArgumentException("차감 금액은 0보다 커야 합니다: " + usedAmount);
+        if (status != TopupStatus.DONE) throw new IllegalStateException("승인 완료된 충전 건만 차감할 수 있습니다: " + status);
+        if (usedAmount > remainingAmount) {
+            throw new IllegalStateException("충전 건의 남은 금액이 부족합니다. remaining=" + remainingAmount + ", amount=" + usedAmount);
+        }
+        this.remainingAmount -= usedAmount;
+    }
+
     // 승인 완료됐고 한 번도 쓰지 않은 충전 건만 토스 취소 가능
     public boolean isCancelable() {
         return status == TopupStatus.DONE && remainingAmount == amount;
