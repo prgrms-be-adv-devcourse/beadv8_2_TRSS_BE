@@ -12,6 +12,8 @@ public class MemberPolicy {
     private final Duration emailCodeResendInterval;
     private final Duration emailVerifiedTokenTtl;
     private final int emailCodeMaxAttempts;
+    private final int loginMaxAttempts;
+    private final Duration loginLockTtl;
     private final Duration refreshTokenTtl;
     private final boolean refreshCookieSecure;
     private final String refreshCookieSameSite;
@@ -21,6 +23,8 @@ public class MemberPolicy {
             @Value("${custom.member.emailCodeResendSeconds}") long emailCodeResendSeconds,
             @Value("${custom.member.emailVerifiedTokenExpireMinutes}") long emailVerifiedTokenExpireMinutes,
             @Value("${custom.member.emailCodeMaxAttempts}") int emailCodeMaxAttempts,
+            @Value("${custom.member.loginMaxAttempts}") int loginMaxAttempts,
+            @Value("${custom.member.loginLockMinutes}") long loginLockMinutes,
             @Value("${custom.member.refreshTokenExpireDays}") long refreshTokenExpireDays,
             @Value("${custom.member.refreshCookieSecure}") boolean refreshCookieSecure,
             @Value("${custom.member.refreshCookieSameSite}") String refreshCookieSameSite
@@ -29,6 +33,8 @@ public class MemberPolicy {
         this.emailCodeResendInterval = Duration.ofSeconds(emailCodeResendSeconds);
         this.emailVerifiedTokenTtl = Duration.ofMinutes(emailVerifiedTokenExpireMinutes);
         this.emailCodeMaxAttempts = emailCodeMaxAttempts;
+        this.loginMaxAttempts = loginMaxAttempts;
+        this.loginLockTtl = Duration.ofMinutes(loginLockMinutes);
         this.refreshTokenTtl = Duration.ofDays(refreshTokenExpireDays);
         this.refreshCookieSecure = refreshCookieSecure;
         this.refreshCookieSameSite = refreshCookieSameSite;
@@ -52,6 +58,16 @@ public class MemberPolicy {
     // 인증코드 확인 최대 실패 횟수
     public int emailCodeMaxAttempts() {
         return emailCodeMaxAttempts;
+    }
+
+    // 로그인 최대 실패 횟수 (도달하면 잠금)
+    public int loginMaxAttempts() {
+        return loginMaxAttempts;
+    }
+
+    // 로그인 실패를 세는 기간이자 잠금 시간
+    public Duration loginLockTtl() {
+        return loginLockTtl;
     }
 
     // Refresh Token 유효 기간
