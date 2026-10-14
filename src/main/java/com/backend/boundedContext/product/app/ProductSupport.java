@@ -2,6 +2,7 @@ package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
+import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
@@ -140,6 +141,23 @@ public class ProductSupport {
         return productRepository.findById(productId)
                 .filter(Product::isDisplayable)
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /** 판매자 본인의 삭제되지 않은 상품. 없거나, 다른 판매자의 상품이거나, 삭제됐으면 404. */
+    public Product getSellerProduct(Long sellerId, Long productId) {
+        return productRepository.findById(productId)
+                .filter(product -> product.getSellerId().equals(sellerId) && !product.isDeleted())
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /** 판매자 상품 수정 폼을 채우는 값. 이미지는 이미지 기능 전까지 비어 있다. */
+    public SellerProductFormDto getSellerProductForm(Long sellerId, Long productId) {
+        Product product = getSellerProduct(sellerId, productId);
+        Category category = product.getCategory();
+
+        return new SellerProductFormDto(
+                product.getId(), product.getName(), product.getPrice(), product.getDescription(),
+                category.getParent().getId(), category.getId(), null, List.of());
     }
 
     /** 삭제되지 않은 옵션이 없거나 모두 재고 0이면 품절 */
