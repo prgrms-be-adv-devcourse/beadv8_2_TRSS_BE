@@ -32,13 +32,14 @@ public class PaymentPayUseCase {
     private final PaymentRepository paymentRepository;
     private final WalletTransactionRepository walletTransactionRepository;
     private final WalletHoldingRepository walletHoldingRepository;
+    private final PaymentFailureRecorder paymentFailureRecorder;
 
     /**
      * 주문 결제: 구매자 지갑 → 홀딩
      * 1. 지갑을 먼저 잠근다. 같은 구매자의 결제는 여기서 한 줄로 서므로, 아래 "읽고 판단하는" 일은 모두 잠금 뒤에 한다
      * 2. 같은 멱등 키로 이미 처리했으면 처음 결과를 그대로 반환 (돈은 다시 움직이지 않음)
      * 3. 다른 키인데 이미 PAID 결제가 있는 주문이면 409 (정상 흐름에서는 주문 쪽이 먼저 막으므로 버그 신호)
-     * 4. 잔액이 결제 금액 이상인지 확인
+     * 4. 주문 만료·잔액 부족은 예외가 아니라 FAILED_* 결과로 반환하고, 실패 기록은 별도 트랜잭션으로 남긴다
      * 5. 결제 건 저장 (원장이 결제 ID를 가리켜야 하므로 원장보다 먼저)
      * 6. 원장 PAYMENT 기록 (이때 지갑 잔액 차감)
      * 7. 주문의 홀딩 생성 (HELD)
@@ -57,12 +58,23 @@ public class PaymentPayUseCase {
             throw new DomainException(PaymentErrorCode.PAYMENT_ALREADY_PAID);
         }
 
-        if (wallet.getBalance() < command.amount()) {
-            // TODO 4단계: 잔액 부족은 예외가 아니라 FAILED_INSUFFICIENT_BALANCE 결과로 반환하고, 실패 기록은 별도 트랜잭션으로 저장
-            throw new IllegalStateException("잔액이 부족합니다. balance=" + wallet.getBalance() + ", amount=" + command.amount());
+        LocalDateTime now = LocalDateTime.now();
+
+        // 주문 쪽이 먼저 만료를 확인하지만, 계약상 결제 쪽에서도 한 번 더 막는다
+        if (!now.isBefore(command.orderExpiresAt())) {
+            return fail(
+                    command,
+                    wallet,
+                    PaymentStatus.FAILED_ORDER_EXPIRED,
+                    "주문 결제 가능 시간이 지났습니다."
+            );
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        if (wallet.getBalance() < command.amount()) {
+            return fail(command, wallet, PaymentStatus.FAILED_INSUFFICIENT_BALANCE,
+                    "잔액 부족: 잔액 " + wallet.getBalance() + "원, 결제 금액 " + command.amount() + "원");
+        }
+
         Payment payment = paymentRepository.save(
                 Payment.paid(
                         command.orderId(),
@@ -89,12 +101,7 @@ public class PaymentPayUseCase {
                 )
         );
 
-        return new PayResultDto(
-                payment.getId(),
-                PayResultStatus.PAID,
-                0,
-                0
-        );
+        return toResult(payment);
     }
 
     // 같은 멱등 키로 다시 온 요청: 처음 결과를 그대로 돌려준다
@@ -105,7 +112,34 @@ public class PaymentPayUseCase {
                 || payment.getAmount() != command.amount()) {
             throw new DomainException(GlobalErrorCode.IDEMPOTENCY_KEY_REUSED);
         }
-        // TODO 4단계: 실패한 결제 건(FAILED_*)도 처음 결과로 돌려준다
-        return new PayResultDto(payment.getId(), PayResultStatus.PAID, 0, 0);
+        return toResult(payment);
+    }
+
+    // 실패 기록은 별도 트랜잭션으로 먼저 커밋 → 주문 쪽이 롤백해도 남는다
+    private PayResultDto fail(PayCommand command, Wallet wallet, PaymentStatus failStatus, String reason) {
+        Payment failed = paymentFailureRecorder.record(
+                command,
+                wallet.getId(),
+                failStatus,
+                reason
+        );
+        return toResult(failed);
+    }
+
+    // 저장된 결제 건의 상태를 결과로 바꾼다
+    // TODO 5단계: 잔액 부족이면 부족액·충전 권장액을 채운다
+    private PayResultDto toResult(Payment payment) {
+        PayResultStatus status = switch (payment.getStatus()) {
+            case PAID -> PayResultStatus.PAID;
+            case FAILED_INSUFFICIENT_BALANCE -> PayResultStatus.FAILED_INSUFFICIENT_BALANCE;
+            case FAILED_ORDER_EXPIRED -> PayResultStatus.FAILED_ORDER_EXPIRED;
+            default -> throw new IllegalStateException("결제 결과로 돌려줄 수 없는 상태입니다: " + payment.getStatus());
+        };
+        return new PayResultDto(
+                payment.getId(),
+                status,
+                0,   // shortage: 5단계에서 채움
+                0    // chargeAmount: 5단계에서 채움
+        );
     }
 }

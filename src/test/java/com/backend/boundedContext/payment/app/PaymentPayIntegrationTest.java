@@ -15,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
@@ -42,6 +43,9 @@ class PaymentPayIntegrationTest {
 
     @Autowired
     private PaymentFacade paymentFacade;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -161,17 +165,75 @@ class PaymentPayIntegrationTest {
         assertThat(holdingCount()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("잔액이 부족하면 예외가 아니라 FAILED_INSUFFICIENT_BALANCE를 돌려주고, 돈은 그대로이며 실패 건이 남는다")
+    void pay_insufficientBalance() {
+        PayResultDto result = pay(40_000);
+
+        assertThat(result.status()).isEqualTo(PayResultStatus.FAILED_INSUFFICIENT_BALANCE);
+        assertThat(result.isPaid()).isFalse();
+        assertThat(balance()).isEqualTo(30_000);
+        assertThat(holdingCount()).isZero();
+
+        Payment failed = paymentRepository.findById(result.paymentId()).orElseThrow();
+        assertThat(failed.getStatus()).isEqualTo(PaymentStatus.FAILED_INSUFFICIENT_BALANCE);
+        assertThat(failed.getFailReason()).contains("잔액 부족");
+        assertThat(failed.getPaidAt()).isNull();
+        assertThat(walletTransactionRepository.findByIdempotencyKey("PAYMENT-" + failed.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("주문 결제 가능 시간이 지났으면 FAILED_ORDER_EXPIRED를 돌려주고 돈은 그대로다")
+    void pay_orderExpired() {
+        PayResultDto result = payWith(25_000, "TEST-" + UUID.randomUUID(), LocalDateTime.now().minusSeconds(1));
+
+        assertThat(result.status()).isEqualTo(PayResultStatus.FAILED_ORDER_EXPIRED);
+        assertThat(balance()).isEqualTo(30_000);
+        assertThat(paymentRepository.findById(result.paymentId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentStatus.FAILED_ORDER_EXPIRED);
+    }
+
+    @Test
+    @DisplayName("실패한 결제도 같은 멱등 키로 다시 호출하면 처음 결과(실패)를 그대로 돌려준다")
+    void pay_failedReplay() {
+        String key = "TEST-" + UUID.randomUUID();
+        PayResultDto first = pay(40_000, key);
+
+        PayResultDto second = pay(40_000, key);
+
+        assertThat(second.paymentId()).isEqualTo(first.paymentId());
+        assertThat(second.status()).isEqualTo(PayResultStatus.FAILED_INSUFFICIENT_BALANCE);
+    }
+
+    @Test
+    @DisplayName("주문 트랜잭션이 롤백돼도 결제 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 커밋되어 남는다")
+    void pay_failureRecordSurvivesRollback() {
+        // 주문 쪽 흐름 흉내: 같은 트랜잭션에서 pay를 부르고, PAID가 아니면 예외로 전체 롤백
+        PayResultDto result = transactionTemplate.execute(status -> {
+            PayResultDto r = pay(40_000);
+            status.setRollbackOnly();
+            return r;
+        });
+
+        assertThat(result.status()).isEqualTo(PayResultStatus.FAILED_INSUFFICIENT_BALANCE);
+        assertThat(paymentRepository.findById(result.paymentId())).isPresent();
+    }
+
     private PayResultDto pay(long amount) {
         return pay(amount, "TEST-" + UUID.randomUUID());
     }
 
     private PayResultDto pay(long amount, String idempotencyKey) {
+        return payWith(amount, idempotencyKey, LocalDateTime.now().plusMinutes(15));
+    }
+
+    private PayResultDto payWith(long amount, String idempotencyKey, LocalDateTime orderExpiresAt) {
         PayResultDto result = paymentFacade.pay(
                 new PayCommand(
                         orderId,
                         buyerMemberId,
                         amount,
-                        LocalDateTime.now().plusMinutes(15),
+                        orderExpiresAt,
                         idempotencyKey
                 )
         );
