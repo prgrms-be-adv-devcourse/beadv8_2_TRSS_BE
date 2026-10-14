@@ -9,11 +9,16 @@ import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.PaymentPolicy;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
+import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.domain.TopupStatus;
+import com.backend.boundedContext.payment.domain.TopupUsage;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletHolding;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.domain.WalletTransactionType;
 import com.backend.boundedContext.payment.out.PaymentRepository;
+import com.backend.boundedContext.payment.out.TopupRepository;
+import com.backend.boundedContext.payment.out.TopupUsageRepository;
 import com.backend.boundedContext.payment.out.WalletHoldingRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
@@ -35,6 +40,8 @@ public class PaymentPayUseCase {
     private final WalletHoldingRepository walletHoldingRepository;
     private final PaymentFailureRecorder paymentFailureRecorder;
     private final PaymentPolicy paymentPolicy;
+    private final TopupRepository topupRepository;
+    private final TopupUsageRepository topupUsageRepository;
 
     /**
      * 주문 결제: 구매자 지갑 → 홀딩
@@ -44,7 +51,8 @@ public class PaymentPayUseCase {
      * 4. 주문 만료·잔액 부족은 예외가 아니라 FAILED_* 결과로 반환하고, 실패 기록은 별도 트랜잭션으로 남긴다
      * 5. 결제 건 저장 (원장이 결제 ID를 가리켜야 하므로 원장보다 먼저)
      * 6. 원장 PAYMENT 기록 (이때 지갑 잔액 차감)
-     * 7. 주문의 홀딩 생성 (HELD)
+     * 7. 오래된 충전 건부터 차감하고 차감 내역 기록 (topup_usage)
+     * 8. 주문의 홀딩 생성 (HELD)
      * 동시 요청의 최후 안전장치: payment.idempotency_key, wallet_holding.order_id UNIQUE
      */
     public PayResultDto pay(PayCommand command) {
@@ -96,6 +104,7 @@ public class PaymentPayUseCase {
                             payment.paymentIdempotencyKey()
                     )
         );
+        useTopups(command.buyerId(), payment);
         walletHoldingRepository.save(
                 WalletHolding.hold(
                         payment,
@@ -104,6 +113,20 @@ public class PaymentPayUseCase {
         );
 
         return toResult(payment, wallet);
+    }
+
+    // 오래된 충전 건부터 결제 금액만큼 차감하고 차감 내역을 남긴다 (충전 취소 가능 여부 판단용)
+    // 잔액에는 환불·정산으로 들어온 돈도 있어서, 충전 건을 다 써도 결제 금액이 남을 수 있다 (그 부분은 기록할 충전 건이 없음)
+    private void useTopups(Long memberId, Payment payment) {
+        long left = payment.getAmount();
+        for (Topup topup : topupRepository.findUsableForUpdate(memberId, TopupStatus.DONE)) {
+            if (left == 0) break;
+            long used = Math.min(left, topup.getRemainingAmount());
+            topupUsageRepository.save(
+                    TopupUsage.use(topup, payment, used)
+            );
+            left -= used;
+        }
     }
 
     // 같은 멱등 키로 다시 온 요청: 처음 결과를 그대로 돌려준다

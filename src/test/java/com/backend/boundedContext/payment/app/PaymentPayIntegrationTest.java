@@ -19,6 +19,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
+import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.domain.TopupUsage;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletHolding;
 import com.backend.boundedContext.payment.domain.WalletHoldingStatus;
@@ -26,6 +28,8 @@ import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.domain.WalletTransactionReferenceType;
 import com.backend.boundedContext.payment.domain.WalletTransactionType;
 import com.backend.boundedContext.payment.out.PaymentRepository;
+import com.backend.boundedContext.payment.out.TopupRepository;
+import com.backend.boundedContext.payment.out.TopupUsageRepository;
 import com.backend.boundedContext.payment.out.WalletHoldingRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
@@ -59,12 +63,19 @@ class PaymentPayIntegrationTest {
     @Autowired
     private WalletHoldingRepository walletHoldingRepository;
 
+    @Autowired
+    private TopupRepository topupRepository;
+
+    @Autowired
+    private TopupUsageRepository topupUsageRepository;
+
     // 다른 테스트·시드와 겹치지 않는 회원·주문 ID
     private final long buyerMemberId = randomId();
     private final long orderId = randomId();
 
     private Wallet wallet;
     private final List<Long> paymentIds = new ArrayList<>();
+    private final List<Topup> topups = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -76,6 +87,7 @@ class PaymentPayIntegrationTest {
     @AfterEach
     void cleanUp() {
         for (Long paymentId : paymentIds) {
+            topupUsageRepository.deleteAll(topupUsageRepository.findAllByPayment_Id(paymentId));
             walletHoldingRepository.findAll().stream()
                     .filter(h -> h.getPayment().getId().equals(paymentId))
                     .forEach(walletHoldingRepository::delete);
@@ -83,7 +95,65 @@ class PaymentPayIntegrationTest {
                     .ifPresent(walletTransactionRepository::delete);
             paymentRepository.deleteById(paymentId);
         }
+        topupRepository.deleteAll(topups);
         walletRepository.delete(wallet);
+    }
+
+    @Test
+    @DisplayName("결제 금액만큼 오래된 충전 건부터 차감하고 차감 내역을 남긴다 (차감된 충전 건은 토스 취소 불가)")
+    void pay_usesOldestTopupsFirst() {
+        Topup older = doneTopup(10_000, LocalDateTime.now().minusDays(2));
+        Topup newer = doneTopup(20_000, LocalDateTime.now().minusDays(1));
+
+        PayResultDto result = pay(25_000);
+
+        // 오래된 충전 10,000을 모두 쓰고, 다음 충전에서 15,000을 씀
+        Topup olderAfter = topupRepository.findById(older.getId()).orElseThrow();
+        Topup newerAfter = topupRepository.findById(newer.getId()).orElseThrow();
+        assertThat(olderAfter.getRemainingAmount()).isZero();
+        assertThat(newerAfter.getRemainingAmount()).isEqualTo(5_000);
+        assertThat(olderAfter.isCancelable()).isFalse();
+        assertThat(newerAfter.isCancelable()).isFalse();
+
+        assertThat(topupUsageRepository.findAllByPayment_Id(result.paymentId()))
+                .extracting(TopupUsage::getAmount)
+                .containsExactlyInAnyOrder(10_000L, 15_000L);
+    }
+
+    @Test
+    @DisplayName("충전 건으로 들어온 돈이 결제 금액보다 적으면 있는 만큼만 차감 내역을 남긴다 (나머지는 환불·정산으로 들어온 돈)")
+    void pay_topupsLessThanAmount() {
+        Topup only = doneTopup(10_000, LocalDateTime.now().minusDays(1));
+
+        PayResultDto result = pay(25_000);
+
+        assertThat(result.isPaid()).isTrue();
+        assertThat(topupRepository.findById(only.getId()).orElseThrow().getRemainingAmount()).isZero();
+        assertThat(topupUsageRepository.findAllByPayment_Id(result.paymentId()))
+                .extracting(TopupUsage::getAmount)
+                .containsExactly(10_000L);
+    }
+
+    @Test
+    @DisplayName("결제가 실패하면 충전 건은 차감하지 않는다")
+    void pay_failed_doesNotUseTopups() {
+        Topup topup = doneTopup(10_000, LocalDateTime.now().minusDays(1));
+
+        PayResultDto result = pay(48_000);
+
+        assertThat(result.isPaid()).isFalse();
+        assertThat(topupRepository.findById(topup.getId()).orElseThrow().getRemainingAmount()).isEqualTo(10_000);
+        assertThat(topupUsageRepository.findAllByPayment_Id(result.paymentId())).isEmpty();
+    }
+
+    // 승인 완료(DONE)된 충전 건 (지갑 잔액은 setUp에서 따로 넣었으므로 여기서는 충전 건 기록만 만든다)
+    private Topup doneTopup(long amount, LocalDateTime approvedAt) {
+        Topup topup = Topup.create(buyerMemberId, wallet, amount);
+        topup.markProcessing("TEST-PK-" + UUID.randomUUID());
+        topup.approve(approvedAt);
+        Topup saved = topupRepository.save(topup);
+        topups.add(saved);
+        return saved;
     }
 
     @Test
