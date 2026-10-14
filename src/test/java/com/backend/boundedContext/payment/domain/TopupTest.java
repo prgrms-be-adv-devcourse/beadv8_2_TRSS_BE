@@ -120,4 +120,41 @@ class TopupTest {
         assertThatThrownBy(() -> topup.fail(TopupStatus.DONE, "오류"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("결제에 쓰면 남은 금액이 줄고, 일부라도 쓰면 토스 취소할 수 없다")
+    void use() {
+        Topup topup = doneTopup(20_000);
+
+        topup.use(5_000);
+
+        assertThat(topup.getRemainingAmount()).isEqualTo(15_000);
+        assertThat(topup.isCancelable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("남은 금액보다 많이 쓸 수 없고, 남은 금액은 그대로다")
+    void use_overRemaining() {
+        Topup topup = doneTopup(10_000);
+
+        assertThatThrownBy(() -> topup.use(10_001))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(topup.getRemainingAmount()).isEqualTo(10_000);
+    }
+
+    @Test
+    @DisplayName("승인 완료되지 않은 충전 건은 쓸 수 없다")
+    void use_notDone() {
+        Topup topup = Topup.create(1L, wallet, 10_000);
+
+        assertThatThrownBy(() -> topup.use(1_000))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    private Topup doneTopup(long amount) {
+        Topup topup = Topup.create(1L, wallet, amount);
+        topup.markProcessing("pk_" + amount);
+        topup.approve(NOW);
+        return topup;
+    }
 }

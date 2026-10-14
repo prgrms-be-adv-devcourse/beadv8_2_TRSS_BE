@@ -55,7 +55,13 @@ public class Payment extends BaseIdAndTime {
 
     // 결제 성공 건 (지갑 차감·홀딩 생성은 호출한 쪽에서 같은 트랜잭션으로 처리)
     public static Payment paid(Long orderId, Wallet wallet, long amount, String idempotencyKey, LocalDateTime paidAt) {
-        Payment payment = create(orderId, wallet, amount, idempotencyKey, PaymentStatus.PAID);
+        Payment payment = create(
+                orderId,
+                wallet,
+                amount,
+                idempotencyKey,
+                PaymentStatus.PAID
+        );
         payment.paidAt = paidAt;
         return payment;
     }
@@ -83,5 +89,10 @@ public class Payment extends BaseIdAndTime {
 
     public boolean isPaid() {
         return status == PaymentStatus.PAID;
+    }
+
+    // 결제 원장(PAYMENT)의 멱등 키
+    public String paymentIdempotencyKey() {
+        return "PAYMENT-" + getId();
     }
 }

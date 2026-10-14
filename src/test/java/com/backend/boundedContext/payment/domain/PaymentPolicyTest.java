@@ -9,6 +9,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import com.backend.global.exception.DomainException;
@@ -31,6 +32,19 @@ class PaymentPolicyTest {
         assertThatThrownBy(() -> paymentPolicy.validateTopupAmount(amount))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-TOPUP_AMOUNT_INVALID");
+    }
+
+    @ParameterizedTest(name = "부족액 {0} → 충전 권장액 {1}")
+    @CsvSource({"1, 10000", "9999, 10000", "10000, 10000", "18000, 20000", "20000, 20000", "20001, 30000"})
+    @DisplayName("충전 권장액은 부족액을 충전 단위(1만 원)로 올린 금액이다")
+    void recommendedChargeAmount(long shortage, long expected) {
+        assertThat(paymentPolicy.recommendedChargeAmount(shortage)).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("부족액이 없으면 충전 권장액도 0이다")
+    void recommendedChargeAmount_noShortage() {
+        assertThat(paymentPolicy.recommendedChargeAmount(0)).isZero();
     }
 
     @Test
