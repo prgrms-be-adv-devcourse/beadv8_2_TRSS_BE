@@ -198,6 +198,67 @@ class ApiV1AdminSellerControllerTest {
         verify(memberSellerFacade, never()).rejectSeller(any(), any());
     }
 
+    @Test
+    @DisplayName("철회 승인: 진행 중인 판매가 있으면 409 ACTIVE_SALES_EXIST")
+    void approveWithdrawal_activeSales() throws Exception {
+        given(memberSellerFacade.approveWithdrawal(5L)).willThrow(new DomainException(MemberErrorCode.ACTIVE_SALES_EXIST));
+
+        mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/approve").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.resultCode").value("409-ACTIVE_SALES_EXIST"));
+    }
+
+    @Test
+    @DisplayName("철회 승인·거절: 관리자는 처리하고 바뀐 판매자 상세를 받는다")
+    void withdrawal_admin() throws Exception {
+        given(memberSellerFacade.approveWithdrawal(5L)).willReturn(detail(SellerStatus.WITHDRAWN));
+        given(memberSellerFacade.rejectWithdrawal(5L, "반품 처리 후 다시 요청")).willReturn(detail(SellerStatus.APPROVED));
+
+        mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/approve").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("WITHDRAWN"));
+        mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/reject").header("Authorization", bearer(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": "반품 처리 후 다시 요청"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+    }
+
+    @Test
+    @DisplayName("철회 거절: 사유가 비어 있으면 400 VALIDATION_FAILED")
+    void rejectWithdrawal_blankReason() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/reject").header("Authorization", bearer(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": ""}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        verify(memberSellerFacade, never()).rejectWithdrawal(any(), any());
+    }
+
+    @Test
+    @DisplayName("철회 승인·거절: 관리자가 아니면 403 FORBIDDEN")
+    void withdrawal_forbidden() throws Exception {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+            mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/approve").header("Authorization", bearer(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+            mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/reject").header("Authorization", bearer(role))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"reason": "사유"}
+                                    """))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+        }
+        verify(memberSellerFacade, never()).approveWithdrawal(any());
+        verify(memberSellerFacade, never()).rejectWithdrawal(any(), any());
+    }
+
     private static AdminSellerDetailDto detail(SellerStatus status) {
         return new AdminSellerDetailDto(
                 5L, 7L, "seller@palette.test", "판매자", status,

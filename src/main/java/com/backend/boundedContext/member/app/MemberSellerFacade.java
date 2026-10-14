@@ -38,6 +38,8 @@ public class MemberSellerFacade {
     private final MemberGetSellerDetailUseCase memberGetSellerDetailUseCase;
     private final MemberApproveSellerUseCase memberApproveSellerUseCase;
     private final MemberRejectSellerUseCase memberRejectSellerUseCase;
+    private final MemberApproveWithdrawalUseCase memberApproveWithdrawalUseCase;
+    private final MemberRejectWithdrawalUseCase memberRejectWithdrawalUseCase;
 
     // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
     @Transactional
@@ -109,6 +111,18 @@ public class MemberSellerFacade {
     @Transactional
     public AdminSellerDetailDto rejectSeller(Long sellerId, String reason) {
         return memberRejectSellerUseCase.reject(sellerId, reason);
+    }
+
+    // 관리자 철회 승인 (WITHDRAW_REQUESTED → WITHDRAWN, 진행 중인 판매·미정산 금액이 있으면 불가)
+    @Transactional
+    public AdminSellerDetailDto approveWithdrawal(Long sellerId) {
+        return memberApproveWithdrawalUseCase.approveWithdrawal(sellerId);
+    }
+
+    // 관리자 철회 거절 (WITHDRAW_REQUESTED → APPROVED, 사유 필수)
+    @Transactional
+    public AdminSellerDetailDto rejectWithdrawal(Long sellerId, String reason) {
+        return memberRejectWithdrawalUseCase.rejectWithdrawal(sellerId, reason);
     }
 
     // 개발용 시드 판매자 (시드 판매자 회원을 APPROVED 판매자로)

@@ -64,4 +64,21 @@ public class ApiV1AdminSellerController {
     ) {
         return RsData.of("200-1", "판매자 입점을 반려했습니다.", memberSellerFacade.rejectSeller(sellerId, request.reason()));
     }
+
+    @Operation(summary = "철회 승인", description = "철회 심사 중(WITHDRAW_REQUESTED)만 승인할 수 있습니다. 진행 중인 판매 주문이나 미정산 금액이 있으면 409입니다. 신청 내용은 이력에 남고 사업자번호는 비워집니다.")
+    @PostMapping("/{sellerId}/withdrawal/approve")
+    public RsData<AdminSellerDetailDto> approveWithdrawal(
+            @PathVariable Long sellerId
+    ) {
+        return RsData.of("200-1", "판매자 철회를 승인했습니다.", memberSellerFacade.approveWithdrawal(sellerId));
+    }
+
+    @Operation(summary = "철회 거절", description = "철회 심사 중(WITHDRAW_REQUESTED)만 거절할 수 있고, 사유는 필수입니다. 판매자는 다시 판매 중(APPROVED)이 됩니다.")
+    @PostMapping("/{sellerId}/withdrawal/reject")
+    public RsData<AdminSellerDetailDto> rejectWithdrawal(
+            @PathVariable Long sellerId,
+            @Valid @RequestBody SellerReasonRequest request
+    ) {
+        return RsData.of("200-1", "판매자 철회를 거절했습니다.", memberSellerFacade.rejectWithdrawal(sellerId, request.reason()));
+    }
 }
