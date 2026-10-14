@@ -18,10 +18,6 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
-    properties:
-      hibernate:
-        format_sql: true
-    show-sql: true
 
   data:
     redis:
