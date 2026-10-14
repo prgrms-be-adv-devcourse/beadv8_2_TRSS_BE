@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
+import com.backend.shared.payment.dto.PayCommand;
+import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
 import com.backend.shared.payment.dto.WalletSummaryDto;
@@ -22,6 +24,7 @@ public class PaymentFacade {
     private final PaymentGetWalletUseCase paymentGetWalletUseCase;
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
+    private final PaymentPayUseCase paymentPayUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -47,6 +50,12 @@ public class PaymentFacade {
     // 충전 승인. 토스 호출을 DB 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음 (트랜잭션은 PaymentTopupConfirmProcessor의 Tx1·Tx2에서 각각 실행)
     public TopupConfirmDto confirmTopup(Long memberId, String paymentKey, String orderId, long amount) {
         return paymentConfirmTopupUseCase.confirmTopup(memberId, paymentKey, orderId, amount);
+    }
+
+    // 주문 결제 (주문 결제 트랜잭션에 참여, 주문 쪽이 실패하면 함께 롤백)
+    @Transactional
+    public PayResultDto pay(PayCommand command) {
+        return paymentPayUseCase.pay(command);
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)
