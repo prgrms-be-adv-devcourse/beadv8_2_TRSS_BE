@@ -1,6 +1,5 @@
 package com.backend.global.jpa.entity;
 
-import com.backend.global.global.GlobalConfig;
 import com.backend.standard.modelType.HasModelTypeCode;
 import jakarta.persistence.MappedSuperclass;
 
@@ -19,19 +18,9 @@ public abstract class BaseEntity implements HasModelTypeCode {
 
     public abstract LocalDateTime getUpdatedAt();
 
-    /**
-     * 엔티티 클래스 이름(예: "Order").
-     */
+    // 엔티티 클래스 이름
     @Override
     public String getModelTypeCode() {
         return getClass().getSimpleName();
-    }
-
-    /**
-     * 도메인 이벤트를 발행한다. 상태 변경 메서드 안에서 호출한다.
-     * 받는 쪽은 @TransactionalEventListener(phase = AFTER_COMMIT)로 커밋 후에 처리한다.
-     */
-    protected void publishEvent(Object event) {
-        GlobalConfig.getEventPublisher().publish(event);
     }
 }
