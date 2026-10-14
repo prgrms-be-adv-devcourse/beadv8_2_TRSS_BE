@@ -44,9 +44,6 @@ public class StockHistory extends BaseIdAndTime {
     @Column(nullable = false)
     private int stockAfter;
 
-    @Column(length = 300)
-    private String reason;
-
     private Long orderId;
 
     private Long orderItemId;
@@ -57,6 +54,16 @@ public class StockHistory extends BaseIdAndTime {
         history.option = option;
         history.changeType = StockChangeType.INIT;
         history.changeQty = option.getStock();
+        history.stockAfter = option.getStock();
+        return history;
+    }
+
+    /** 판매자 재고 조정 이력. 재고를 바꾼 뒤에 만든다. 줄였으면 changeQty가 음수다. */
+    public static StockHistory ofAdjust(ProductOption option, int changeQty) {
+        StockHistory history = new StockHistory();
+        history.option = option;
+        history.changeType = StockChangeType.ADJUST;
+        history.changeQty = changeQty;
         history.stockAfter = option.getStock();
         return history;
     }
