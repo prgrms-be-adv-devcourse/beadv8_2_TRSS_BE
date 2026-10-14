@@ -76,6 +76,10 @@ custom:
     topupUnit: 10000           # 충전 단위·최소 금액(원)
     topupMax: 1000000          # 1회 최대 충전 금액(원)
     topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
+    topupExpireIntervalSeconds: 60      # READY 만료 스케줄러 실행 간격(초)
+    topupReconcileIntervalSeconds: 300  # PROCESSING 결과 확인 스케줄러 실행 간격(초)
+    topupReconcileDelayMinutes: 5       # PROCESSING이 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
+    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
   # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
   toss:
