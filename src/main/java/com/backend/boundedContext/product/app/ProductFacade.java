@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
+import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductSampleDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.shared.product.dto.OptionSnapshotDto;
@@ -27,6 +28,7 @@ public class ProductFacade {
     private final ProductCreateProductUseCase productCreateProductUseCase;
     private final ProductDeductStockUseCase productDeductStockUseCase;
     private final ProductRestoreStockUseCase productRestoreStockUseCase;
+    private final ProductAdjustStockUseCase productAdjustStockUseCase;
 
     // 내부 API (ProductApiAdapter). 호출한 쪽 트랜잭션에 참여한다
 
@@ -51,6 +53,13 @@ public class ProductFacade {
                               long price, int stock) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock).getId();
+    }
+
+    /** 승인된 판매자가 자기 상품 옵션의 재고를 증감량만큼 조정하고, 조정 후 재고를 돌려준다. */
+    @Transactional
+    public OptionStockDto adjustStock(Long memberId, Long productId, Long optionId, int changeQty) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return OptionStockDto.from(productAdjustStockUseCase.adjustStock(sellerId, productId, optionId, changeQty));
     }
 
     @Transactional(readOnly = true)
