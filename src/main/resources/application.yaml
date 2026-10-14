@@ -52,8 +52,8 @@ spring:
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
 custom:
   jwt:
-    # 서명 키: 무작위 32바이트를 Base64로 인코딩한 값(openssl rand -base64 32). 로컬 개발용 기본값이며, 배포 환경에서는 반드시 JWT_SECRET으로 바꾼다.
-    secret: ${JWT_SECRET:AnGlh3QBPrBhUdJ7H87lXb1zgI2l7B818fVnAXpscfE=}
+    # 서명 키: 무작위 32바이트를 Base64로 인코딩한 값. 기본값 없이 환경변수(.env)로만 주입한다.
+    secret: ${JWT_SECRET}
     accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
@@ -66,10 +66,10 @@ custom:
     emailCodeResendSeconds: 60            # 인증코드 재발송 제한 간격(초)
     emailVerifiedTokenExpireMinutes: 30   # 인증 완료 토큰 유효 시간(분)
     emailCodeMaxAttempts: 5               # 인증코드 확인 최대 실패 횟수
-    # 정산 계좌번호 암호화 키. 기본값은 개발용이고, 운영은 환경변수로 덮어쓴다.
+    # 정산 계좌번호 암호화 키. 기본값 없이 환경변수(.env)로만 주입한다.
     accountEncryption:
-      password: ${ACCOUNT_ENCRYPTION_PASSWORD:palette-dev-account-key}
-      salt: ${ACCOUNT_ENCRYPTION_SALT:5c0744940b5c369b}
+      password: ${ACCOUNT_ENCRYPTION_PASSWORD}
+      salt: ${ACCOUNT_ENCRYPTION_SALT}
   order:
     cartMaxQuantity: 99        # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
