@@ -24,7 +24,8 @@ import java.util.UUID;
  * 주문서
  */
 @Entity
-@Table(name = "market_order")
+@Table(name = "market_order",
+        indexes = @Index(name = "idx_market_order_buyer", columnList = "buyer_id, created_at"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends BaseIdAndTime {
@@ -173,5 +174,23 @@ public class Order extends BaseIdAndTime {
         this.canceledAt = now;
         this.cancelType = cancelType;
         changeStatus(OrderStatus.CANCELED, reason);   // 주문이력도 함께 쌓임
+    }
+
+    // 구매 확정 - 결제 완료 주문만 가능
+    public void confirm(ConfirmType confirmType, LocalDateTime now) {
+        if (status != OrderStatus.PAID) {
+            throw new DomainException(OrderErrorCode.ORDER_NOT_CONFIRMABLE);
+        }
+
+        this.confirmedAt = now;
+        this.confirmType = confirmType;
+        changeStatus(OrderStatus.CONFIRMED, null);   // 주문이력도 함께 쌓임
+    }
+
+    // 자동 구매 확정 대상 여부
+    public boolean isAutoConfirmable(LocalDateTime now, int autoConfirmDays) {
+        return status == OrderStatus.PAID
+                && paidAt != null
+                && !now.isBefore(paidAt.plusDays(autoConfirmDays));
     }
 }
