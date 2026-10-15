@@ -248,6 +248,7 @@
           "fRNzvDSTeWinrqD74cfpV",
           "PhvPfeLgbvR85X2qY24cL",
           "fc82IQktd-zwTOOrOudOh",
+          "Kq7mR2vXa9TbN4cW8eZpL",
           "74uxwUyHsjrtLxPTwb-FW",
           "0_iyM2PGULy-v-gFAt-fj",
           "UkcYLlsPA3BRa3n10wP6E"
@@ -1787,6 +1788,26 @@
         "meta": {
           "updateAt": 1791812262217,
           "createAt": 1791793118726
+        }
+      },
+      "Kq7mR2vXa9TbN4cW8eZpL": {
+        "id": "Kq7mR2vXa9TbN4cW8eZpL",
+        "tableId": "CBQCt0Dp_OAzo8JA6gfTV",
+        "name": "approved_at",
+        "comment": "승인 일시 - 재신청 시 비움",
+        "dataType": "TIMESTAMP",
+        "default": "",
+        "options": 0,
+        "ui": {
+          "keys": 0,
+          "widthName": 70,
+          "widthComment": 150,
+          "widthDataType": 65,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1792051200000,
+          "createAt": 1792051200000
         }
       },
       "pA5eYmqHdPnUUNjhBiL3R": {

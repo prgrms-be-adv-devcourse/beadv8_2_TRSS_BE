@@ -81,7 +81,8 @@ class SellerWithdrawalIntegrationTest {
 
         assertThat(response.status()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
         assertThat(response.reason()).isEqualTo("폐업 예정");
-        assertThat(response.statusChangedAt()).isNotNull();
+        assertThat(response.approvedAt()).isNotNull();
+        assertThat(response.unsettledAmount()).isZero();
 
         Seller saved = sellerRepository.findByMemberId(memberId).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);

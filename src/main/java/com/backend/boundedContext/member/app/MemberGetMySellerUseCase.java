@@ -7,6 +7,7 @@ import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.settlement.out.SettlementApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -16,12 +17,13 @@ import org.springframework.stereotype.Component;
 public class MemberGetMySellerUseCase {
     private final SellerRepository sellerRepository;
     private final SellerStatusHistoryRepository sellerStatusHistoryRepository;
+    private final SettlementApi settlementApi;
 
     public MySellerResponse getMySeller(Long memberId) {
         Seller seller = sellerRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.SELLER_NOT_FOUND));
         SellerStatusHistory latest = sellerStatusHistoryRepository.findFirstBySellerIdOrderByIdDesc(seller.getId())
                 .orElse(null);
-        return MySellerResponse.from(seller, latest);
+        return MySellerResponse.from(seller, latest, settlementApi.getUnsettledAmount(seller.getId()));
     }
 }
