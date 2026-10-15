@@ -3,9 +3,11 @@ package com.backend.boundedContext.order.out;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.shared.order.dto.OrderStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -30,4 +32,53 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :id and o.buyerId = :buyerId")
     Optional<Order> findByIdAndBuyerIdForUpdate(@Param("id") Long id, @Param("buyerId") Long buyerId);
+
+    // 구매자의 최근 주문
+    List<Order> findByBuyerId(Long buyerId, Pageable pageable);
+
+    // 구매자에게 해당 상태의 주문이 있는지
+    boolean existsByBuyerIdAndStatusIn(Long buyerId, Collection<OrderStatus> statuses);
+
+    // 판매자 상품이 들어간 해당 상태의 주문이 있는지
+    @Query("""
+            select count(i) > 0
+            from OrderItem i
+            where i.sellerId = :sellerId
+              and i.order.status in :statuses
+            """)
+    boolean existsSalesBySellerIdAndStatusIn(@Param("sellerId") Long sellerId,
+                                             @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 자동 구매 확정 대상 주문 id
+    @Query("""
+            select o.id
+            from Order o
+            where o.status = :status
+              and o.paidAt <= :paidBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findAutoConfirmTargetIds(@Param("status") OrderStatus status,
+                                        @Param("paidBefore") LocalDateTime paidBefore,
+                                        @Param("afterId") Long afterId,
+                                        Pageable pageable);
+
+    // 주문 행을 잠가서 조회 (스케줄러용)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
+    // 결제 만료 처리 대상 주문 id - 만료 시각이 expiredBefore 이전인 결제 대기 주문
+    @Query("""
+            select o.id
+            from Order o
+            where o.status in :statuses
+              and o.expiresAt <= :expiredBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findExpireTargetIds(@Param("statuses") Collection<OrderStatus> statuses,
+                                   @Param("expiredBefore") LocalDateTime expiredBefore,
+                                   @Param("afterId") Long afterId,
+                                   Pageable pageable);
 }

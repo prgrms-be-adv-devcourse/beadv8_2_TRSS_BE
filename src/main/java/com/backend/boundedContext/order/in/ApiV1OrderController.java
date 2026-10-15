@@ -24,7 +24,7 @@ import java.time.LocalDate;
 /**
  * 주문 API
  */
-@Tag(name = "주문", description = "주문 생성·조회·취소")
+@Tag(name = "주문", description = "주문 생성·조회·취소·구매확정")
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
@@ -94,5 +94,18 @@ public class ApiV1OrderController {
     ) {
         return RsData.of("200-1", "주문을 취소했습니다.",
                 orderFacade.cancelOrder(authMember.memberId(), orderId));
+    }
+
+    @Operation(summary = "구매 확정", description = "결제 완료(PAID) 주문을 구매자가 직접 확정한다. 확정되면 정산 후보가 만들어진다.")
+    @ApiResponse(responseCode = "200", description = "200-1 구매 확정 완료")
+    @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND")
+    @ApiResponse(responseCode = "409", description = "409-ORDER_NOT_CONFIRMABLE 결제 전·반품 요청 중·이미 확정된 주문")
+    @PostMapping("/{orderId}/confirm")
+    public RsData<OrderConfirmResponse> confirmOrder(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long orderId
+    ) {
+        return RsData.of("200-1", "구매를 확정했습니다.",
+                orderFacade.confirmOrder(authMember.memberId(), orderId));
     }
 }

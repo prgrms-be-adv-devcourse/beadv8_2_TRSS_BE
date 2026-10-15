@@ -9,10 +9,10 @@ import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.product.dto.StockRestoreReason;
 import com.backend.shared.product.out.ProductApi;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -34,8 +34,14 @@ class OrderCancelOrderUseCaseTest {
 
     @Mock OrderRepository orderRepository;
     @Mock ProductApi productApi;
-    @InjectMocks
+
     OrderCancelOrderUseCase useCase;
+
+    @BeforeEach
+    void setUp() {
+        // 취소 + 재고 복원까지 실제 흐름으로 검증하려고 OrderCancelSupport는 실제 객체를 쓴다
+        useCase = new OrderCancelOrderUseCase(orderRepository, new OrderCancelSupport(productApi));
+    }
 
     private static final Long BUYER_ID = 3L;
     private static final Long ORDER_ID = 500L;

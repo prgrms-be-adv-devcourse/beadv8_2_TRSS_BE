@@ -42,7 +42,7 @@ class OrderAddCartItemUseCaseTest {
     @BeforeEach
     void setUp() {
         // OrderPolicy는 값만 담은 객체라 Mock 대신 진짜로 만든다
-        useCase = new OrderAddCartItemUseCase(orderSupport, new OrderPolicy(15, 7, 99), productApi, memberApi);
+        useCase = new OrderAddCartItemUseCase(orderSupport, new OrderPolicy(15, 7, 99, 100, 1), productApi, memberApi);
     }
 
     private OptionSnapshotDto onSale(int stock) {
