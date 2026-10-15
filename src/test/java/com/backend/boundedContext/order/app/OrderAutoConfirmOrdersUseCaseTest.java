@@ -43,7 +43,7 @@ class OrderAutoConfirmOrdersUseCaseTest {
     @BeforeEach
     void setUp() {
         // OrderPolicy는 값 객체라 실제로 만들고(autoConfirmDays 7), 이벤트 발행까지 보려고 OrderConfirmSupport도 실제 객체를 쓴다
-        useCase = new OrderAutoConfirmOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100),
+        useCase = new OrderAutoConfirmOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100, 1),
                 new OrderConfirmSupport(eventPublisher));
     }
 

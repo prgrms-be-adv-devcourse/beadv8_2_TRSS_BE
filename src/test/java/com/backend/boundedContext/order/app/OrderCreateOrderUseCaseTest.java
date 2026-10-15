@@ -53,7 +53,7 @@ class OrderCreateOrderUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100), productApi, memberApi);
+        useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1), productApi, memberApi);
     }
 
     /** 옵션 ID = 상품 ID × 10, 판매자는 2번 */
