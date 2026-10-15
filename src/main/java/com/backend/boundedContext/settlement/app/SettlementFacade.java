@@ -3,10 +3,7 @@ package com.backend.boundedContext.settlement.app;
 import com.backend.boundedContext.settlement.domain.Settlement;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
-import com.backend.boundedContext.settlement.in.dto.SettlementDetailResponse;
-import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
-import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
-import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
+import com.backend.boundedContext.settlement.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.ConfirmedOrderItemDto;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +32,9 @@ public class SettlementFacade {
     private final SettlementPayoutUseCase settlementPayoutUseCase;
     private final SettlementRunMonthlyJobUseCase settlementRunMonthlyJobUseCase;
     private final SettlementGetRunsUseCase settlementGetRunsUseCase;
+    private final SettlementHoldUseCase settlementHoldUseCase;
+    private final SettlementReleaseUseCase settlementReleaseUseCase;
+    private final SettlementHoldSellerUseCase settlementHoldSellerUseCase;
 
     // ================= 정산 후보 생성 (구매 확정 이벤트) =================
 
@@ -119,5 +119,40 @@ public class SettlementFacade {
     public SettlementDetailResponse getSettlement(Long settlementId) {
         Settlement settlement = settlementSupport.getSettlement(settlementId);
         return SettlementDetailResponse.of(settlement, settlementSupport.findCandidatesOf(settlementId));
+    }
+
+    /** 정산서 1건의 처리 이력(시도 순). 없는 정산서는 404 */
+    @Transactional(readOnly = true)
+    public List<SettlementHistoryResponse> getHistories(Long settlementId) {
+        settlementSupport.getSettlement(settlementId);
+        return settlementSupport.findSettlementHistories(settlementId).stream()
+                .map(SettlementHistoryResponse::from)
+                .toList();
+    }
+
+    // ================= 관리자 보류·해제 =================
+
+    @Transactional
+    public SettlementResponse hold(Long settlementId, String reason) {
+        return settlementHoldUseCase.hold(settlementId, reason);
+    }
+
+    @Transactional
+    public SettlementResponse release(Long settlementId) {
+        return settlementReleaseUseCase.release(settlementId);
+    }
+
+    // ================= 다른 컨텍스트 제공 (SettlementApiAdapter) =================
+
+    /** 미정산 금액. 회원 컨텍스트 트랜잭션 안에서 불리면 그 트랜잭션에 참여한다 */
+    @Transactional(readOnly = true)
+    public long getUnsettledAmount(Long sellerId) {
+        return settlementSupport.sumUnsettledPayout(sellerId);
+    }
+
+    /** 판매자 제재: 회원 컨텍스트 트랜잭션(REQUIRED)에 참여해 함께 커밋·롤백된다 */
+    @Transactional
+    public int holdSeller(Long sellerId, String reason) {
+        return settlementHoldSellerUseCase.holdSeller(sellerId, reason);
     }
 }

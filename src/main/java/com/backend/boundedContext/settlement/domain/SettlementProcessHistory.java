@@ -141,6 +141,26 @@ public class SettlementProcessHistory extends BaseIdAndTime {
                 batchExecutionId, now);
     }
 
+    // ---------- 보류·해제 (관리자) ----------
+
+    /**
+     * 정산서 보류(HOLD)
+     * 관리자가 정산서 1건을 보류한 경우와 판매자 제재로 지급 전 정산서를 한꺼번에 보류한 경우 모두 ADMIN으로 남긴다
+     * @param reason 보류 사유 (admin_reason)
+     */
+    public static SettlementProcessHistory held(Long settlementId, String reason, LocalDateTime now) {
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
+                SettlementHistoryStage.HOLD, 1, SettlementTrigger.ADMIN,
+                SettlementHistoryResult.SUCCEEDED, null, null, reason, null, now);
+    }
+
+    /** 정산서 보류 해제(HOLD → READY). 이후 재시도 스케줄러가 지급한다 */
+    public static SettlementProcessHistory released(Long settlementId, LocalDateTime now) {
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
+                SettlementHistoryStage.RELEASE, 1, SettlementTrigger.ADMIN,
+                SettlementHistoryResult.SUCCEEDED, null, null, null, null, now);
+    }
+
     private static String truncate(String text) {
         if (text == null || text.length() <= TEXT_MAX_LENGTH) return text;
         return text.substring(0, TEXT_MAX_LENGTH);

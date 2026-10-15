@@ -1,6 +1,7 @@
 package com.backend.boundedContext.settlement.out;
 
 import com.backend.boundedContext.settlement.domain.Settlement;
+import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,4 +50,18 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
              order by s.id
             """)
     List<Long> findRetryTargetIds(@Param("now") LocalDateTime now, Pageable pageable);
+
+    /**
+     * 판매자 제재(holdSeller) 대상: 이 판매자의 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 잠가서 가져온다
+     * 지급 트랜잭션이 잡고 있는 정산서는 지급이 끝날 때까지 기다린다. PAID가 되면 조건에서 빠지므로 보류하지 않는다
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select s from Settlement s
+             where s.sellerId = :sellerId
+               and s.status in :statuses
+             order by s.id
+            """)
+    List<Settlement> findWithLockBySellerIdAndStatusIn(@Param("sellerId") Long sellerId,
+                                                       @Param("statuses") Collection<SettlementStatus> statuses);
 }

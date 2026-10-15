@@ -29,7 +29,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SettlementAggregateUseCase {
 
-    static final String WITHDRAWN_HOLD_REASON = "판매자 철회(WITHDRAWN) 상태라 정산을 보류합니다.";
+    /** 관리자 제재 상태는 WITHDRAWN(본인 철회 완료)이 아니라 SANCTIONED(관리자 제재) */
+    static final String SANCTIONED_HOLD_REASON = "관리자 제재된 판매자라 정산을 보류합니다.";
 
     private final SettlementRepository settlementRepository;
     private final SettlementCandidateRepository settlementCandidateRepository;
@@ -78,14 +79,15 @@ public class SettlementAggregateUseCase {
     }
 
     /**
-     * 제재로 철회(WITHDRAWN)된 판매자면 정산서를 처음부터 HOLD로 만든다.
+     * 관리자 제재(SANCTIONED)된 판매자면 정산서를 처음부터 HOLD로 만든다.
+     * (SettlementApi.holdSeller의 "이후 만들어지는 정산서도 HOLD" 약속을 여기서 지킨다)
      * 판매자 행이 없으면(아직 회원 시드에 판매자 행이 없음 등) 제재 여부만 모르는 것이므로 보통 정산서로 만들고,
      * 지급 단계에서 판매자 조회 실패(404-SELLER_NOT_FOUND)로 재시도 불가 처리된다.
      */
     private String holdReasonOf(Long sellerId) {
-        boolean withdrawn = memberApi.getSellers(List.of(sellerId)).stream()
+        boolean sanctioned = memberApi.getSellers(List.of(sellerId)).stream()
                 .map(SellerDto::status)
-                .anyMatch(status -> status == SellerStatus.WITHDRAWN);
-        return withdrawn ? WITHDRAWN_HOLD_REASON : null;
+                .anyMatch(status -> status == SellerStatus.SANCTIONED);
+        return sanctioned ? SANCTIONED_HOLD_REASON : null;
     }
 }
