@@ -1,6 +1,6 @@
 package com.backend.boundedContext.product.app;
 
-import com.backend.boundedContext.product.app.dto.SellerProductListDto;
+import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
@@ -36,25 +36,32 @@ public class ProductGetSellerProductsUseCase {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
 
-    /**
-     * 판매자 본인 상품 목록(삭제된 상품 제외, 최신순)과 탭별 개수.
-     * 상태 필터가 null이면 전체이고, 탭별 개수에는 상태 필터를 적용하지 않는다.
-     */
-    public SellerProductListDto getSellerProducts(Long sellerId, ProductDisplayStatus status, String keyword,
-                                                  Pageable pageable) {
-        Specification<Product> base = Specification.allOf(
-                sellerEquals(sellerId),
-                statusNotEquals(ProductSaleStatus.DELETED),
-                nameContains(normalize(keyword)));
-
+    /** 판매자 본인 상품 목록. 삭제된 상품은 빼고 최신순이며, 상태 필터가 null이면 전체다. */
+    public PageResponse<SellerProductSummaryDto> getSellerProducts(Long sellerId, ProductDisplayStatus status,
+                                                                   String keyword, Pageable pageable) {
         Pageable latest = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), LATEST);
-        Page<Product> products = productRepository.findAll(base.and(statusFilter(status)), latest);
+        Page<Product> products = productRepository.findAll(base(sellerId, keyword).and(statusFilter(status)), latest);
 
-        return new SellerProductListDto(toSummaries(products), new SellerProductListDto.Counts(
+        return toSummaries(products);
+    }
+
+    /** 탭별 개수. 목록과 같은 검색어를 적용한다. */
+    public SellerProductCountsDto getSellerProductCounts(Long sellerId, String keyword) {
+        Specification<Product> base = base(sellerId, keyword);
+
+        return new SellerProductCountsDto(
                 productRepository.count(base),
                 productRepository.count(base.and(statusFilter(ProductDisplayStatus.ON_SALE))),
                 productRepository.count(base.and(statusFilter(ProductDisplayStatus.SOLD_OUT))),
-                productRepository.count(base.and(statusFilter(ProductDisplayStatus.STOPPED)))));
+                productRepository.count(base.and(statusFilter(ProductDisplayStatus.STOPPED))));
+    }
+
+    /** 판매자 본인의 삭제되지 않은 상품 + 상품명 검색어 */
+    private static Specification<Product> base(Long sellerId, String keyword) {
+        return Specification.allOf(
+                sellerEquals(sellerId),
+                statusNotEquals(ProductSaleStatus.DELETED),
+                nameContains(normalize(keyword)));
     }
 
     private PageResponse<SellerProductSummaryDto> toSummaries(Page<Product> products) {

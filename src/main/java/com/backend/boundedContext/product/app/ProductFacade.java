@@ -7,7 +7,8 @@ import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
-import com.backend.boundedContext.product.app.dto.SellerProductListDto;
+import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
+import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.global.page.PageResponse;
@@ -78,12 +79,19 @@ public class ProductFacade {
         return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock).getId();
     }
 
-    /** 승인된 판매자의 본인 상품 목록과 탭별 개수 */
+    /** 승인된 판매자의 본인 상품 목록 */
     @Transactional(readOnly = true)
-    public SellerProductListDto getSellerProducts(Long memberId, ProductDisplayStatus status, String keyword,
-                                                  Pageable pageable) {
+    public PageResponse<SellerProductSummaryDto> getSellerProducts(Long memberId, ProductDisplayStatus status,
+                                                                   String keyword, Pageable pageable) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         return productGetSellerProductsUseCase.getSellerProducts(sellerId, status, keyword, pageable);
+    }
+
+    /** 승인된 판매자의 본인 상품 탭별 개수 */
+    @Transactional(readOnly = true)
+    public SellerProductCountsDto getSellerProductCounts(Long memberId, String keyword) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productGetSellerProductsUseCase.getSellerProductCounts(sellerId, keyword);
     }
 
     /** 승인된 판매자의 본인 상품 수정 폼 값 */

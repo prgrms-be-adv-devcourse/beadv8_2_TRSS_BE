@@ -3,7 +3,7 @@ package com.backend.boundedContext.product.in;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
-import com.backend.boundedContext.product.app.dto.SellerProductListDto;
+import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.global.page.PageResponse;
 import com.backend.global.security.JwtAccessDeniedHandler;
@@ -130,17 +130,34 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("본인 상품 목록: 상태 필터·검색어·페이지를 넘기고, 목록과 탭별 개수를 돌려준다")
+    @DisplayName("본인 상품 목록: 상태 필터·검색어·페이지를 넘기고, data가 바로 PageResponse 형식이다")
     void getSellerProducts() throws Exception {
         given(productFacade.getSellerProducts(eq(2L), eq(ProductDisplayStatus.SOLD_OUT), eq("크림"), any(Pageable.class)))
-                .willReturn(new SellerProductListDto(
-                        new PageResponse<>(List.of(), 0, 20, 0, 0), new SellerProductListDto.Counts(4, 2, 1, 1)));
+                .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
 
         getAsSeller("/api/v1/seller/products?status=SOLD_OUT&keyword=크림")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.products.page").value(0))
-                .andExpect(jsonPath("$.data.counts.all").value(4))
-                .andExpect(jsonPath("$.data.counts.soldOut").value(1));
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(20))
+                .andExpect(jsonPath("$.data.totalElements").value(0))
+                .andExpect(jsonPath("$.data.totalPages").value(0));
+    }
+
+    @Test
+    @DisplayName("본인 상품 탭별 개수: 검색어를 넘기고 개수를 돌려준다 (/{productId}로 잡히지 않는다)")
+    void getSellerProductCounts() throws Exception {
+        given(productFacade.getSellerProductCounts(2L, "크림")).willReturn(new SellerProductCountsDto(4, 2, 1, 1));
+
+        getAsSeller("/api/v1/seller/products/counts?keyword=크림")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.data.all").value(4))
+                .andExpect(jsonPath("$.data.onSale").value(2))
+                .andExpect(jsonPath("$.data.soldOut").value(1))
+                .andExpect(jsonPath("$.data.stopped").value(1));
+
+        verify(productFacade, never()).getSellerProductForm(any(), any());
     }
 
     @Test
