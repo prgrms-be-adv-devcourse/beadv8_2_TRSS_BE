@@ -41,7 +41,7 @@ class OrderUpdateCartItemUseCaseTest {
     @BeforeEach
     void setUp() {
         // OrderPolicy는 값만 담은 객체라 Mock 대신 진짜로 만든다
-        useCase = new OrderUpdateCartItemUseCase(orderSupport, new OrderPolicy(15, 7, 99), productApi);
+        useCase = new OrderUpdateCartItemUseCase(orderSupport, new OrderPolicy(15, 7, 99, 100), productApi);
 
         cart = Cart.create(3L);
         item = cart.addItem(100L, 2, 99);

@@ -1,10 +1,12 @@
 package com.backend.boundedContext.order.domain;
 
 import com.backend.global.exception.DomainException;
+import com.backend.shared.order.dto.ConfirmType;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -123,5 +125,82 @@ class OrderTest {
 
         assertThatThrownBy(() -> order.cancel(OrderCancelType.USER, "구매자 취소", NOW.plusMinutes(1)))
                 .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    @DisplayName("결제 완료 주문을 구매 확정하면 CONFIRMED가 되고 확정 정보와 이력이 남는다")
+    void confirm_paid() {
+        Order order = createOrder();
+        order.pay(NOW.plusMinutes(1));
+        LocalDateTime now = NOW.plusDays(1);
+
+        order.confirm(ConfirmType.MANUAL, now);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(order.getConfirmType()).isEqualTo(ConfirmType.MANUAL);
+        assertThat(order.getConfirmedAt()).isEqualTo(now);
+        assertThat(order.getStatusHistories()).last()
+                .satisfies(history -> {
+                    assertThat(history.getFromStatus()).isEqualTo(OrderStatus.PAID);
+                    assertThat(history.getToStatus()).isEqualTo(OrderStatus.CONFIRMED);
+                });
+    }
+
+    @Test
+    @DisplayName("결제 전 주문은 구매 확정할 수 없다")
+    void confirm_pending_fail() {
+        Order order = createOrder();
+
+        assertThatThrownBy(() -> order.confirm(ConfirmType.MANUAL, NOW.plusMinutes(1)))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CONFIRMABLE");
+    }
+
+    @Test
+    @DisplayName("반품 요청 중인 주문은 구매 확정할 수 없다")
+    void confirm_returnRequested_fail() {
+        Order order = createOrder();
+        order.pay(NOW.plusMinutes(1));
+        ReflectionTestUtils.setField(order, "status", OrderStatus.RETURN_REQUESTED);   // 반품 요청 기능 추가 전이라 상태만 바꿈
+
+        assertThatThrownBy(() -> order.confirm(ConfirmType.MANUAL, NOW.plusDays(1)))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CONFIRMABLE");
+    }
+
+    @Test
+    @DisplayName("이미 구매 확정된 주문은 다시 확정할 수 없다")
+    void confirm_twice_fail() {
+        Order order = createOrder();
+        order.pay(NOW.plusMinutes(1));
+        order.confirm(ConfirmType.MANUAL, NOW.plusDays(1));
+
+        assertThatThrownBy(() -> order.confirm(ConfirmType.AUTO, NOW.plusDays(8)))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CONFIRMABLE");
+    }
+
+    @Test
+    @DisplayName("결제 완료 후 7일이 되는 시각부터 자동 확정 대상이다")
+    void isAutoConfirmable_boundary() {
+        Order order = createOrder();
+        LocalDateTime paidAt = NOW.plusMinutes(1);
+        order.pay(paidAt);
+
+        assertThat(order.isAutoConfirmable(paidAt.plusDays(7).minusSeconds(1), 7)).isFalse();
+        assertThat(order.isAutoConfirmable(paidAt.plusDays(7), 7)).isTrue();
+        assertThat(order.isAutoConfirmable(paidAt.plusDays(10), 7)).isTrue();
+    }
+
+    @Test
+    @DisplayName("결제 전·반품 요청 중인 주문은 7일이 지나도 자동 확정 대상이 아니다")
+    void isAutoConfirmable_notPaid() {
+        Order pending = createOrder();
+        assertThat(pending.isAutoConfirmable(NOW.plusDays(30), 7)).isFalse();
+
+        Order returnRequested = createOrder();
+        returnRequested.pay(NOW.plusMinutes(1));
+        ReflectionTestUtils.setField(returnRequested, "status", OrderStatus.RETURN_REQUESTED);
+        assertThat(returnRequested.isAutoConfirmable(NOW.plusDays(30), 7)).isFalse();
     }
 }
