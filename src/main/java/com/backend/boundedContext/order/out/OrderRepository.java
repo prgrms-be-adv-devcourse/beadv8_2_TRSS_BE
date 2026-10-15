@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -47,4 +48,23 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
             """)
     boolean existsSalesBySellerIdAndStatusIn(@Param("sellerId") Long sellerId,
                                              @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 자동 구매 확정 대상 주문 id
+    @Query("""
+            select o.id
+            from Order o
+            where o.status = :status
+              and o.paidAt <= :paidBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findAutoConfirmTargetIds(@Param("status") OrderStatus status,
+                                        @Param("paidBefore") LocalDateTime paidBefore,
+                                        @Param("afterId") Long afterId,
+                                        Pageable pageable);
+
+    // 주문 행을 잠가서 조회 (스케줄러용)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
 }

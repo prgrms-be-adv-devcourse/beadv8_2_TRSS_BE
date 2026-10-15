@@ -19,13 +19,18 @@ public class OrderPolicy {
     // 장바구니 항목 하나에 담을 수 있는 최대 수량
     private final int cartMaxQuantity;
 
+    // 자동 구매 확정 스케줄러가 한 번에 조회하는 주문 수
+    private final int autoConfirmBatchSize;
+
     public OrderPolicy(
             @Value("${custom.order.expireMinutes}") int expireMinutes,
             @Value("${custom.order.autoConfirmDays}") int autoConfirmDays,
-            @Value("${custom.order.cartMaxQuantity}") int cartMaxQuantity
+            @Value("${custom.order.cartMaxQuantity}") int cartMaxQuantity,
+            @Value("${custom.order.autoConfirmBatchSize}") int autoConfirmBatchSize
     ) {
         this.expireMinutes = expireMinutes;
         this.autoConfirmDays = autoConfirmDays;
         this.cartMaxQuantity = cartMaxQuantity;
+        this.autoConfirmBatchSize = autoConfirmBatchSize;
     }
 }
