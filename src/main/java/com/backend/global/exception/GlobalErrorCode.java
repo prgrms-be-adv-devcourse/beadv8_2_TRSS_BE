@@ -12,6 +12,7 @@ public enum GlobalErrorCode implements ErrorCode {
     VALIDATION_FAILED(400, "입력값이 올바르지 않습니다."),
     INVALID_REQUEST(400, "요청 형식이 올바르지 않습니다."),
     HEADER_REQUIRED(400, "필수 요청 헤더가 없습니다."),
+    FILE_TOO_LARGE(400, "업로드할 수 있는 파일 크기를 넘었습니다."),
 
     // 인증·권한
     UNAUTHORIZED(401, "로그인이 필요합니다."),
