@@ -2,9 +2,13 @@ package com.backend.boundedContext.settlement.app;
 
 import com.backend.boundedContext.settlement.domain.Settlement;
 import com.backend.boundedContext.settlement.domain.SettlementCandidate;
+import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
 import com.backend.boundedContext.settlement.domain.SettlementErrorCode;
+import com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType;
+import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
+import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
 import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
@@ -28,8 +32,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SettlementSupport {
 
+    /** 최신순: 정산월이 같으면 나중에 만든 것부터 */
+    private static final Sort LATEST = Sort.by(Sort.Order.desc("id"));
+
     private final SettlementRepository settlementRepository;
     private final SettlementCandidateRepository settlementCandidateRepository;
+    private final SettlementProcessHistoryRepository settlementProcessHistoryRepository;
 
     // ---------- 정산 후보 ----------
 
@@ -61,7 +69,23 @@ public class SettlementSupport {
         if (status != null) specs.add((root, query, cb) -> cb.equal(root.get("status"), status));
         if (sellerId != null) specs.add((root, query, cb) -> cb.equal(root.get("sellerId"), sellerId));
         return settlementRepository.findAll(Specification.allOf(specs),
-                PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Order.desc("id"))));
+                PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), LATEST));
+    }
+
+    // ---------- 처리 이력 ----------
+
+    /** 정산서 1건의 처리 이력(집계·지급·보류·해제)을 처리 순서대로 */
+    public List<SettlementProcessHistory> findSettlementHistories(Long settlementId) {
+        return settlementProcessHistoryRepository.findByTargetTypeAndTargetIdOrderByIdAsc(
+                SettlementHistoryTargetType.SETTLEMENT, settlementId);
+    }
+
+    // ---------- 미정산 금액 ----------
+
+    /** 미정산 금액(지급액 합). 후보가 없으면 0 */
+    public long sumUnsettledPayout(Long sellerId) {
+        Long sum = settlementCandidateRepository.sumUnsettledPayout(sellerId);
+        return sum == null ? 0L : sum;
     }
 
     // ---------- 배치·스케줄러 대상 ----------

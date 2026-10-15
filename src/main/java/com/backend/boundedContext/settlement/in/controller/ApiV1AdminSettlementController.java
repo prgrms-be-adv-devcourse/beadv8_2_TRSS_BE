@@ -4,12 +4,7 @@ import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.app.SettlementFacade;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
-import com.backend.boundedContext.settlement.in.dto.SettlementDetailResponse;
-import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
-import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
-import com.backend.boundedContext.settlement.in.dto.SettlementRetryRequest;
-import com.backend.boundedContext.settlement.in.dto.SettlementRunRequest;
-import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
+import com.backend.boundedContext.settlement.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,13 +24,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.YearMonth;
+import java.util.List;
 
 /**
  * 관리자 정산 API
  *
  * /api/v1/admin/** 은 SecurityConfig에서 ADMIN만 들어올 수 있다
  */
-@Tag(name = "관리자 정산", description = "월 정산 실행·조회·수동 재처리")
+@Tag(name = "관리자 정산", description = "월 정산 실행·조회·수동 재처리·보류·해제·처리 이력")
 @RestController
 @RequestMapping("/api/v1/admin/settlements")
 @RequiredArgsConstructor
@@ -94,4 +90,35 @@ public class ApiV1AdminSettlementController {
         return RsData.of("200-1", "정산 재처리를 마쳤습니다.",
                 settlementFacade.retry(settlementId, request.reason()));
     }
+
+    @Operation(summary = "정산서 처리 이력", description = "정산서 1건의 집계·지급·보류·해제 이력(성공·실패·건너뜀)을 처리 순서대로")
+    @ApiResponse(responseCode = "200", description = "200-1 조회 성공")
+    @ApiResponse(responseCode = "404", description = "404-SETTLEMENT_NOT_FOUND")
+    @GetMapping("/{settlementId}/histories")
+    public RsData<List<SettlementHistoryResponse>> getHistories(@PathVariable Long settlementId) {
+        return RsData.of("200-1", "정산 처리 이력을 조회했습니다.", settlementFacade.getHistories(settlementId));
+    }
+
+    @Operation(summary = "정산 보류",
+            description = "지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾼다(사유 필수). HOLD 동안에는 어떤 경로로도 지급하지 않는다")
+    @ApiResponse(responseCode = "200", description = "200-1 보류 완료")
+    @ApiResponse(responseCode = "400", description = "400-VALIDATION_FAILED 사유 없음")
+    @ApiResponse(responseCode = "404", description = "404-SETTLEMENT_NOT_FOUND")
+    @ApiResponse(responseCode = "409", description = "409-SETTLEMENT_STATE_INVALID 이미 PAID·HOLD")
+    @PostMapping("/{settlementId}/hold")
+    public RsData<SettlementResponse> hold(@PathVariable Long settlementId,
+                                           @Valid @RequestBody SettlementHoldRequest request) {
+        return RsData.of("200-1", "정산을 보류했습니다.", settlementFacade.hold(settlementId, request.reason()));
+    }
+
+    @Operation(summary = "정산 보류 해제",
+            description = "HOLD 정산서를 READY로 되돌린다. 지급은 10분마다 도는 재시도 스케줄러가 한다")
+    @ApiResponse(responseCode = "200", description = "200-1 해제 완료")
+    @ApiResponse(responseCode = "404", description = "404-SETTLEMENT_NOT_FOUND")
+    @ApiResponse(responseCode = "409", description = "409-SETTLEMENT_STATE_INVALID HOLD가 아님")
+    @PostMapping("/{settlementId}/release")
+    public RsData<SettlementResponse> release(@PathVariable Long settlementId) {
+        return RsData.of("200-1", "정산 보류를 해제했습니다.", settlementFacade.release(settlementId));
+    }
+
 }

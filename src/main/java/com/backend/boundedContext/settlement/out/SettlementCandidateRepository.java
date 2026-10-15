@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * 정산 후보 저장·조회
- * TODO 집계·미리보기·미정산 금액 쿼리는 추후 구현 예정
+ * TODO 미리보기·관리자 후보 목록 쿼리는 다음 이슈에서 추가
  */
 public interface SettlementCandidateRepository extends JpaRepository<SettlementCandidate, Long> {
 
@@ -69,4 +69,18 @@ public interface SettlementCandidateRepository extends JpaRepository<SettlementC
                and c.status = com.backend.boundedContext.settlement.domain.SettlementCandidateStatus.INCLUDED
             """)
     SettlementCandidateTotalsRow sumIncludedTotals(@Param("settlementId") Long settlementId);
+
+    /**
+     * 미정산 금액(지급액 합) = READY 후보 + PAID가 아닌 정산서에 묶인 INCLUDED 후보 (EXCLUDED는 세지 않는다)
+     * 보류(HOLD)·실패 중인 정산서의 금액도 포함한다. 후보가 없으면 null이므로 호출한 쪽이 0으로 바꾼다
+     */
+    @Query("""
+            select sum(c.payoutAmount) from SettlementCandidate c
+              left join c.settlement s
+             where c.sellerId = :sellerId
+               and (c.status = com.backend.boundedContext.settlement.domain.SettlementCandidateStatus.READY
+                    or (c.status = com.backend.boundedContext.settlement.domain.SettlementCandidateStatus.INCLUDED
+                        and s.status <> com.backend.boundedContext.settlement.domain.SettlementStatus.PAID))
+            """)
+    Long sumUnsettledPayout(@Param("sellerId") Long sellerId);
 }
