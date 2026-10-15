@@ -67,6 +67,9 @@ public class Seller extends BaseIdAndTime {
     @Column(nullable = false)
     private LocalDateTime appliedAt;
 
+    // 지금 신청이 승인된 시각 (재신청하면 비움). 철회 거절 등으로 상태가 바뀌어도 그대로다
+    private LocalDateTime approvedAt;
+
     // 같은 행을 동시에 바꾸면 늦게 커밋한 쪽이 실패한다 (예: 철회 요청과 제재가 동시에 들어온 경우)
     @Version
     private Long version;
@@ -93,7 +96,9 @@ public class Seller extends BaseIdAndTime {
     }
 
     public SellerStatusHistory approve() {
-        return changeStatus(SellerStatus.PENDING, SellerStatus.APPROVED, null);
+        SellerStatusHistory history = changeStatus(SellerStatus.PENDING, SellerStatus.APPROVED, null);
+        approvedAt = LocalDateTime.now();
+        return history;
     }
 
     public SellerStatusHistory reject(String reason) {
@@ -181,6 +186,7 @@ public class Seller extends BaseIdAndTime {
         this.accountHolder = accountHolder.strip();
         this.status = SellerStatus.PENDING;
         this.appliedAt = LocalDateTime.now();
+        this.approvedAt = null;
     }
 
     private SellerStatusHistory changeStatus(SellerStatus expected, SellerStatus to, String reason) {

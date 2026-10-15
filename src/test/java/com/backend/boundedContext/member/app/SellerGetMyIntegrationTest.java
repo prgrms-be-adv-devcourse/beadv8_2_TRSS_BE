@@ -68,6 +68,8 @@ class SellerGetMyIntegrationTest {
         assertThat(response.status()).isEqualTo(SellerStatus.PENDING);
         assertThat(response.accountNumber()).isEqualTo("**********3456");
         assertThat(response.phoneNumber()).isEqualTo("01012345678");
+        assertThat(response.approvedAt()).isNull();
+        assertThat(response.unsettledAmount()).isZero();
     }
 
     @Test

@@ -99,7 +99,7 @@ class SellerReapplyIntegrationTest {
         assertThat(response.status()).isEqualTo(SellerStatus.REJECTED);
         assertThat(response.reason()).isEqualTo("사업자번호 불일치");
         assertThat(response.businessNumber()).isNull();
-        assertThat(response.statusChangedAt()).isNotNull();
+        assertThat(response.approvedAt()).isNull();
     }
 
     @Test

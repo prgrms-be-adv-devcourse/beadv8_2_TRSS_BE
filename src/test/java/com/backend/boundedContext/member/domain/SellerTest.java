@@ -6,6 +6,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -99,6 +101,33 @@ class SellerTest {
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
         assertTransition(history, SellerStatus.WITHDRAW_REQUESTED, SellerStatus.APPROVED);
         assertThat(history.getReason()).isEqualTo("진행 중인 주문 있음");
+    }
+
+    @Test
+    @DisplayName("승인일: 승인할 때 기록되고, 철회 요청·거절이 있어도 그대로다")
+    void approvedAt() {
+        Seller seller = pending();
+        assertThat(seller.getApprovedAt()).isNull();
+
+        seller.approve();
+        LocalDateTime approvedAt = seller.getApprovedAt();
+        seller.requestWithdrawal("폐업 예정");
+        seller.rejectWithdrawal("진행 중인 주문 있음");
+
+        assertThat(approvedAt).isNotNull();
+        assertThat(seller.getApprovedAt()).isEqualTo(approvedAt);
+    }
+
+    @Test
+    @DisplayName("승인일: 본인 철회 뒤 재신청하면 비워진다")
+    void approvedAt_clearedOnReapply() {
+        Seller seller = approved();
+        seller.requestWithdrawal("폐업 예정");
+        seller.approveWithdrawal();
+
+        reapply(seller);
+
+        assertThat(seller.getApprovedAt()).isNull();
     }
 
     @Test

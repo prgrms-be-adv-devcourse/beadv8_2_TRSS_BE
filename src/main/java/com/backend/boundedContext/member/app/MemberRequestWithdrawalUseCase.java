@@ -26,7 +26,8 @@ public class MemberRequestWithdrawalUseCase {
         Seller seller = sellerRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.SELLER_NOT_FOUND));
 
-        if (settlementApi.getUnsettledAmount(seller.getId()) > 0) {
+        long unsettledAmount = settlementApi.getUnsettledAmount(seller.getId());
+        if (unsettledAmount > 0) {
             throw new DomainException(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
         }
 
@@ -34,6 +35,6 @@ public class MemberRequestWithdrawalUseCase {
         SellerStatusHistory history = seller.requestWithdrawal(reason.strip());
         sellerStatusHistoryRepository.save(history);
 
-        return MySellerResponse.from(seller, history);
+        return MySellerResponse.from(seller, history, unsettledAmount);
     }
 }

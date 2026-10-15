@@ -50,7 +50,7 @@ class ApiV1SellerMeControllerTest {
         given(memberSellerFacade.updateSeller(eq(2L), any(SellerUpdateRequest.class))).willReturn(new MySellerResponse(
                 10L, SellerStatus.APPROVED, "팔레트 뷰티 2호점", "1234567890", "홍길동", "01012345678",
                 "국민은행", "**********3456", "홍길동", null,
-                LocalDateTime.of(2026, 10, 12, 10, 0), LocalDateTime.of(2026, 10, 12, 11, 0)));
+                LocalDateTime.of(2026, 10, 12, 10, 0), LocalDateTime.of(2026, 10, 12, 11, 0), 0L));
 
         mockMvc.perform(patch("/api/v1/seller/me")
                         .header("Authorization", "Bearer " + token(MemberRole.SELLER))
@@ -61,7 +61,10 @@ class ApiV1SellerMeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
                 .andExpect(jsonPath("$.data.businessName").value("팔레트 뷰티 2호점"))
-                .andExpect(jsonPath("$.data.accountNumber").value("**********3456"));
+                .andExpect(jsonPath("$.data.accountNumber").value("**********3456"))
+                .andExpect(jsonPath("$.data.approvedAt").exists())
+                .andExpect(jsonPath("$.data.unsettledAmount").value(0))
+                .andExpect(jsonPath("$.data.statusChangedAt").doesNotExist());
     }
 
     @Test
@@ -106,7 +109,7 @@ class ApiV1SellerMeControllerTest {
         given(memberSellerFacade.requestWithdrawal(2L, "폐업 예정")).willReturn(new MySellerResponse(
                 10L, SellerStatus.WITHDRAW_REQUESTED, "팔레트 뷰티", "1234567890", "홍길동", "01012345678",
                 "국민은행", "**********3456", "홍길동", "폐업 예정",
-                LocalDateTime.of(2026, 10, 12, 10, 0), LocalDateTime.of(2026, 10, 12, 12, 0)));
+                LocalDateTime.of(2026, 10, 12, 10, 0), LocalDateTime.of(2026, 10, 12, 11, 0), 0L));
 
         mockMvc.perform(post("/api/v1/seller/me/withdrawal")
                         .header("Authorization", "Bearer " + token(MemberRole.SELLER))
