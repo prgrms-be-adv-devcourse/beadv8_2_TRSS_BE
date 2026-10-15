@@ -203,4 +203,53 @@ class OrderTest {
         ReflectionTestUtils.setField(returnRequested, "status", OrderStatus.RETURN_REQUESTED);
         assertThat(returnRequested.isAutoConfirmable(NOW.plusDays(30), 7)).isFalse();
     }
+
+    @Test
+    @DisplayName("결제 만료 시각 + 1분이 되는 시각부터 만료 처리 대상이다")
+    void isExpirable_boundary() {
+        Order order = createOrder();   // 만료 시각 = NOW + 15분
+        LocalDateTime expiresAt = NOW.plusMinutes(EXPIRE_MINUTES);
+
+        assertThat(order.isExpirable(expiresAt, 1)).isFalse();
+        assertThat(order.isExpirable(expiresAt.plusMinutes(1).minusSeconds(1), 1)).isFalse();
+        assertThat(order.isExpirable(expiresAt.plusMinutes(1), 1)).isTrue();
+    }
+
+    @Test
+    @DisplayName("결제 실패(PAYMENT_FAILED) 주문도 만료 시각 + 1분이 지나면 만료 처리 대상이다")
+    void isExpirable_paymentFailed() {
+        Order order = createOrder();
+        ReflectionTestUtils.setField(order, "status", OrderStatus.PAYMENT_FAILED);   // 결제 실패 처리 메서드가 없어 상태만 바꿈
+
+        assertThat(order.isExpirable(NOW.plusMinutes(EXPIRE_MINUTES + 1), 1)).isTrue();
+    }
+
+    @Test
+    @DisplayName("결제 완료·취소된 주문은 만료 시각이 지나도 만료 처리 대상이 아니다")
+    void isExpirable_notPending() {
+        LocalDateTime later = NOW.plusDays(1);
+
+        Order paid = createOrder();
+        paid.pay(NOW.plusMinutes(1));
+        assertThat(paid.isExpirable(later, 1)).isFalse();
+
+        Order canceled = createOrder();
+        canceled.cancel(OrderCancelType.USER, "구매자 취소", NOW.plusMinutes(1));
+        assertThat(canceled.isExpirable(later, 1)).isFalse();
+    }
+
+    @Test
+    @DisplayName("만료 처리로 취소하면 CANCELED·EXPIRED가 되고 취소 사유가 이력에 남는다")
+    void cancel_expired() {
+        Order order = createOrder();
+        LocalDateTime now = NOW.plusMinutes(EXPIRE_MINUTES + 1);
+
+        order.cancel(OrderCancelType.EXPIRED, "결제 시간 만료", now);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+        assertThat(order.getCancelType()).isEqualTo(OrderCancelType.EXPIRED);
+        assertThat(order.getCanceledAt()).isEqualTo(now);
+        assertThat(order.getStatusHistories()).last()
+                .extracting(OrderStatusHistory::getReason).isEqualTo("결제 시간 만료");
+    }
 }

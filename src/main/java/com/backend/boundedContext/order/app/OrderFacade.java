@@ -32,6 +32,7 @@ public class OrderFacade {
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
     private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
     private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
+    private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
 
@@ -111,6 +112,18 @@ public class OrderFacade {
     @Transactional
     public boolean autoConfirmOrder(Long orderId, LocalDateTime now) {
         return orderAutoConfirmOrdersUseCase.autoConfirm(orderId, now);
+    }
+
+    // 결제 만료 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findExpireTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderExpireOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 결제 만료 취소 한 건 (스케줄러) - 취소와 재고 복원을 한 트랜잭션으로, 주문마다 따로 연다
+    @Transactional
+    public boolean expireOrder(Long orderId, LocalDateTime now) {
+        return orderExpireOrdersUseCase.expire(orderId, now);
     }
 
     // 최근 주문 목록 (OrderApi)

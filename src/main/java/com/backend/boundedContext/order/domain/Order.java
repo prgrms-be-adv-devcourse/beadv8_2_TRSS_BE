@@ -193,4 +193,10 @@ public class Order extends BaseIdAndTime {
                 && paidAt != null
                 && !now.isBefore(paidAt.plusDays(autoConfirmDays));
     }
+
+    // 결제 만료 처리 대상 여부 - 결제 대기 상태이고 만료 시각이 지난 대상
+    public boolean isExpirable(LocalDateTime now, int graceMinutes) {
+        return isPaymentPending()
+                && !now.isBefore(expiresAt.plusMinutes(graceMinutes));
+    }
 }

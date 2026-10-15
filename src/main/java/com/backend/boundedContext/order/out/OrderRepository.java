@@ -67,4 +67,18 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
+    // 결제 만료 처리 대상 주문 id - 만료 시각이 expiredBefore 이전인 결제 대기 주문
+    @Query("""
+            select o.id
+            from Order o
+            where o.status in :statuses
+              and o.expiresAt <= :expiredBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findExpireTargetIds(@Param("statuses") Collection<OrderStatus> statuses,
+                                   @Param("expiredBefore") LocalDateTime expiredBefore,
+                                   @Param("afterId") Long afterId,
+                                   Pageable pageable);
 }
