@@ -38,3 +38,6 @@ out/
 
 ### Env ###
 .env
+.env.*
+!.env.example
+!.env.prod.example
