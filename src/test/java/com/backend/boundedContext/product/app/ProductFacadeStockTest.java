@@ -35,6 +35,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProductFacadeStockTest {
 
     private static final long ORDER_ID = 900_001L;
+    /** 실제 주문 항목 ID와 겹치면 '이미 처리한 항목'으로 건너뛰므로, 쓰이지 않을 큰 ID를 쓴다 */
+    private static final long ORDER_ITEM_ID = 9_100_001L;
 
     @Autowired
     private ProductFacade productFacade;
@@ -93,22 +95,22 @@ class ProductFacadeStockTest {
     @Test
     @DisplayName("deductStock: 재고를 줄이고 ORDER_DEDUCT 이력을 남긴다. 같은 주문 항목으로 다시 부르면 아무것도 안 한다")
     void deductStock() {
-        productFacade.deductStock(List.of(item(1L, 2)));
-        productFacade.deductStock(List.of(item(1L, 2)));   // 중복 호출
+        productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));
+        productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));   // 중복 호출
 
         assertThat(option.getStock()).isEqualTo(3);
         assertThat(histories(StockChangeType.ORDER_DEDUCT)).singleElement().satisfies(history -> {
             assertThat(history.getChangeQty()).isEqualTo(-2);
             assertThat(history.getStockAfter()).isEqualTo(3);
             assertThat(history.getOrderId()).isEqualTo(ORDER_ID);
-            assertThat(history.getOrderItemId()).isEqualTo(1L);
+            assertThat(history.getOrderItemId()).isEqualTo(ORDER_ITEM_ID);
         });
     }
 
     @Test
     @DisplayName("deductStock: 재고가 모자라면 OUT_OF_STOCK")
     void deductStockOutOfStock() {
-        assertThatThrownBy(() -> productFacade.deductStock(List.of(item(1L, 6))))
+        assertThatThrownBy(() -> productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 6))))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-OUT_OF_STOCK");
     }
@@ -116,7 +118,7 @@ class ProductFacadeStockTest {
     @Test
     @DisplayName("deductStock: 없는 옵션이면 PRODUCT_NOT_FOUND")
     void deductStockUnknownOption() {
-        assertThatThrownBy(() -> productFacade.deductStock(List.of(new StockChangeDto(ORDER_ID, 1L, Long.MAX_VALUE, 1))))
+        assertThatThrownBy(() -> productFacade.deductStock(List.of(new StockChangeDto(ORDER_ID, ORDER_ITEM_ID, Long.MAX_VALUE, 1))))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-PRODUCT_NOT_FOUND");
     }
@@ -124,10 +126,10 @@ class ProductFacadeStockTest {
     @Test
     @DisplayName("restoreStock: 재고를 되돌리고 이력을 남긴다. 같은 주문 항목·사유로 다시 부르면 아무것도 안 한다")
     void restoreStock() {
-        productFacade.deductStock(List.of(item(1L, 2)));
+        productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));
 
-        productFacade.restoreStock(List.of(item(1L, 2)), StockRestoreReason.ORDER_RESTORE);
-        productFacade.restoreStock(List.of(item(1L, 2)), StockRestoreReason.ORDER_RESTORE);   // 중복 호출
+        productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE);
+        productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE);   // 중복 호출
 
         assertThat(option.getStock()).isEqualTo(5);
         assertThat(histories(StockChangeType.ORDER_RESTORE)).singleElement().satisfies(history -> {
@@ -139,18 +141,18 @@ class ProductFacadeStockTest {
     @Test
     @DisplayName("restoreStock: 차감한 적 없는 주문 항목이면 IllegalStateException")
     void restoreStockNotDeducted() {
-        assertThatThrownBy(() -> productFacade.restoreStock(List.of(item(1L, 2)), StockRestoreReason.ORDER_RESTORE))
+        assertThatThrownBy(() -> productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     @DisplayName("restoreStock: 삭제된 상품의 반품 복원은 PRODUCT_DELETED")
     void returnRestoreDeletedProduct() {
-        productFacade.deductStock(List.of(item(1L, 2)));
+        productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));
         ReflectionTestUtils.setField(product, "status", ProductSaleStatus.DELETED);
         productRepository.flush();
 
-        assertThatThrownBy(() -> productFacade.restoreStock(List.of(item(1L, 2)), StockRestoreReason.RETURN_RESTORE))
+        assertThatThrownBy(() -> productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.RETURN_RESTORE))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_DELETED");
     }
