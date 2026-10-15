@@ -8,12 +8,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface SellerRepository extends JpaRepository<Seller, Long> {
 
     // 회원의 판매자 (회원 1 : 판매자 1)
     Optional<Seller> findByMemberId(Long memberId);
+
+    // 관리자 회원 목록: 한 페이지 회원들의 판매자를 한 번에 읽는다 (회원마다 따로 조회하지 않게)
+    List<Seller> findAllByMemberIdIn(Collection<Long> memberIds);
 
     // 이 사업자번호를 쓰는 판매자가 있으면 true (반려·본인 철회된 판매자는 번호가 비어 있어 걸리지 않음)
     boolean existsByBusinessNumber(String businessNumber);
