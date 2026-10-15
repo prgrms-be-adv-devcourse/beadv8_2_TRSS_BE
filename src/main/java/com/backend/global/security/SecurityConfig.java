@@ -49,6 +49,14 @@ public class SecurityConfig {
     private static final String[] SELLER_API_URLS = {
             "/api/v1/seller/**"
     };
+    // 구매자 기능. 관리자는 운영 전용이라 구매·판매자 신청을 막음 (/api/v1/sellers/** (복수, 판매자 신청)는 /api/v1/seller/** (단수, 판매자 전용)와 다른 경로)
+    private static final String[] BUYER_API_URLS = {
+            "/api/v1/cart/**",
+            "/api/v1/orders/**",
+            "/api/v1/topups/**",
+            "/api/v1/wallet/**",
+            "/api/v1/sellers/**"
+    };
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
@@ -80,6 +88,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_API_URLS).permitAll()
                         .requestMatchers(ADMIN_API_URLS).hasRole("ADMIN")
                         .requestMatchers(SELLER_API_URLS).hasRole("SELLER")
+                        .requestMatchers(BUYER_API_URLS).hasAnyRole("USER", "SELLER")  // 토큰에 역할이 하나라 판매자도 함께 허용
                         .anyRequest().authenticated()
                 )
                 // 필터는 빈으로 등록하지 않음 (빈이면 서블릿 필터로도 자동 등록됨)
