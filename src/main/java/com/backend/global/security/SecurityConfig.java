@@ -35,7 +35,8 @@ public class SecurityConfig {
     };
     private static final String[] PUBLIC_GET_API_URLS = {
             "/api/v1/products/**",
-            "/api/v1/categories/**"
+            "/api/v1/categories/**",
+            "/images/**"   // 로컬 저장소의 상품 이미지 파일
     };
     private static final String[] PUBLIC_POST_API_URLS = {
             "/api/v1/auth/email/**",
