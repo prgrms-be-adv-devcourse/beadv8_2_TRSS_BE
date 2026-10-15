@@ -29,7 +29,7 @@ class OrderSchedulerTest {
     @BeforeEach
     void setUp() {
         // 한 번에 2건씩 조회하도록 batchSize 2
-        scheduler = new OrderScheduler(orderFacade, new OrderPolicy(15, 7, 99, 2));
+        scheduler = new OrderScheduler(orderFacade, new OrderPolicy(15, 7, 99, 2, 1));
     }
 
     @Test
@@ -69,5 +69,45 @@ class OrderSchedulerTest {
         scheduler.autoConfirmOrders();
 
         verify(orderFacade).autoConfirmOrder(eq(2L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("결제 만료: 대상을 batchSize건씩 끝까지 조회해 한 건씩 만료 취소한다")
+    void expireOrders_paging() {
+        given(orderFacade.findExpireTargetIds(any(LocalDateTime.class), eq(0L), eq(2))).willReturn(List.of(1L, 2L));
+        given(orderFacade.findExpireTargetIds(any(LocalDateTime.class), eq(2L), eq(2))).willReturn(List.of(3L));
+        given(orderFacade.expireOrder(anyLong(), any(LocalDateTime.class))).willReturn(true);
+
+        scheduler.expireOrders();
+
+        verify(orderFacade).expireOrder(eq(1L), any(LocalDateTime.class));
+        verify(orderFacade).expireOrder(eq(2L), any(LocalDateTime.class));
+        verify(orderFacade).expireOrder(eq(3L), any(LocalDateTime.class));
+        verify(orderFacade, never()).findExpireTargetIds(any(LocalDateTime.class), eq(3L), eq(2));
+        verify(orderFacade, never()).autoConfirmOrder(anyLong(), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("결제 만료: 여러 건 중 하나가 실패해도 나머지는 취소한다")
+    void expireOrders_partialFailure() {
+        given(orderFacade.findExpireTargetIds(any(LocalDateTime.class), eq(0L), eq(2))).willReturn(List.of(1L, 2L));
+        given(orderFacade.findExpireTargetIds(any(LocalDateTime.class), eq(2L), eq(2))).willReturn(List.of());
+        given(orderFacade.expireOrder(eq(1L), any(LocalDateTime.class))).willThrow(new RuntimeException("재고 복원 실패"));
+        given(orderFacade.expireOrder(eq(2L), any(LocalDateTime.class))).willReturn(true);
+
+        scheduler.expireOrders();
+
+        verify(orderFacade).expireOrder(eq(2L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("결제 만료: 대상 조회가 실패해도 예외가 밖으로 나오지 않는다")
+    void expireOrders_findFails() {
+        given(orderFacade.findExpireTargetIds(any(LocalDateTime.class), eq(0L), eq(2)))
+                .willThrow(new RuntimeException("DB 연결 실패"));
+
+        scheduler.expireOrders();   // 예외가 밖으로 나오지 않는다
+
+        verify(orderFacade, never()).expireOrder(anyLong(), any(LocalDateTime.class));
     }
 }
