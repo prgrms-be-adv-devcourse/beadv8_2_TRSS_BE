@@ -108,7 +108,7 @@ public class SettlementCandidate extends BaseIdAndTime {
     public void exclude(String reason) {
         requireReady();
         this.status = SettlementCandidateStatus.EXCLUDED;
-        this.excludedReason = reason;
+        this.excludedReason = reason != null && reason.length() > 300 ? reason.substring(0, 300) : reason;
     }
 
     /** 연관된 정산서 ID. 지연 로딩 프록시여도 ID만 꺼내므로 추가 조회가 없다 */

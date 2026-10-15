@@ -5,6 +5,7 @@ import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
 import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
+import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -41,6 +42,13 @@ public class SettlementScheduler {
             SettlementRunResponse result = settlementFacade.runMonthlyJob(targetMonth, SettlementTrigger.MONTHLY_JOB);
             log.info("월 정산 스케줄 실행 targetMonth={} status={} paid={} failed={}",
                     targetMonth, result.status(), result.paidCount(), result.failedCount());
+        } catch (DomainException e) {
+            // 로그 규칙(exception_handling 9장): 4xx는 INFO·스택 없음(예: 관리자가 먼저 실행해 409 이미 완료된 달), 5xx는 ERROR
+            if (e.statusCode() < 500) {
+                log.info("월 정산 스케줄 실행 안 함 targetMonth={} [{}]", targetMonth, e.getResultCode());
+            } else {
+                log.error("월 정산 스케줄 실행 실패 targetMonth={}", targetMonth, e);
+            }
         } catch (Exception e) {
             // 관리자 화면(실행 결과)에서 실패를 보고 POST /admin/settlements/runs로 수동 실행한다
             log.error("월 정산 스케줄 실행 실패 targetMonth={}", targetMonth, e);

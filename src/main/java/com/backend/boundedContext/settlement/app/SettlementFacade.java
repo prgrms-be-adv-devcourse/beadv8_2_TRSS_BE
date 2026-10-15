@@ -1,9 +1,20 @@
 package com.backend.boundedContext.settlement.app;
 
 import com.backend.boundedContext.settlement.domain.Settlement;
+import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
+import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
-import com.backend.boundedContext.settlement.in.dto.*;
+import com.backend.boundedContext.settlement.in.dto.SellerSettlementDetailResponse;
+import com.backend.boundedContext.settlement.in.dto.SellerSettlementResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementCandidateResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementDetailResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementExpectedResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementHistoryResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
+import com.backend.boundedContext.settlement.in.dto.SettlementPreviewResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.ConfirmedOrderItemDto;
 import lombok.RequiredArgsConstructor;
@@ -32,9 +43,14 @@ public class SettlementFacade {
     private final SettlementPayoutUseCase settlementPayoutUseCase;
     private final SettlementRunMonthlyJobUseCase settlementRunMonthlyJobUseCase;
     private final SettlementGetRunsUseCase settlementGetRunsUseCase;
+    private final SettlementGetSellerSettlementsUseCase settlementGetSellerSettlementsUseCase;
+    private final SettlementGetSellerSettlementUseCase settlementGetSellerSettlementUseCase;
+    private final SettlementGetExpectedAmountsUseCase settlementGetExpectedAmountsUseCase;
+    private final SettlementGetPreviewUseCase settlementGetPreviewUseCase;
     private final SettlementHoldUseCase settlementHoldUseCase;
     private final SettlementReleaseUseCase settlementReleaseUseCase;
     private final SettlementHoldSellerUseCase settlementHoldSellerUseCase;
+    private final SettlementExcludeCandidateUseCase settlementExcludeCandidateUseCase;
 
     // ================= 정산 후보 생성 (구매 확정 이벤트) =================
 
@@ -130,6 +146,12 @@ public class SettlementFacade {
                 .toList();
     }
 
+    /** 정산월 미리보기(저장하지 않음, 단순 조회) */
+    @Transactional(readOnly = true)
+    public SettlementPreviewResponse getPreview(YearMonth targetMonth, Pageable pageable) {
+        return settlementGetPreviewUseCase.getPreview(targetMonth, pageable);
+    }
+
     // ================= 관리자 보류·해제 =================
 
     @Transactional
@@ -140,6 +162,40 @@ public class SettlementFacade {
     @Transactional
     public SettlementResponse release(Long settlementId) {
         return settlementReleaseUseCase.release(settlementId);
+    }
+
+    // ================= 관리자 정산 후보 =================
+
+    @Transactional(readOnly = true)
+    public PageResponse<SettlementCandidateResponse> getCandidates(Long sellerId, String month,
+                                                                   SettlementCandidateStatus status,
+                                                                   Pageable pageable) {
+        return PageResponse.from(settlementSupport.findCandidates(sellerId, month, status, pageable),
+                SettlementCandidateResponse::from);
+    }
+
+    @Transactional
+    public SettlementCandidateResponse excludeCandidate(Long candidateId, String reason) {
+        return settlementExcludeCandidateUseCase.exclude(candidateId, reason);
+    }
+
+    // ================= 판매자 본인 조회 =================
+
+    @Transactional(readOnly = true)
+    public PageResponse<SellerSettlementResponse> getSellerSettlements(Long memberId, String month,
+                                                                       SettlementSellerStatus status,
+                                                                       Pageable pageable) {
+        return settlementGetSellerSettlementsUseCase.getSellerSettlements(memberId, month, status, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public SellerSettlementDetailResponse getSellerSettlement(Long memberId, Long settlementId) {
+        return settlementGetSellerSettlementUseCase.getSellerSettlement(memberId, settlementId);
+    }
+
+    @Transactional(readOnly = true)
+    public SettlementExpectedResponse getExpectedAmounts(Long memberId) {
+        return settlementGetExpectedAmountsUseCase.getExpectedAmounts(memberId);
     }
 
     // ================= 다른 컨텍스트 제공 (SettlementApiAdapter) =================
