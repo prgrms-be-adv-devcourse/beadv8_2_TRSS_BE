@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.order.dto.OrderSummaryDto;
 import com.backend.shared.order.dto.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +29,8 @@ public class OrderFacade {
     private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
     private final OrderPayOrderUseCase orderPayOrderUseCase;
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
+    private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
+    private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -87,5 +90,23 @@ public class OrderFacade {
     @Transactional
     public OrderCancelResponse cancelOrder(Long buyerId, Long orderId) {
         return orderCancelOrderUseCase.cancel(buyerId, orderId);
+    }
+
+    // 최근 주문 목록 (OrderApi)
+    @Transactional(readOnly = true)
+    public List<OrderSummaryDto> getRecentOrders(Long buyerId, int limit) {
+        return orderGetRecentOrdersUseCase.getRecentOrders(buyerId, limit);
+    }
+
+    // 구매자 진행 중 주문 여부 (OrderApi)
+    @Transactional(readOnly = true)
+    public boolean hasActiveOrders(Long buyerId) {
+        return orderCheckActiveOrdersUseCase.hasActiveOrders(buyerId);
+    }
+
+    // 판매자 진행 중 판매 여부 (OrderApi)
+    @Transactional(readOnly = true)
+    public boolean hasActiveSales(Long sellerId) {
+        return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
     }
 }

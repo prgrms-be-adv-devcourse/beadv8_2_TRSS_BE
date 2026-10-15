@@ -28,8 +28,13 @@ import java.util.UUID;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends BaseIdAndTime {
+    // 주문번호
     private static final String ORDER_NUMBER_PREFIX = "ORD-";
+    // 결제 대기 상태
     public static final List<OrderStatus> PAYMENT_PENDING_STATUSES = List.of(OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED);
+    // 진행 중 주문 상태
+    public static final List<OrderStatus> ACTIVE_STATUSES = List.of(
+            OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED, OrderStatus.PAID, OrderStatus.RETURN_REQUESTED);
 
     @Column(nullable = false, unique = true, length = 40)
     private String orderNumber;
