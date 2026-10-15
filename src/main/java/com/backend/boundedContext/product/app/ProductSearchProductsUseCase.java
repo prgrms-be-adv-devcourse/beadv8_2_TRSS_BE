@@ -56,10 +56,14 @@ public class ProductSearchProductsUseCase {
                 products.stream().map(Product::getSellerId).collect(Collectors.toSet()));
 
         return products.stream()
-                .map(product -> new ProductSummaryDto(
-                        product.getId(), product.getName(), product.getPrice(), product.getCategory().getId(),
-                        product.getSellerId(), businessNames.get(product.getSellerId()), null,
-                        ProductSupport.isSoldOut(options.getOrDefault(product.getId(), List.of()))))
+                .map(product -> {
+                    List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
+                    return new ProductSummaryDto(
+                            product.getId(), product.getName(), product.getPrice(), product.getCategory().getId(),
+                            product.getSellerId(), businessNames.get(product.getSellerId()), null,
+                            ProductSupport.isSoldOut(productOptions),
+                            ProductSupport.getLowStockRemaining(productOptions));
+                })
                 .collect(Collectors.toMap(ProductSummaryDto::productId, Function.identity()));
     }
 

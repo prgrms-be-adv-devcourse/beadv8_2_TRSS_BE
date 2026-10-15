@@ -165,6 +165,15 @@ public class ProductSupport {
         return options.stream().allMatch(ProductOption::isSoldOut);
     }
 
+    /**
+     * 상품 단위로 구매자에게 보여 줄 남은 수량. 삭제되지 않은 옵션의 재고 합계가
+     * 1 ~ {@value ProductOption#LOW_STOCK_THRESHOLD}개일 때만 주고, 그 외(품절 포함)에는 null.
+     */
+    public static Integer getLowStockRemaining(List<ProductOption> options) {
+        int total = options.stream().mapToInt(ProductOption::getStock).sum();
+        return (total > 0 && total <= ProductOption.LOW_STOCK_THRESHOLD) ? total : null;
+    }
+
     public long countProducts() {
         return productRepository.count();
     }
