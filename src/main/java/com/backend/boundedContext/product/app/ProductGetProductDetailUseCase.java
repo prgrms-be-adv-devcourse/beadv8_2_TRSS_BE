@@ -1,6 +1,7 @@
 package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
+import com.backend.boundedContext.product.app.dto.ProductImageDto;
 import com.backend.boundedContext.product.app.dto.ProductOptionDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
@@ -15,6 +16,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ProductGetProductDetailUseCase {
     private final ProductSupport productSupport;
+    private final ProductImageSupport productImageSupport;
 
     /** 구매자용 상품 상세. 판매 중지·삭제된 상품이나 사용 중지된 카테고리의 상품은 404. */
     public ProductDetailDto getProductDetail(Long productId) {
@@ -30,8 +32,14 @@ public class ProductGetProductDetailUseCase {
         return new ProductDetailDto(
                 product.getId(), product.getName(), product.getDescription(), product.getPrice(),
                 parent.getId(), parent.getName(), category.getId(), category.getName(),
-                product.getSellerId(), businessName, null, List.of(),
+                product.getSellerId(), businessName, thumbnailUrl(productId),
+                productImageSupport.getDetailImages(productId).stream().map(ProductImageDto::url).toList(),
                 ProductSupport.isSoldOut(options),
                 options.stream().map(ProductOptionDto::from).toList());
+    }
+
+    private String thumbnailUrl(Long productId) {
+        ProductImageDto thumbnail = productImageSupport.getThumbnail(productId);
+        return thumbnail == null ? null : thumbnail.url();
     }
 }
