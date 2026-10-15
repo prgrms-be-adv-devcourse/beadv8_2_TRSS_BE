@@ -150,6 +150,24 @@ class ProductFacadeSearchTest {
     }
 
     @Test
+    @DisplayName("남은 수량은 재고가 1~5개인 상품만 주고, 6개 이상이거나 품절이면 null이다")
+    void searchRemainingStock() {
+        Product five = create(skincare, KEY + " 5개", 10_000, 5);
+        Product one = create(skincare, KEY + " 1개", 10_000, 1);
+        Product six = create(skincare, KEY + " 6개", 10_000, 6);
+        Product soldOut = create(skincare, KEY + " 품절", 10_000, 1);
+        setStock(soldOut, 0);
+
+        assertThat(search(KEY, null, ProductSort.LATEST, false).items())
+                .extracting(ProductSummaryDto::productId, ProductSummaryDto::remainingStock)
+                .containsExactly(
+                        tuple(soldOut.getId(), null),
+                        tuple(six.getId(), null),
+                        tuple(one.getId(), 1),
+                        tuple(five.getId(), 5));
+    }
+
+    @Test
     @DisplayName("삭제된 옵션의 재고는 품절 판단에 넣지 않는다")
     void searchIgnoresDeletedOption() {
         Product product = create(skincare, KEY + " 옵션 삭제", 10_000, 5);

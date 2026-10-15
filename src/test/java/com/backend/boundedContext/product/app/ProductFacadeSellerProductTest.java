@@ -1,7 +1,7 @@
 package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
-import com.backend.boundedContext.product.app.dto.SellerProductListDto;
+import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
@@ -13,6 +13,7 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
@@ -79,12 +80,13 @@ class ProductFacadeSellerProductTest {
         setStatus(create(SELLER_ID, "삭제된 크림", 10), ProductSaleStatus.DELETED);
         create(OTHER_SELLER_ID, "다른 판매자 크림", 10);
 
-        SellerProductListDto result = getList(null, null);
+        PageResponse<SellerProductSummaryDto> result = getList(null, null);
 
-        assertThat(result.products().items())
+        assertThat(result.items())
                 .extracting(SellerProductSummaryDto::productId)
                 .containsExactly(stopped.getId(), onSale.getId());
-        assertThat(result.products().items().getLast()).satisfies(item -> {
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.items().getLast()).satisfies(item -> {
             assertThat(item.optionId()).isEqualTo(option(onSale).getId());
             assertThat(item.name()).isEqualTo("판매 중 크림");
             assertThat(item.categoryName()).isEqualTo("스킨케어");
@@ -92,7 +94,7 @@ class ProductFacadeSellerProductTest {
             assertThat(item.status()).isEqualTo(ProductDisplayStatus.ON_SALE);
             assertThat(item.stoppedReason()).isNull();
         });
-        assertThat(result.products().items().getFirst()).satisfies(item -> {
+        assertThat(result.items().getFirst()).satisfies(item -> {
             assertThat(item.status()).isEqualTo(ProductDisplayStatus.STOPPED);
             assertThat(item.stoppedBy()).isEqualTo(ProductStoppedBy.ADMIN);
             assertThat(item.stoppedReason()).isEqualTo("성분 표기 오류");
@@ -100,21 +102,23 @@ class ProductFacadeSellerProductTest {
     }
 
     @Test
-    @DisplayName("목록: 상태 탭으로 거르고, 탭별 개수는 상태 필터와 관계없이 센다")
+    @DisplayName("목록: 상태 탭으로 거르고, 탭별 개수는 판매중·품절·판매 중지를 따로 센다 (삭제 제외)")
     void getSellerProductsByStatus() {
         Product onSale = create(SELLER_ID, "판매 중", 10);
         Product soldOut = create(SELLER_ID, "품절", 1);
         ReflectionTestUtils.setField(option(soldOut), "stock", 0);
         Product stopped = create(SELLER_ID, "중지", 10);
         stop(stopped, "사유");
+        setStatus(create(SELLER_ID, "삭제", 10), ProductSaleStatus.DELETED);
 
         assertThat(ids(getList(ProductDisplayStatus.ON_SALE, null))).containsExactly(onSale.getId());
         assertThat(ids(getList(ProductDisplayStatus.SOLD_OUT, null))).containsExactly(soldOut.getId());
         assertThat(ids(getList(ProductDisplayStatus.STOPPED, null))).containsExactly(stopped.getId());
 
-        SellerProductListDto soldOutTab = getList(ProductDisplayStatus.SOLD_OUT, null);
-        assertThat(soldOutTab.products().items().getFirst().status()).isEqualTo(ProductDisplayStatus.SOLD_OUT);
-        assertThat(soldOutTab.counts()).isEqualTo(new SellerProductListDto.Counts(3, 1, 1, 1));
+        assertThat(getList(ProductDisplayStatus.SOLD_OUT, null).items().getFirst().status())
+                .isEqualTo(ProductDisplayStatus.SOLD_OUT);
+        assertThat(productFacade.getSellerProductCounts(MEMBER_ID, null))
+                .isEqualTo(new SellerProductCountsDto(3, 1, 1, 1));
     }
 
     @Test
@@ -123,10 +127,9 @@ class ProductFacadeSellerProductTest {
         Product cream = create(SELLER_ID, "수분 크림", 10);
         create(SELLER_ID, "립 틴트", 10);
 
-        SellerProductListDto result = getList(null, " 크림 ");
-
-        assertThat(ids(result)).containsExactly(cream.getId());
-        assertThat(result.counts().all()).isEqualTo(1);
+        assertThat(ids(getList(null, " 크림 "))).containsExactly(cream.getId());
+        assertThat(productFacade.getSellerProductCounts(MEMBER_ID, " 크림 "))
+                .isEqualTo(new SellerProductCountsDto(1, 1, 0, 0));
     }
 
     @Test
@@ -198,12 +201,12 @@ class ProductFacadeSellerProductTest {
                 .extracting("resultCode").isEqualTo("400-CATEGORY_NOT_SELECTABLE");
     }
 
-    private SellerProductListDto getList(ProductDisplayStatus status, String keyword) {
+    private PageResponse<SellerProductSummaryDto> getList(ProductDisplayStatus status, String keyword) {
         return productFacade.getSellerProducts(MEMBER_ID, status, keyword, PageRequest.of(0, 20));
     }
 
-    private List<Long> ids(SellerProductListDto result) {
-        return result.products().items().stream().map(SellerProductSummaryDto::productId).toList();
+    private List<Long> ids(PageResponse<SellerProductSummaryDto> result) {
+        return result.items().stream().map(SellerProductSummaryDto::productId).toList();
     }
 
     private Product create(Long sellerId, String name, int stock) {

@@ -3,7 +3,8 @@ package com.backend.boundedContext.product.in;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
-import com.backend.boundedContext.product.app.dto.SellerProductListDto;
+import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
+import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.in.dto.ProductCreateRequest;
@@ -12,6 +13,7 @@ import com.backend.boundedContext.product.in.dto.ProductModifyRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustResponse;
 import com.backend.global.exception.DomainException;
+import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
 import io.swagger.v3.oas.annotations.Operation;
@@ -76,10 +78,10 @@ public class ApiV1SellerProductController {
 
     @Operation(
             summary = "본인 상품 목록",
-            description = "삭제된 상품을 뺀 본인 상품을 최신 등록순으로 줍니다. status가 없으면 전체이고, "
-                    + "counts(탭별 개수)에는 status를 적용하지 않습니다(keyword는 적용).")
+            description = "삭제된 상품을 뺀 본인 상품을 최신 등록순으로 줍니다. status가 없으면 전체입니다. "
+                    + "탭별 개수는 /counts로 따로 조회합니다.")
     @GetMapping
-    public RsData<SellerProductListDto> getSellerProducts(
+    public RsData<PageResponse<SellerProductSummaryDto>> getSellerProducts(
             @AuthenticationPrincipal AuthMember authMember,
             @Parameter(description = "ON_SALE(재고 있음) · SOLD_OUT(재고 0) · STOPPED(판매 중지)")
             @RequestParam(required = false) ProductDisplayStatus status,
@@ -89,6 +91,19 @@ public class ApiV1SellerProductController {
     ) {
         return RsData.of("200-1", "상품 목록을 조회했습니다.",
                 productFacade.getSellerProducts(authMember.memberId(), status, keyword, pageable));
+    }
+
+    @Operation(
+            summary = "본인 상품 탭별 개수",
+            description = "전체·판매중·품절·판매 중지 개수를 줍니다. 삭제된 상품은 세지 않고, 목록과 같은 keyword를 적용합니다.")
+    @GetMapping("/counts")
+    public RsData<SellerProductCountsDto> getSellerProductCounts(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Parameter(description = "상품명 일부 (최대 100자)")
+            @RequestParam(required = false) @Size(max = 100) String keyword
+    ) {
+        return RsData.of("200-1", "상품 개수를 조회했습니다.",
+                productFacade.getSellerProductCounts(authMember.memberId(), keyword));
     }
 
     @Operation(summary = "상품 수정 폼 조회", description = "수정 폼을 채울 본인 상품 정보를 줍니다. 다른 판매자의 상품·삭제된 상품은 404입니다.")
