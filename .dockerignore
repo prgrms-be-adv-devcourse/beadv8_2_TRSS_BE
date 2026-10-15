@@ -31,5 +31,6 @@ docs
 README.md
 HELP.md
 compose*.yaml
+nginx
 Dockerfile
 .dockerignore
