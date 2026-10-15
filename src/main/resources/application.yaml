@@ -50,7 +50,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 3          # 월 정산 Job이 오래 돌아도 충전·재시도 스케줄러가 멈추지 않게 조정
+        size: 6          # 스케줄 작업 6개(정산 2, 충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 다른 스케줄러가 멈추지 않는다
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
@@ -80,6 +80,10 @@ custom:
     cartMaxQuantity: 99        # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
     autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
+    autoConfirmIntervalSeconds: 3600   # 자동 구매 확정 스케줄러 실행 간격(초). 7일 경과 후 최대 이 시간만큼 늦게 확정된다
+    schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
+    expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
+    expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
   payment:
     topupUnit: 10000           # 충전 단위·최소 금액(원)
     topupMax: 1000000          # 1회 최대 충전 금액(원)
