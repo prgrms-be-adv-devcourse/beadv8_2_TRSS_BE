@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -29,6 +30,8 @@ public class OrderFacade {
     private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
     private final OrderPayOrderUseCase orderPayOrderUseCase;
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
+    private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
+    private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
 
@@ -90,6 +93,24 @@ public class OrderFacade {
     @Transactional
     public OrderCancelResponse cancelOrder(Long buyerId, Long orderId) {
         return orderCancelOrderUseCase.cancel(buyerId, orderId);
+    }
+
+    // 구매확정 (수동)
+    @Transactional
+    public OrderConfirmResponse confirmOrder(Long buyerId, Long orderId) {
+        return orderConfirmOrderUseCase.confirm(buyerId, orderId);
+    }
+
+    // 자동 구매확정 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findAutoConfirmTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderAutoConfirmOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 자동 구매확정 한 건 (스케줄러)
+    @Transactional
+    public boolean autoConfirmOrder(Long orderId, LocalDateTime now) {
+        return orderAutoConfirmOrdersUseCase.autoConfirm(orderId, now);
     }
 
     // 최근 주문 목록 (OrderApi)
