@@ -27,6 +27,7 @@ import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
@@ -75,6 +76,12 @@ public class ProductFacade {
     @Transactional
     public void restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
         productRestoreStockUseCase.restoreStock(items, reason);
+    }
+
+    /** 호출한 쪽 트랜잭션이 끝날 때까지 잠금을 유지해야 하므로 트랜잭션 없이 부르면 예외가 난다 */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockProductsForOrderChange(Collection<Long> productIds) {
+        productSupport.lockProductsForShare(productIds);
     }
 
     @Transactional

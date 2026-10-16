@@ -38,6 +38,11 @@ public class ProductApiAdapter implements ProductApi {
     }
 
     @Override
+    public void lockProductsForOrderChange(Collection<Long> productIds) {
+        productFacade.lockProductsForOrderChange(productIds);
+    }
+
+    @Override
     public void stopAllBySeller(Long sellerId, String reason) {
         productFacade.stopAllBySeller(sellerId, reason);
     }
