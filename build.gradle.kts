@@ -51,6 +51,8 @@ tasks.withType<Test> {
 	jvmArgs("-Duser.timezone=Asia/Seoul")
 	// 테스트가 저장하는 상품 이미지는 build 폴더에 둔다 (로컬 개발용 ./uploads와 섞이지 않게)
 	systemProperty("PRODUCT_IMAGE_DIR", layout.buildDirectory.dir("test-uploads").get().asFile.absolutePath)
+	// 캐시된 테스트 컨텍스트마다 Hikari 풀(10)을 잡고 있어 기본값(32개)이면 Postgres max_connections(100)를 넘는다
+	systemProperty("spring.test.context.cache.maxSize", "8")
 }
 
 tasks.named<JavaExec>("bootRun") {
