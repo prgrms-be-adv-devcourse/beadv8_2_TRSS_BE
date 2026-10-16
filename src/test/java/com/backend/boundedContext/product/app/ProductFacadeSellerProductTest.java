@@ -17,6 +17,7 @@ import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
+import com.backend.shared.order.out.OrderApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,10 @@ class ProductFacadeSellerProductTest {
 
     @MockitoBean
     private MemberApi memberApi;
+
+    /** 주문 쪽 구현과 분리하고, 다른 상품 통합 테스트와 mock 조합을 맞춰 테스트 컨텍스트(DB 연결 풀)를 같이 쓴다 */
+    @MockitoBean
+    private OrderApi orderApi;
 
     private Category skincare;
     private Category makeup;

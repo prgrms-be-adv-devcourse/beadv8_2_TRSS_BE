@@ -14,8 +14,10 @@ import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
+import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
+import com.backend.shared.product.out.ProductApi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
@@ -35,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 /**
@@ -70,8 +74,15 @@ class ProductStockConcurrencyTest {
     @Autowired
     private TransactionTemplate transactionTemplate;
 
+    @Autowired
+    private ProductApi productApi;
+
     @MockitoBean
     private MemberApi memberApi;
+
+    /** 주문 쪽 구현과 분리하고, 다른 상품 통합 테스트와 mock 조합을 맞춰 테스트 컨텍스트(DB 연결 풀)를 같이 쓴다 */
+    @MockitoBean
+    private OrderApi orderApi;
 
     private Long productId;
     private Long optionId;
@@ -304,6 +315,68 @@ class ProductStockConcurrencyTest {
         ProductStopRequestStatus status = productStopRequestRepository.findById(requestId).orElseThrow().getStatus();
         ProductSaleStatus productStatus = productRepository.findById(productId).orElseThrow().getStatus();
         assertThat(productStatus).isEqualTo(status == ProductStopRequestStatus.APPROVED ? ProductSaleStatus.STOPPED : ProductSaleStatus.ON_SALE);
+    }
+
+    @Test
+    @DisplayName("주문 변경 전 상품 잠금: 상품 중지가 커밋되기 전이면 기다렸다가, 중지된 상태를 본다 (잠금 순서 상품 → 주문)")
+    void lockForOrderChangeWaitsForStop() throws Exception {
+        CountDownLatch stopLocked = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        // 주문 취소: 중지 트랜잭션이 상품을 잠근 뒤에 상품 잠금을 시도한다
+        Future<ProductSaleStatus> cancel = executor.submit(() -> {
+            await(stopLocked);
+            return transactionTemplate.execute(status -> {
+                productApi.lockProductsForOrderChange(List.of(productId));
+                return productRepository.findById(productId).orElseThrow().getStatus();
+            });
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            productFacade.stopProductByAdmin(productId, "허위 광고");
+            stopLocked.countDown();
+            sleep(500);
+        });
+
+        assertThat(cancel.get(10, TimeUnit.SECONDS)).isEqualTo(ProductSaleStatus.STOPPED);
+        executor.shutdown();
+    }
+
+    @Test
+    @DisplayName("주문 변경 전 상품 잠금: 같은 상품을 동시에 잠가도 서로 기다리지 않는다 (읽기 잠금)")
+    void lockForOrderChangeIsShared() throws Exception {
+        CountDownLatch firstLocked = new CountDownLatch(1);
+        CountDownLatch secondDone = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        Future<?> second = executor.submit(() -> {
+            await(firstLocked);
+            transactionTemplate.executeWithoutResult(status -> productApi.lockProductsForOrderChange(List.of(productId)));
+            secondDone.countDown();
+        });
+
+        // 첫 번째 잠금을 쥔 채로 두 번째가 끝나기를 기다린다. 서로 막는다면 시간 안에 끝나지 않는다
+        Boolean secondFinishedWhileLocked = transactionTemplate.execute(status -> {
+            productApi.lockProductsForOrderChange(List.of(productId, Long.MAX_VALUE));
+            firstLocked.countDown();
+            try {
+                return secondDone.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        });
+
+        second.get(10, TimeUnit.SECONDS);
+        executor.shutdown();
+        assertThat(secondFinishedWhileLocked).isTrue();
+    }
+
+    @Test
+    @DisplayName("주문 변경 전 상품 잠금: 트랜잭션 밖에서 부르면 잠금이 바로 풀리므로 예외가 난다")
+    void lockForOrderChangeRequiresTransaction() {
+        assertThatThrownBy(() -> productApi.lockProductsForOrderChange(List.of(productId)))
+                .isInstanceOf(IllegalTransactionStateException.class);
     }
 
     private void givenApprovedSeller() {

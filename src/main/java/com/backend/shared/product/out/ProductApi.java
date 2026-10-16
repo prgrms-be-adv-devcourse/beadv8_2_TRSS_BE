@@ -58,6 +58,24 @@ public interface ProductApi {
     void restoreStock(List<StockChangeDto> items, StockRestoreReason reason);
 
     /**
+     * 재고를 복원할 주문을 잠그기 전에, 그 주문에 담긴 상품을 먼저 잠근다.
+     * 구매자 주문 취소·결제 만료·반품 승인처럼 주문을 잠근 뒤 restoreStock을 부르는 흐름에서 쓴다.
+     *
+     * <p>잠금 순서는 항상 상품 → 주문이다. 상품 판매 중지·삭제는 상품을 잠근 뒤 cancelPendingOrders로 주문을 잠그므로,
+     * 주문을 먼저 잠그고 상품을 잠그면 서로 기다리다 데드락이 난다.
+     *
+     * <ul>
+     *   <li>호출 순서: 주문 항목의 productId 모으기 → 이 메서드 → 주문 잠금 → 주문 상태 다시 확인 → 취소·restoreStock</li>
+     *   <li>상품을 ID 순으로 읽기 잠금(FOR SHARE)한다. 구매자 취소끼리는 서로 막지 않는다.</li>
+     *   <li>상품 판매 중지·삭제가 진행 중이면 끝날 때까지 기다린다. 그사이 주문이 취소됐을 수 있으므로 주문 상태를 다시 확인한다.</li>
+     *   <li>잠금은 호출한 쪽 트랜잭션이 끝날 때 풀린다. 트랜잭션 밖에서 부르면 IllegalTransactionStateException.</li>
+     *   <li>없는 상품 ID는 건너뛰고, 상품 상태는 확인하지 않는다 (삭제·중지된 상품도 잠근다).</li>
+     *   <li>cancelPendingOrders 안에서는 상품이 이미 잠겨 있으므로 부르지 않아도 된다.</li>
+     * </ul>
+     */
+    void lockProductsForOrderChange(Collection<Long> productIds);
+
+    /**
      * 판매자의 판매 중 상품을 모두 중지한다. 판매자 철회 요청·관리자 제재 때 회원 컨텍스트가 같은 트랜잭션에서 호출한다.
      *
      * <ul>
