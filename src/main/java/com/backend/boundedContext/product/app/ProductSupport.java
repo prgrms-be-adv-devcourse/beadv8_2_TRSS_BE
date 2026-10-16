@@ -75,8 +75,7 @@ public class ProductSupport {
     public Map<Long, ProductOption> lockOptions(Collection<Long> optionIds) {
         Set<Long> ids = new HashSet<>(optionIds);
 
-        productRepository.findAllForShareByIdIn(productOptionRepository.findProductIdsByIdIn(ids))
-                .forEach(entityManager::refresh);
+        lockProductsForShare(productOptionRepository.findProductIdsByIdIn(ids));
 
         List<ProductOption> options = productOptionRepository.findAllForUpdateByIdIn(ids);
         options.forEach(entityManager::refresh);
@@ -85,6 +84,16 @@ public class ProductSupport {
         }
 
         return options.stream().collect(Collectors.toMap(ProductOption::getId, Function.identity()));
+    }
+
+    /**
+     * 상품을 ID 순으로 읽기 잠금(FOR SHARE)하고 DB 값으로 다시 읽는다. 없는 ID는 건너뛴다.
+     * 읽기 잠금끼리는 서로 막지 않고, 판매 중지·삭제(쓰기 잠금)와는 순서대로 처리된다.
+     */
+    public void lockProductsForShare(Collection<Long> productIds) {
+        if (productIds.isEmpty()) return;
+
+        productRepository.findAllForShareByIdIn(new HashSet<>(productIds)).forEach(entityManager::refresh);
     }
 
     /**
