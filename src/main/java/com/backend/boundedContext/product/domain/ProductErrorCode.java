@@ -26,6 +26,10 @@ public enum ProductErrorCode implements ErrorCode {
     IMAGE_TYPE_NOT_ALLOWED(400, "jpg, png, webp 이미지만 올릴 수 있습니다."),
     DETAIL_IMAGE_LIMIT_EXCEEDED(400, "상세 이미지는 최대 10개까지 올릴 수 있습니다."),
     DETAIL_IMAGE_NOT_FOUND(400, "이 상품의 상세 이미지가 아닙니다."),
+
+    // 판매 중지 요청
+    STOP_REQUEST_PENDING(409, "심사 중인 판매 중지 요청이 이미 있습니다."),
+    STOP_REQUEST_NOT_PENDING(409, "심사 중인 요청만 처리할 수 있습니다."),
     PRODUCT_DELETED(409, "삭제된 상품입니다."),
     OPTION_DELETED(409, "삭제된 옵션입니다.");
 
