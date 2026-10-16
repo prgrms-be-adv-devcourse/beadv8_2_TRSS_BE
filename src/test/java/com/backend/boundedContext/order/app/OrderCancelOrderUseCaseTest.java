@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -23,11 +24,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCancelOrderUseCaseTest {
@@ -45,6 +48,7 @@ class OrderCancelOrderUseCaseTest {
 
     private static final Long BUYER_ID = 3L;
     private static final Long ORDER_ID = 500L;
+    private static final Long PRODUCT_ID = 10L;
 
     /** 장바구니 항목 1번(옵션 100, 10,000원 × 2)으로 방금 만든 주문 */
     private Order order(LocalDateTime createdAt) {
@@ -58,6 +62,7 @@ class OrderCancelOrderUseCaseTest {
     @DisplayName("결제 대기 주문을 취소하면 CANCELED가 되고, 주문 항목 전체로 ORDER_RESTORE 재고 복원을 요청한다")
     void cancel() {
         Order order = order(LocalDateTime.now());
+        given(orderRepository.findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
 
         OrderCancelResponse response = useCase.cancel(BUYER_ID, ORDER_ID);
@@ -79,12 +84,13 @@ class OrderCancelOrderUseCaseTest {
     void paidOrder() {
         Order order = order(LocalDateTime.now());
         order.pay(LocalDateTime.now());
+        given(orderRepository.findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> useCase.cancel(BUYER_ID, ORDER_ID))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CANCELABLE");
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
     }
 
     @Test
@@ -92,22 +98,49 @@ class OrderCancelOrderUseCaseTest {
     void alreadyCanceled() {
         Order order = order(LocalDateTime.now());
         order.cancel(OrderCancelType.USER, "구매자 취소", LocalDateTime.now());
+        given(orderRepository.findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> useCase.cancel(BUYER_ID, ORDER_ID))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CANCELABLE");
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
     }
 
     @Test
     @DisplayName("내 주문이 아니거나 없는 주문이면 404-ORDER_NOT_FOUND")
     void notFound() {
-        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.empty());
+        given(orderRepository.findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID)).willReturn(List.of());
 
         assertThatThrownBy(() -> useCase.cancel(BUYER_ID, ORDER_ID))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "404-ORDER_NOT_FOUND");
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
+    }
+
+    @Test
+    @DisplayName("잠금 순서: 상품 ID 조회 → 상품 읽기 잠금 → 주문 쓰기 잠금 → 재고 복원 (상품 중지·삭제와 같은 순서)")
+    void lockOrder() {
+        Order order = order(LocalDateTime.now());
+        given(orderRepository.findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID)).willReturn(List.of(PRODUCT_ID));
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+
+        useCase.cancel(BUYER_ID, ORDER_ID);
+
+        InOrder inOrder = inOrder(orderRepository, productApi);
+        inOrder.verify(orderRepository).findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID);
+        inOrder.verify(productApi).lockProductsForOrderChange(List.of(PRODUCT_ID));
+        inOrder.verify(orderRepository).findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID);
+        inOrder.verify(productApi).restoreStock(any(), eq(StockRestoreReason.ORDER_RESTORE));
+    }
+
+    @Test
+    @DisplayName("내 주문이 아니거나 없는 주문이면 상품을 잠그지 않는다")
+    void notFound_noLock() {
+        given(orderRepository.findProductIdsByOrderIdAndBuyerId(ORDER_ID, BUYER_ID)).willReturn(List.of());
+
+        assertThatThrownBy(() -> useCase.cancel(BUYER_ID, ORDER_ID)).isInstanceOf(DomainException.class);
+        verify(productApi, never()).lockProductsForOrderChange(any());
+        verify(orderRepository, never()).findByIdAndBuyerIdForUpdate(any(), any());
     }
 }

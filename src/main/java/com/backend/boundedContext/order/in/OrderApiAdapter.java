@@ -23,10 +23,9 @@ public class OrderApiAdapter implements OrderApi {
     @Lazy   // 컨텍스트 간 순환 참조 방지 (Order → ProductApi → OrderApi)
     private final OrderFacade orderFacade;
 
-    // TODO: 임시 구현. ProductApi.stopAllBySeller 연동 시 결제 대기 주문 취소 + 재고 복원으로 바꾼다.
     @Override
     public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
-        return 0;
+        return orderFacade.cancelPendingOrders(productIds, cancelType);
     }
 
     @Override
