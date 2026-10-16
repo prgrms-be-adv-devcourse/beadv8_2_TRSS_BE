@@ -120,7 +120,7 @@ public class OrderFacade {
         return orderExpireOrdersUseCase.findTargetIds(now, afterId, limit);
     }
 
-    // 결제 만료 취소 한 건 (스케줄러) - 취소와 재고 복원을 한 트랜잭션으로, 주문마다 따로 연다
+    // 결제 만료 취소 한 건 (스케줄러)
     @Transactional
     public boolean expireOrder(Long orderId, LocalDateTime now) {
         return orderExpireOrdersUseCase.expire(orderId, now);
