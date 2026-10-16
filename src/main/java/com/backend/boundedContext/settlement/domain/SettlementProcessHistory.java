@@ -141,7 +141,7 @@ public class SettlementProcessHistory extends BaseIdAndTime {
                 batchExecutionId, now);
     }
 
-    // ---------- 보류·해제 (관리자) ----------
+    // ---------- 보류·해제·제외 (관리자) ----------
 
     /**
      * 정산서 보류(HOLD)
@@ -159,6 +159,16 @@ public class SettlementProcessHistory extends BaseIdAndTime {
         return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
                 SettlementHistoryStage.RELEASE, 1, SettlementTrigger.ADMIN,
                 SettlementHistoryResult.SUCCEEDED, null, null, null, null, now);
+    }
+
+    /**
+     * 정산 후보 제외(READY → EXCLUDED)
+     * @param reason 제외 사유 (admin_reason)
+     */
+    public static SettlementProcessHistory candidateExcluded(Long candidateId, String reason, LocalDateTime now) {
+        return new SettlementProcessHistory(SettlementHistoryTargetType.CANDIDATE, candidateId,
+                SettlementHistoryStage.EXCLUDE, 1, SettlementTrigger.ADMIN,
+                SettlementHistoryResult.SUCCEEDED, null, null, reason, null, now);
     }
 
     private static String truncate(String text) {

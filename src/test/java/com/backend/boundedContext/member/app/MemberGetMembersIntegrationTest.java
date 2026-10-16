@@ -1,10 +1,12 @@
 package com.backend.boundedContext.member.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,10 +19,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
+import com.backend.shared.member.dto.SellerStatus;
 
 /**
  * 관리자 회원 목록의 검색·필터·정렬·페이징을 실제 PostgreSQL로 확인한다. 로컬 Docker가 필요하다.
@@ -34,6 +39,9 @@ class MemberGetMembersIntegrationTest {
 
     @Autowired
     private MemberRepository memberRepository;
+
+    @Autowired
+    private SellerRepository sellerRepository;
 
     private final String keyword = "list-it-" + UUID.randomUUID().toString().substring(0, 8);
     private final List<Member> saved = new ArrayList<>();
@@ -52,7 +60,22 @@ class MemberGetMembersIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        sellerRepository.deleteAll(sellerRepository.findAllByMemberIdIn(saved.stream().map(Member::getId).toList()));
         memberRepository.deleteAll(saved);
+    }
+
+    @Test
+    @DisplayName("판매자 신청 이력이 있으면 판매자 상태를 함께 주고, 없으면 null")
+    void sellerStatus() {
+        String businessNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
+        sellerRepository.save(Seller.apply(saved.get(0), "A상회", businessNumber, "홍길동",
+                "01012345678", "국민은행", "123456-01-123456", "홍길동"));
+
+        PageResponse<AdminMemberDto> result = memberFacade.getMembers(keyword, null, null, PageRequest.of(0, 20));
+
+        assertThat(result.items())
+                .extracting(AdminMemberDto::name, AdminMemberDto::sellerStatus)
+                .containsExactly(tuple("회원C", null), tuple("회원B", null), tuple("회원A", SellerStatus.PENDING));
     }
 
     @Test

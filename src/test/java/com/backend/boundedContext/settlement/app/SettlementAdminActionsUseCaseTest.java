@@ -1,15 +1,24 @@
 package com.backend.boundedContext.settlement.app;
 
 import com.backend.boundedContext.settlement.domain.Settlement;
+import com.backend.boundedContext.settlement.domain.SettlementCandidate;
+import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryStage;
+import com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
+import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
+import com.backend.boundedContext.settlement.in.dto.SellerSettlementDetailResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementCandidateResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.member.out.MemberApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -21,23 +30,28 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 10/15 추가 기능(보류·해제·제재 보류·미정산 금액)을 DB 없이 검증한다.
- * Repository는 SettlementPayoutUseCaseTest와 같은 방식(동적 프록시 메모리 가짜)으로 흉내 낸다.
+ * 보류·해제·제재 보류·후보 제외·판매자 상세·미정산 금액을 DB 없이 검증한다.
+ * Repository·MemberApi는 SettlementPayoutUseCaseTest와 같은 방식(동적 프록시 메모리 가짜)으로 흉내 낸다.
  */
 class SettlementAdminActionsUseCaseTest {
 
     private static final Long SELLER_ID = 7L;
+    private static final Long SELLER_MEMBER_ID = 2L;
     private static final Long OTHER_SELLER_ID = 8L;
+    private static final Long OTHER_MEMBER_ID = 4L;
 
     private final Map<Long, Settlement> settlements = new HashMap<>();
+    private final Map<Long, SettlementCandidate> candidates = new HashMap<>();
     private final List<SettlementProcessHistory> histories = new ArrayList<>();
     private Long unsettledSum;
 
@@ -45,26 +59,46 @@ class SettlementAdminActionsUseCaseTest {
     private final SettlementHoldUseCase holdUseCase;
     private final SettlementReleaseUseCase releaseUseCase;
     private final SettlementHoldSellerUseCase holdSellerUseCase;
+    private final SettlementExcludeCandidateUseCase excludeUseCase;
+    private final SettlementGetSellerSettlementUseCase sellerDetailUseCase;
 
     SettlementAdminActionsUseCaseTest() {
         SettlementRepository settlementRepository = fake(SettlementRepository.class, Map.of(
                 "findById", args -> Optional.ofNullable(settlements.get((Long) args[0])),
                 "findWithLockById", args -> Optional.ofNullable(settlements.get((Long) args[0])),
+                "findByIdAndSellerId", args -> Optional.ofNullable(settlements.get((Long) args[0]))
+                        .filter(s -> s.getSellerId().equals(args[1])),
                 "findWithLockBySellerIdAndStatusIn", args -> settlements.values().stream()
                         .filter(s -> s.getSellerId().equals(args[0]))
                         .filter(s -> ((Collection<?>) args[1]).contains(s.getStatus()))
                         .toList()));
         SettlementCandidateRepository candidateRepository = fake(SettlementCandidateRepository.class, Map.of(
+                "findWithLockById", args -> Optional.ofNullable(candidates.get((Long) args[0])),
+                "findBySettlementIdOrderByIdAsc", args -> candidates.values().stream()
+                        .filter(c -> Objects.equals(c.getSettlementId(), args[0]))
+                        .toList(),
                 "sumUnsettledPayout", args -> unsettledSum));
         SettlementProcessHistoryRepository historyRepository = fake(SettlementProcessHistoryRepository.class,
                 Map.of("save", args -> {
                     histories.add((SettlementProcessHistory) args[0]);
                     return args[0];
                 }));
-        support = new SettlementSupport(settlementRepository, candidateRepository, historyRepository);
+        MemberApi memberApi = fake(MemberApi.class, Map.of(
+                "findSellerByMemberId", args -> {
+                    if (SELLER_MEMBER_ID.equals(args[0])) {
+                        return Optional.of(new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.APPROVED));
+                    }
+                    if (OTHER_MEMBER_ID.equals(args[0])) {
+                        return Optional.of(new SellerDto(OTHER_SELLER_ID, OTHER_MEMBER_ID, "다른상점", SellerStatus.APPROVED));
+                    }
+                    return Optional.empty();
+                }));
+        support = new SettlementSupport(settlementRepository, candidateRepository, historyRepository, memberApi);
         holdUseCase = new SettlementHoldUseCase(support, historyRepository);
         releaseUseCase = new SettlementReleaseUseCase(support, historyRepository);
         holdSellerUseCase = new SettlementHoldSellerUseCase(settlementRepository, historyRepository);
+        excludeUseCase = new SettlementExcludeCandidateUseCase(support, historyRepository);
+        sellerDetailUseCase = new SettlementGetSellerSettlementUseCase(support);
     }
 
     @Test
@@ -131,6 +165,58 @@ class SettlementAdminActionsUseCaseTest {
     }
 
     @Test
+    @DisplayName("후보 제외: READY → EXCLUDED + EXCLUDE 이력(후보 대상), 묶인 후보는 409, 없는 후보는 404")
+    void excludeCandidate() {
+        SettlementCandidate ready = candidate(1001L);
+        ReflectionTestUtils.setField(ready, "id", 501L);
+        candidates.put(501L, ready);
+
+        SettlementCandidateResponse result = excludeUseCase.exclude(501L, " 테스트 주문 ");
+
+        assertEquals(SettlementCandidateStatus.EXCLUDED, result.status());
+        assertEquals("테스트 주문", result.excludedReason());
+        SettlementProcessHistory h = histories.get(0);
+        assertEquals(SettlementHistoryTargetType.CANDIDATE, h.getTargetType());
+        assertEquals(SettlementHistoryStage.EXCLUDE, h.getStage());
+
+        assertEquals("409-SETTLEMENT_CANDIDATE_STATE_INVALID",
+                assertThrows(DomainException.class, () -> excludeUseCase.exclude(501L, "다시")).getResultCode());
+        assertEquals("404-SETTLEMENT_CANDIDATE_NOT_FOUND",
+                assertThrows(DomainException.class, () -> excludeUseCase.exclude(999L, "사유")).getResultCode());
+    }
+
+    @Test
+    @DisplayName("판매자 상세: 본인 정산서는 품목별 내역과 이월 표시, 남의 정산서·판매자 아님은 404")
+    void sellerDetail() {
+        Settlement s = Settlement.create(SELLER_ID, "2026-09", null);
+        SettlementCandidate lateAugust = SettlementCandidate.create(90L, 900L, SELLER_ID, 10_000L, 10,
+                LocalDateTime.of(2026, 8, 31, 23, 0));   // 8월 확정분이 9월 정산서로 이월
+        SettlementCandidate september = candidate(901L);
+        ReflectionTestUtils.setField(lateAugust, "id", 1L);
+        ReflectionTestUtils.setField(september, "id", 2L);
+        s.addCandidate(lateAugust);
+        s.addCandidate(september);
+        ReflectionTestUtils.setField(s, "id", 31L);
+        s.markFailed("일시 장애", LocalDateTime.now(), 3, 10);
+        settlements.put(31L, s);
+        candidates.put(1L, lateAugust);
+        candidates.put(2L, september);
+
+        SellerSettlementDetailResponse detail = sellerDetailUseCase.getSellerSettlement(SELLER_MEMBER_ID, 31L);
+
+        assertEquals(SettlementSellerStatus.DELAYED, detail.settlement().status());   // FAILED는 지급 지연으로만
+        assertEquals(18_000L, detail.settlement().payoutAmount());
+        assertEquals(2, detail.items().size());
+        assertTrue(detail.items().stream().anyMatch(i -> i.carriedOver() && "2026-08".equals(i.settlementMonth())));
+        assertFalse(detail.items().stream().allMatch(i -> i.carriedOver()));
+
+        assertEquals("404-SETTLEMENT_NOT_FOUND", assertThrows(DomainException.class,
+                () -> sellerDetailUseCase.getSellerSettlement(OTHER_MEMBER_ID, 31L)).getResultCode());
+        assertEquals("404-SETTLEMENT_NOT_FOUND", assertThrows(DomainException.class,
+                () -> sellerDetailUseCase.getSellerSettlement(99L, 31L)).getResultCode());
+    }
+
+    @Test
     @DisplayName("미정산 금액: 후보가 없으면(null) 0")
     void unsettledAmount() {
         unsettledSum = null;
@@ -145,6 +231,11 @@ class SettlementAdminActionsUseCaseTest {
         s.assignIdempotencyKey();
         settlements.put(id, s);
         return s;
+    }
+
+    private static SettlementCandidate candidate(Long orderItemId) {
+        return SettlementCandidate.create(orderItemId, orderItemId, SELLER_ID, 10_000L, 10,
+                LocalDateTime.of(2026, 9, 15, 12, 0));
     }
 
     private interface Handler {

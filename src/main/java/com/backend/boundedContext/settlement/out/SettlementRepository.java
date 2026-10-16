@@ -51,6 +51,9 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
             """)
     List<Long> findRetryTargetIds(@Param("now") LocalDateTime now, Pageable pageable);
 
+    /** 판매자 본인 정산서 조회. 소유자를 조회 조건에 넣어 남의 정산서는 404가 되게 한다(예외 처리 5.1) */
+    Optional<Settlement> findByIdAndSellerId(Long id, Long sellerId);
+
     /**
      * 판매자 제재(holdSeller) 대상: 이 판매자의 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 잠가서 가져온다
      * 지급 트랜잭션이 잡고 있는 정산서는 지급이 끝날 때까지 기다린다. PAID가 되면 조건에서 빠지므로 보류하지 않는다
@@ -64,4 +67,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
             """)
     List<Settlement> findWithLockBySellerIdAndStatusIn(@Param("sellerId") Long sellerId,
                                                        @Param("statuses") Collection<SettlementStatus> statuses);
+
+    /** 관리자 정산 미리보기: 대상월에 이미 만들어진 정산서(판매자별 상태 표시용) */
+    List<Settlement> findBySettlementMonthAndSellerIdIn(String settlementMonth, Collection<Long> sellerIds);
 }

@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 
 /**
@@ -168,6 +169,9 @@ public class Settlement extends BaseIdAndTime {
     /**
      * ② 자동 지급 실패 기록
      * 실패 횟수가 maxAttempts에 닿으면 MANUAL_REQUIRED, 아니면 FAILED + 다음 재시도 일시
+     * 다음 재시도 일시는 실패 시각을 분 단위로 자른 뒤 간격을 더한다.
+     * 재시도 스케줄러가 10분마다 정각(00:10:00)에 돌므로, 초를 남기면(00:10:05) 그 회차를 놓치고 다음 회차로 밀린다
+     * (테스트 00:00 → 00:10 → 00:20, 운영 00:00 → 02:00 → 04:00)
      */
     public void markFailed(String reason, LocalDateTime now, int maxAttempts, int retryIntervalMinutes) {
         // MANUAL_REQUIRED는 자동 재시도로 되돌리지 않는다(3회 실패하면 자동 재시도를 멈춘다)
@@ -179,7 +183,7 @@ public class Settlement extends BaseIdAndTime {
             this.nextRetryAt = null;
         } else {
             this.status = SettlementStatus.FAILED;
-            this.nextRetryAt = now.plusMinutes(retryIntervalMinutes);
+            this.nextRetryAt = now.truncatedTo(ChronoUnit.MINUTES).plusMinutes(retryIntervalMinutes);
         }
     }
 

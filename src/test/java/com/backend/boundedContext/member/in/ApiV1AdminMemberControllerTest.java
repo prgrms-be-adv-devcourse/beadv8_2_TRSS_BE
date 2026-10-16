@@ -60,8 +60,8 @@ class ApiV1AdminMemberControllerTest {
     @Test
     @DisplayName("회원 목록: 관리자는 검색 조건과 페이지로 조회하고 PageResponse 형식으로 받는다")
     void getMembers_admin() throws Exception {
-        AdminMemberDto item = new AdminMemberDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, MemberStatus.ACTIVE,
-                LocalDateTime.of(2026, 10, 11, 15, 0));
+        AdminMemberDto item = new AdminMemberDto(3L, "buyer@palette.test", "구매자", MemberRole.SELLER, MemberStatus.ACTIVE,
+                LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED);
         given(memberFacade.getMembers(eq("buyer"), eq(MemberStatus.ACTIVE), isNull(), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(item), 1, 10, 11, 2));
 
@@ -71,6 +71,7 @@ class ApiV1AdminMemberControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].memberId").value(3))
                 .andExpect(jsonPath("$.data.items[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.items[0].sellerStatus").value("APPROVED"))
                 .andExpect(jsonPath("$.data.page").value(1))
                 .andExpect(jsonPath("$.data.totalElements").value(11));
 
