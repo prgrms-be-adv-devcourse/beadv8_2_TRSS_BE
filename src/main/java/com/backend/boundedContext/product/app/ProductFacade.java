@@ -6,7 +6,9 @@ import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
 import com.backend.boundedContext.product.app.dto.ProductImageFile;
+import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
+import com.backend.boundedContext.product.app.dto.StockHistoryDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
@@ -40,6 +42,9 @@ public class ProductFacade {
     private final ProductRestoreStockUseCase productRestoreStockUseCase;
     private final ProductStopAllBySellerUseCase productStopAllBySellerUseCase;
     private final ProductResumeAllBySellerUseCase productResumeAllBySellerUseCase;
+    private final ProductDeleteProductUseCase productDeleteProductUseCase;
+    private final ProductRequestStopUseCase productRequestStopUseCase;
+    private final ProductGetStockHistoriesUseCase productGetStockHistoriesUseCase;
     private final ProductAdjustStockUseCase productAdjustStockUseCase;
     private final ProductSearchProductsUseCase productSearchProductsUseCase;
     private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
@@ -126,6 +131,27 @@ public class ProductFacade {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         productModifyProductUseCase.modifyProduct(sellerId, productId, name, price, categoryId, description,
                 keepDetailImageIds, thumbnail, newDetailImages);
+    }
+
+    /** 승인된 판매자가 본인 상품을 지운다 (소프트 삭제). 결제 대기 주문 취소와 심사 중인 중지 요청 정리를 함께 한다. */
+    @Transactional
+    public void deleteProduct(Long memberId, Long productId) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productDeleteProductUseCase.deleteProduct(sellerId, productId);
+    }
+
+    /** 승인된 판매자가 본인 상품의 판매 중지를 요청한다. 관리자가 승인해야 중지된다. */
+    @Transactional
+    public ProductStopRequestDto requestStop(Long memberId, Long productId, String reason) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return ProductStopRequestDto.from(productRequestStopUseCase.requestStop(sellerId, productId, reason));
+    }
+
+    /** 승인된 판매자의 본인 상품 옵션 재고 이력 (최신순) */
+    @Transactional(readOnly = true)
+    public PageResponse<StockHistoryDto> getStockHistories(Long memberId, Long productId, Long optionId, Pageable pageable) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productGetStockHistoriesUseCase.getStockHistories(sellerId, productId, optionId, pageable);
     }
 
     /** 승인된 판매자가 자기 상품 옵션의 재고를 증감량만큼 조정하고, 조정 후 재고를 돌려준다. */
