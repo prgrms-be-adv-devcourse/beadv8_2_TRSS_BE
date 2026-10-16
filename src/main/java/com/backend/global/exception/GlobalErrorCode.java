@@ -27,6 +27,7 @@ public enum GlobalErrorCode implements ErrorCode {
     CONCURRENT_UPDATE(409, "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),
     DATA_CONFLICT(409, "이미 처리되었거나 충돌하는 요청입니다."),
     IDEMPOTENCY_KEY_REUSED(409, "같은 요청 키로 다른 요청을 보낼 수 없습니다."),
+    LOCK_CONFLICT(409, "요청이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."),
 
     // 요청 제한
     TOO_MANY_REQUESTS(429, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
