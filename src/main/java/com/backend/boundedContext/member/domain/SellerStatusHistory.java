@@ -73,6 +73,12 @@ public class SellerStatusHistory extends BaseIdAndTime {
         return history;
     }
 
+    // 회원 탈퇴: 신청서 스냅샷의 개인정보(대표자명·계좌 끝 4자리)를 지운다
+    public void anonymize() {
+        this.representativeName = null;
+        this.accountLast4 = null;
+    }
+
     static SellerStatusHistory withSnapshot(Seller seller, SellerStatus fromStatus, String reason) {
         SellerStatusHistory history = of(seller, fromStatus, reason);
         history.businessName = seller.getBusinessName();

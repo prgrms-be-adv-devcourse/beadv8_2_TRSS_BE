@@ -61,10 +61,30 @@ public class ProductStopRequest extends BaseIdAndTime {
 
     /** 심사 중에 상품이 삭제되거나 다른 이유로 중지되어 요청을 닫는다. 심사 중인 요청에만 쓴다. */
     public void cancel() {
+        checkPending();
+        status = ProductStopRequestStatus.CANCELED;
+        reviewedAt = LocalDateTime.now();
+    }
+
+    /** 관리자가 승인한다. 상품은 판매자가 적은 사유로 판매 중지(SELLER_REQUEST)된다. 이미 처리된 요청이면 409. */
+    public void approve() {
+        checkPending();
+        product.stopBySellerRequest(reason);
+        status = ProductStopRequestStatus.APPROVED;
+        reviewedAt = LocalDateTime.now();
+    }
+
+    /** 관리자가 반려 사유를 적고 반려한다. 상품은 그대로 판매 중이다. 이미 처리된 요청이면 409. */
+    public void reject(String rejectReason) {
+        checkPending();
+        status = ProductStopRequestStatus.REJECTED;
+        this.rejectReason = rejectReason.strip();
+        reviewedAt = LocalDateTime.now();
+    }
+
+    private void checkPending() {
         if (status != ProductStopRequestStatus.PENDING) {
             throw new DomainException(ProductErrorCode.STOP_REQUEST_NOT_PENDING);
         }
-        status = ProductStopRequestStatus.CANCELED;
-        reviewedAt = LocalDateTime.now();
     }
 }
