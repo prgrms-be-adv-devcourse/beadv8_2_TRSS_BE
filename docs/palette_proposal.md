@@ -222,7 +222,8 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /auth/refresh | POST | 회원 | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
 | /auth/logout | POST | USER | 로그아웃 | 401 |
 | /users/me | GET | USER | 내 정보 조회 | 401 |
-| /users/me | DELETE | USER | 회원 탈퇴(주문·미정산·잔액 0일 때만) | 409 WITHDRAWAL_NOT_ALLOWED |
+| /users/me/withdrawal | GET | USER | 탈퇴 조건 조회(진행 중 주문 여부·미정산 금액·잔액) | 401 |
+| /users/me | DELETE | USER | 회원 탈퇴(비밀번호 재확인, 주문·미정산·잔액 0일 때만) | 400 PASSWORD_MISMATCH, 409 WITHDRAWAL_NOT_ALLOWED, 429 LOGIN_LOCKED |
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |

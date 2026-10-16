@@ -29,6 +29,33 @@ class SellerTest {
     }
 
     @Test
+    @DisplayName("회원 탈퇴 비식별화: 대표자명·연락처·정산 계좌를 대체 값으로 바꾸고, 상호·사업자번호는 남긴다")
+    void anonymize() {
+        Seller seller = pending();
+        seller.reject("사업자번호 불일치");
+
+        seller.anonymize();
+
+        assertThat(seller.getRepresentativeName()).isEqualTo(Member.WITHDRAWN_NAME);
+        assertThat(seller.getPhoneNumber()).isEqualTo("0");
+        assertThat(seller.getAccountNumber()).isEqualTo("0");
+        assertThat(seller.getAccountHolder()).isEqualTo(Member.WITHDRAWN_NAME);
+        assertThat(seller.getBusinessName()).isEqualTo("팔레트 뷰티");
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 비식별화: 이력 스냅샷의 대표자명·계좌 끝 4자리를 지운다")
+    void anonymizeHistory() {
+        SellerStatusHistory history = pending().reject("사업자번호 불일치");
+
+        history.anonymize();
+
+        assertThat(history.getRepresentativeName()).isNull();
+        assertThat(history.getAccountLast4()).isNull();
+        assertThat(history.getBusinessNumber()).isEqualTo("1234567890");
+    }
+
+    @Test
     @DisplayName("처음 신청한 이력은 from이 없고 to가 PENDING")
     void appliedHistory() {
         SellerStatusHistory history = SellerStatusHistory.applied(pending());

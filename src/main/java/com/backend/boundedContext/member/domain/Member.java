@@ -2,7 +2,9 @@ package com.backend.boundedContext.member.domain;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.UUID;
 
+import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberRole;
@@ -22,6 +24,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "member")
 public class Member extends BaseIdAndTime {
+
+    // 탈퇴한 회원·판매자의 이름 자리에 넣는 값
+    public static final String WITHDRAWN_NAME = "탈퇴회원";
 
     @Column(nullable = false, unique = true, length = 100)
     private String email;
@@ -73,6 +78,18 @@ public class Member extends BaseIdAndTime {
         if (role == MemberRole.USER) {
             role = MemberRole.SELLER;
         }
+    }
+
+    // 탈퇴: DELETED로 바꾸고 개인정보를 비식별화한다.
+    // 이메일은 회원 ID로 만든 값으로 바꿔 원래 이메일로 다시 가입할 수 있게 하고, 비밀번호는 어떤 입력과도 맞지 않는 값으로 바꾼다
+    public void withdraw() {
+        if (!isActive()) throw new DomainException(MemberErrorCode.MEMBER_NOT_FOUND);
+
+        email = "deleted-" + getId() + "@deleted.palette";
+        name = WITHDRAWN_NAME;
+        password = UUID.randomUUID().toString();
+        status = MemberStatus.DELETED;
+        deletedAt = LocalDateTime.now();
     }
 
     public boolean isActive() {
