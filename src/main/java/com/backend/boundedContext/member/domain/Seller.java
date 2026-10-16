@@ -146,6 +146,15 @@ public class Seller extends BaseIdAndTime {
         this.accountHolder = accountHolder.strip();
     }
 
+    // 회원 탈퇴: 대표자명·연락처·정산 계좌를 비식별화한다. 상호·사업자번호는 공개된 사업자 정보라 정산 기록 확인용으로 남긴다
+    // 컬럼이 NOT NULL이라 비우지 않고 대체 값을 넣는다. 판매 중인 상태인지는 탈퇴 쪽에서 먼저 확인한다
+    public void anonymize() {
+        this.representativeName = Member.WITHDRAWN_NAME;
+        this.phoneNumber = "0";
+        this.accountNumber = "0";
+        this.accountHolder = Member.WITHDRAWN_NAME;
+    }
+
     // 판매자 기능(정보 수정 등)은 승인 상태(APPROVED)일 때만 가능
     private void checkApproved() {
         if (status != SellerStatus.APPROVED) throw new DomainException(MemberErrorCode.SELLER_NOT_APPROVED);

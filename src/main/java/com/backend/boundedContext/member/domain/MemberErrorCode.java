@@ -13,6 +13,8 @@ public enum MemberErrorCode implements ErrorCode {
 
     // 회원 조회
     MEMBER_NOT_FOUND(404, "회원을 찾을 수 없습니다."),
+    PASSWORD_MISMATCH(400, "비밀번호가 올바르지 않습니다."),          // 탈퇴 등 로그인 상태에서 본인 확인. 401은 프론트가 토큰 만료로 처리하므로 400
+    WITHDRAWAL_NOT_ALLOWED(409, "탈퇴 조건을 충족하지 않습니다."),    // data.reasons에 남은 조건
 
     // 회원가입·이메일 인증
     EMAIL_DUPLICATED(409, "이미 가입된 이메일입니다."),
