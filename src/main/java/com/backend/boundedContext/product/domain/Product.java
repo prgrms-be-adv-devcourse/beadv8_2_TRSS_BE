@@ -99,10 +99,35 @@ public class Product extends BaseIdAndTime {
         if (status != ProductSaleStatus.ON_SALE) {
             throw new IllegalStateException("판매 중인 상품만 중지할 수 있습니다. status=" + status);
         }
-        status = ProductSaleStatus.STOPPED;
-        stoppedBy = ProductStoppedBy.SELLER_WITHDRAWN;
-        stoppedReason = reason;
-        stoppedAt = LocalDateTime.now();
+        stop(ProductStoppedBy.SELLER_WITHDRAWN, reason);
+    }
+
+    /** 관리자가 사유를 적고 바로 판매를 멈춘다 (stoppedBy = ADMIN, 해제 없음). 판매 중(품절 포함)이 아니면 409. */
+    public void stopByAdmin(String reason) {
+        checkOnSale();
+        stop(ProductStoppedBy.ADMIN, reason.strip());
+    }
+
+    /**
+     * 관리자가 판매자의 중지 요청을 승인해 판매를 멈춘다 (stoppedBy = SELLER_REQUEST, 사유는 판매자가 적은 사유).
+     * 판매 중(품절 포함)이 아니면 409. {@link ProductStopRequest#approve()}가 부른다.
+     */
+    void stopBySellerRequest(String reason) {
+        checkOnSale();
+        stop(ProductStoppedBy.SELLER_REQUEST, reason);
+    }
+
+    private void checkOnSale() {
+        if (status != ProductSaleStatus.ON_SALE) {
+            throw new DomainException(ProductErrorCode.PRODUCT_NOT_ON_SALE);
+        }
+    }
+
+    private void stop(ProductStoppedBy stoppedBy, String reason) {
+        this.status = ProductSaleStatus.STOPPED;
+        this.stoppedBy = stoppedBy;
+        this.stoppedReason = reason;
+        this.stoppedAt = LocalDateTime.now();
     }
 
     /**
