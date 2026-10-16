@@ -96,4 +96,21 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id in :ids order by o.id")
     List<Order> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
+
+    // 주문에 들어 있는 상품 id 조회
+    @Query("""
+            select distinct i.productId
+            from OrderItem i
+            where i.order.id = :orderId
+            """)
+    List<Long> findProductIdsByOrderId(@Param("orderId") Long orderId);
+
+    // 본인 주문에 들어 있는 상품 id
+    @Query("""
+            select distinct i.productId
+            from OrderItem i
+            where i.order.id = :orderId
+              and i.order.buyerId = :buyerId
+            """)
+    List<Long> findProductIdsByOrderIdAndBuyerId(@Param("orderId") Long orderId, @Param("buyerId") Long buyerId);
 }

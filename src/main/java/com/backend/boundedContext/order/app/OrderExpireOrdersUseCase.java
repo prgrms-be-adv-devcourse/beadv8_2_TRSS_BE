@@ -13,8 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 결제 만료 주문 취소
- * 만료 시각 + expireGraceMinutes분이 지난 결제 대기 주문을 한 건씩 취소하고 재고를 복원한다.
+ * 결제 만료 후 주문 취소
  */
 @Component
 @RequiredArgsConstructor
@@ -26,17 +25,21 @@ public class OrderExpireOrdersUseCase {
     private final OrderPolicy orderPolicy;
     private final OrderCancelSupport orderCancelSupport;
 
-    // 만료 처리 대상 주문 id
+    // 만료 처리 대상 주문 id 조회
     public List<Long> findTargetIds(LocalDateTime now, Long afterId, int limit) {
         LocalDateTime expiredBefore = now.minusMinutes(orderPolicy.getExpireGraceMinutes());
         return orderRepository.findExpireTargetIds(Order.PAYMENT_PENDING_STATUSES, expiredBefore, afterId, PageRequest.of(0, limit));
     }
 
-    /**
-     * 주문 한 건 만료 취소
-     * 조회 이후 결제 완료·구매자 취소가 먼저 반영됐을 수 있어, 잠근 뒤 대상인지 다시 확인한다
-     */
+    // 주문 한 건 만료 취소
     public boolean expire(Long orderId, LocalDateTime now) {
+        // 상품 -> 주문 잠금
+        List<Long> productIds = orderRepository.findProductIdsByOrderId(orderId);
+        if (productIds.isEmpty()) {
+            return false;
+        }
+        orderCancelSupport.lockProducts(productIds);
+
         Optional<Order> found = orderRepository.findByIdForUpdate(orderId);
         if (found.isEmpty() || !found.get().isExpirable(now, orderPolicy.getExpireGraceMinutes())) {
             return false;

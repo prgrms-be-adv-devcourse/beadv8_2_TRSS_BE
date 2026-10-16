@@ -32,12 +32,12 @@ public class OrderCancelPendingOrdersUseCase {
             return 0;
         }
 
-        // id 순서대로 잠근다
+        // id 순서대로 잠금
         List<Order> orders = orderRepository.findAllByIdInForUpdate(orderIds);
 
         int canceled = 0;
         for (Order order : orders) {
-            // 조회 이후 결제 완료,구매자 취소 및 만료가 먼저 반영됐을 수 있어, 잠근 뒤 다시 확인한다
+            // 조회 이후 결제 완료,구매자 취소 및 만료가 먼저 반영됐을 수 있어서 잠근 뒤 다시 확인
             if (!order.isPaymentPending()) {
                 continue;
             }
