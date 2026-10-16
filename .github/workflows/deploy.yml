@@ -1,0 +1,51 @@
+# develop에 push(머지)되면 개발 서버(EC2)에 배포한다. PR 이벤트로는 실행되지 않는다.
+# 배포 전용 키로 SSH 접속만 한다. 서버의 authorized_keys가 이 키로 실행할 명령을 고정해 두어서
+# (develop 최신 코드 받기 → scripts/deploy.sh), 키가 유출돼도 다른 명령은 실행할 수 없다.
+#
+# 필요한 Secrets: EC2_HOST, EC2_USER, EC2_SSH_KEY(배포 전용 비밀키), EC2_KNOWN_HOSTS(서버 지문)
+name: Deploy
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:   # Actions 탭에서 수동 재배포
+
+permissions:
+  contents: read
+
+# 배포는 한 번에 하나씩. 진행 중인 배포는 취소하지 않고 다음 배포가 기다린다.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 서버 지문을 미리 고정해, 접속한 서버가 진짜 우리 서버인지 확인한다.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy to dev server
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            "$EC2_USER@$EC2_HOST"
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
