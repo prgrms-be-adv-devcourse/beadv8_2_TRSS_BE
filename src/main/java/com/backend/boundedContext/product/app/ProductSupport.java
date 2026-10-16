@@ -162,6 +162,28 @@ public class ProductSupport {
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 
+    /**
+     * 판매자 본인의 삭제되지 않은 상품을 쓰기 잠금하고 DB 값으로 다시 읽는다 (삭제·중지 요청용).
+     * 주문이 같은 상품을 잠그고 있으면 끝날 때까지 기다린다. 없거나 다른 판매자 상품이거나 삭제됐으면 404.
+     */
+    public Product lockSellerProduct(Long sellerId, Long productId) {
+        Product product = productRepository.findForUpdateById(productId)
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+        entityManager.refresh(product);
+        if (!product.getSellerId().equals(sellerId) || product.isDeleted()) {
+            throw new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return product;
+    }
+
+    /** 판매자 본인 상품(삭제 안 됨)의 옵션. 상품이 없거나 남의 것이거나, 옵션이 그 상품의 것이 아니면 404. */
+    public ProductOption getSellerOption(Long sellerId, Long productId, Long optionId) {
+        Product product = getSellerProduct(sellerId, productId);
+        return productOptionRepository.findById(optionId)
+                .filter(option -> option.getProduct().getId().equals(product.getId()))
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    }
+
     /** 판매자 상품 수정 폼을 채우는 값. 이미지 ID는 수정할 때 남길 상세 이미지를 고르는 데 쓴다. */
     public SellerProductFormDto getSellerProductForm(Long sellerId, Long productId) {
         Product product = getSellerProduct(sellerId, productId);
