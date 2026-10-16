@@ -40,4 +40,12 @@ public interface SellerRepository extends JpaRepository<Seller, Long> {
             where (:status is null or s.status = :status)
             """)
     Page<Seller> findAllForAdmin(@Param("status") SellerStatus status, Pageable pageable);
+
+    // 관리자 판매자 목록의 탭별 건수: 상태별로 한 번에 센다. 판매자가 없는 상태는 결과에 없다
+    @Query("""
+            select new com.backend.boundedContext.member.out.SellerStatusCountRow(s.status, count(s))
+            from Seller s
+            group by s.status
+            """)
+    List<SellerStatusCountRow> countGroupByStatus();
 }
