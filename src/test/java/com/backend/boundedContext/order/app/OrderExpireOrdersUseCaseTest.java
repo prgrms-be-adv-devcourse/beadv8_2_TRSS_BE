@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
@@ -22,12 +23,14 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class OrderExpireOrdersUseCaseTest {
@@ -38,6 +41,7 @@ class OrderExpireOrdersUseCaseTest {
     OrderExpireOrdersUseCase useCase;
 
     private static final Long ORDER_ID = 500L;
+    private static final Long PRODUCT_ID = 10L;
     private static final LocalDateTime CREATED_AT = LocalDateTime.of(2026, 10, 15, 10, 0);
     private static final LocalDateTime EXPIRES_AT = CREATED_AT.plusMinutes(15);
 
@@ -73,6 +77,7 @@ class OrderExpireOrdersUseCaseTest {
     void expire() {
         Order order = pendingOrder();
         LocalDateTime now = EXPIRES_AT.plusMinutes(1);
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
         boolean result = useCase.expire(ORDER_ID, now);
@@ -94,11 +99,12 @@ class OrderExpireOrdersUseCaseTest {
     void expire_paid() {
         Order order = pendingOrder();
         order.pay(EXPIRES_AT.minusSeconds(1));   // 만료 직전 결제
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
         assertThat(useCase.expire(ORDER_ID, EXPIRES_AT.plusMinutes(1))).isFalse();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
     }
 
     @Test
@@ -106,30 +112,59 @@ class OrderExpireOrdersUseCaseTest {
     void expire_alreadyCanceled() {
         Order order = pendingOrder();
         order.cancel(OrderCancelType.USER, "구매자 취소", EXPIRES_AT.plusSeconds(30));
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
         assertThat(useCase.expire(ORDER_ID, EXPIRES_AT.plusMinutes(1))).isFalse();
         assertThat(order.getCancelType()).isEqualTo(OrderCancelType.USER);
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
     }
 
     @Test
     @DisplayName("expire: 만료 시각 + 1분이 아직 안 됐으면 건너뛴다")
     void expire_notYet() {
         Order order = pendingOrder();
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
         assertThat(useCase.expire(ORDER_ID, EXPIRES_AT.plusMinutes(1).minusSeconds(1))).isFalse();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CREATED);
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
     }
 
     @Test
     @DisplayName("expire: 주문이 없으면 건너뛴다")
     void expire_notFound() {
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of(PRODUCT_ID));
         given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
 
         assertThat(useCase.expire(ORDER_ID, EXPIRES_AT.plusMinutes(1))).isFalse();
-        verifyNoInteractions(productApi);
+        verify(productApi, never()).restoreStock(any(), any());
+    }
+
+    @Test
+    @DisplayName("expire 잠금 순서: 상품 ID 조회 → 상품 읽기 잠금 → 주문 쓰기 잠금 → 재고 복원")
+    void expire_lockOrder() {
+        Order order = pendingOrder();
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of(PRODUCT_ID));
+        given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+
+        useCase.expire(ORDER_ID, EXPIRES_AT.plusMinutes(1));
+
+        InOrder inOrder = inOrder(orderRepository, productApi);
+        inOrder.verify(orderRepository).findProductIdsByOrderId(ORDER_ID);
+        inOrder.verify(productApi).lockProductsForOrderChange(List.of(PRODUCT_ID));
+        inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+        inOrder.verify(productApi).restoreStock(any(), eq(StockRestoreReason.ORDER_RESTORE));
+    }
+
+    @Test
+    @DisplayName("expire: 주문 항목이 없으면(없는 주문) 상품·주문을 잠그지 않고 건너뛴다")
+    void expire_noItems() {
+        given(orderRepository.findProductIdsByOrderId(ORDER_ID)).willReturn(List.of());
+
+        assertThat(useCase.expire(ORDER_ID, EXPIRES_AT.plusMinutes(1))).isFalse();
+        verify(productApi, never()).lockProductsForOrderChange(any());
+        verify(orderRepository, never()).findByIdForUpdate(any());
     }
 }
