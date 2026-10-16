@@ -30,6 +30,9 @@ dependencies {
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-gson:0.12.6")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
+	// 상품 이미지 S3 저장소 (custom.product.image.storage=s3일 때만 사용)
+	implementation(platform("software.amazon.awssdk:bom:2.52.0"))
+	implementation("software.amazon.awssdk:s3")
 
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
