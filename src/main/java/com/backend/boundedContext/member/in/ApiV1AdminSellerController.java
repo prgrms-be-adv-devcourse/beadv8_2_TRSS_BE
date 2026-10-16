@@ -12,9 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.backend.boundedContext.member.app.MemberSellerFacade;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
-import com.backend.boundedContext.member.app.dto.AdminSellerDto;
+import com.backend.boundedContext.member.app.dto.AdminSellerListDto;
 import com.backend.boundedContext.member.in.dto.SellerReasonRequest;
-import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import com.backend.shared.member.dto.SellerStatus;
 
@@ -31,9 +30,9 @@ public class ApiV1AdminSellerController {
 
     private final MemberSellerFacade memberSellerFacade;
 
-    @Operation(summary = "판매자 목록 조회", description = "심사 대기(PENDING)를 먼저, 그다음 최근 신청순으로 고정(sort 값은 무시). page(0부터), size(기본 20, 최대 100)")
+    @Operation(summary = "판매자 목록 조회", description = "심사 대기(PENDING)를 먼저, 그다음 최근 신청순으로 고정(sort 값은 무시). status를 비우면 전체. page(0부터), size(기본 20, 최대 100). counts는 status 필터와 관계없이 전체 판매자 기준 탭별 건수")
     @GetMapping
-    public RsData<PageResponse<AdminSellerDto>> getSellers(
+    public RsData<AdminSellerListDto> getSellers(
             @RequestParam(required = false) SellerStatus status,
             @ParameterObject Pageable pageable
     ) {
