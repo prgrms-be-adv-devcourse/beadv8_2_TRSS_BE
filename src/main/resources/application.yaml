@@ -19,6 +19,12 @@ spring:
     hibernate:
       ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
 
+  # 상품 이미지 업로드 크기. 대표 1장 + 상세 10장을 한 요청으로 받는다 (nginx client_max_body_size도 같이 맞춘다)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 60MB
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -76,6 +82,12 @@ custom:
     accountEncryption:
       password: ${ACCOUNT_ENCRYPTION_PASSWORD}
       salt: ${ACCOUNT_ENCRYPTION_SALT}
+  product:
+    image:
+      maxDetailImages: 10      # 상품 하나의 상세 이미지 최대 개수 (대표 이미지는 별도 1개)
+      storage: local           # 이미지 저장소. local(로컬 파일 시스템)만 있고, s3는 다음 이슈에서 추가한다
+      localDir: ${PRODUCT_IMAGE_DIR:./uploads}                          # local 저장 폴더 (Git에 올리지 않는다)
+      baseUrl: ${PRODUCT_IMAGE_BASE_URL:http://localhost:8080/images}   # local 이미지 URL 앞부분. 앱이 /images/**로 파일을 내려 준다
   order:
     cartMaxQuantity: 99        # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)

@@ -13,7 +13,7 @@ import java.util.List;
  * @param price          가격 (원)
  * @param categoryId     소분류 ID (사용 중인 소분류만 가능)
  * @param description    상품 설명
- * @param detailImageIds 남길 기존 상세 이미지 ID (원하는 순서대로). 빠진 이미지는 삭제된다. 동작은 이미지 기능에서 구현
+ * @param detailImageIds 남길 기존 상세 이미지 ID (원하는 순서대로). 빠진 이미지는 삭제된다. 보내지 않으면(null) 상세 이미지를 그대로 둔다
  */
 public record ProductModifyRequest(
         @Size(max = 100) String name,

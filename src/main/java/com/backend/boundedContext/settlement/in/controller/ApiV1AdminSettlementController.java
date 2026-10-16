@@ -4,16 +4,26 @@ import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.app.SettlementFacade;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
-import com.backend.boundedContext.settlement.in.dto.*;
+import com.backend.boundedContext.settlement.in.dto.SettlementDetailResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementHistoryResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementHoldRequest;
+import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
+import com.backend.boundedContext.settlement.in.dto.SettlementPreviewResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementRetryRequest;
+import com.backend.boundedContext.settlement.in.dto.SettlementRunRequest;
+import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,7 +41,7 @@ import java.util.List;
  *
  * /api/v1/admin/** 은 SecurityConfig에서 ADMIN만 들어올 수 있다
  */
-@Tag(name = "관리자 정산", description = "월 정산 실행·조회·수동 재처리·보류·해제·처리 이력")
+@Tag(name = "관리자 정산", description = "월 정산 실행·조회·미리보기·수동 재처리·보류·해제·처리 이력")
 @RestController
 @RequestMapping("/api/v1/admin/settlements")
 @RequiredArgsConstructor
@@ -89,6 +99,19 @@ public class ApiV1AdminSettlementController {
                                                 @Valid @RequestBody SettlementRetryRequest request) {
         return RsData.of("200-1", "정산 재처리를 마쳤습니다.",
                 settlementFacade.retry(settlementId, request.reason()));
+    }
+
+    @Operation(summary = "정산 미리보기",
+            description = "month(yyyy-MM) 월 정산을 지금 실행하면 집계될 판매자별 대상 후보 수·예상 금액(저장하지 않음). "
+                    + "정산월이 대상월 이전인 READY 후보(이월분)도 포함하고, 제재된 판매자는 willHold=true")
+    @ApiResponse(responseCode = "200", description = "200-1 조회 성공")
+    @ApiResponse(responseCode = "400", description = "400-INVALID_REQUEST month 없음 / 400-VALIDATION_FAILED 형식 오류")
+    @GetMapping("/preview")
+    public RsData<SettlementPreviewResponse> getPreview(
+            @RequestParam @NotBlank @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String month,
+            @ParameterObject Pageable pageable) {
+        return RsData.of("200-1", "정산 미리보기를 조회했습니다.",
+                settlementFacade.getPreview(YearMonth.parse(month), pageable));
     }
 
     @Operation(summary = "정산서 처리 이력", description = "정산서 1건의 집계·지급·보류·해제 이력(성공·실패·건너뜀)을 처리 순서대로")

@@ -5,6 +5,9 @@ import com.backend.boundedContext.order.domain.CartItem;
 import com.backend.boundedContext.order.domain.UnorderableReason;
 import com.backend.boundedContext.order.in.dto.CartItemResponse;
 import com.backend.boundedContext.order.in.dto.CartResponse;
+import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import com.backend.shared.product.out.ProductApi;
@@ -31,6 +34,7 @@ class OrderGetCartUseCaseTest {
 
     @Mock OrderSupport orderSupport;
     @Mock ProductApi productApi;   // 상품 모듈 대역
+    @Mock MemberApi memberApi;     // 회원 모듈 대역
 
     @InjectMocks OrderGetCartUseCase useCase;
 
@@ -76,6 +80,32 @@ class OrderGetCartUseCaseTest {
         assertThat(item.optionId()).isEqualTo(100L);
         assertThat(item.productId()).isEqualTo(10L);
         assertThat(item.optionName()).isEqualTo("기본");
+        assertThat(item.orderable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("판매자 상호명을 응답에 담는다")
+    void sellerName() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1)));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 5)));
+        given(memberApi.getSellers(List.of(2L)))
+                .willReturn(List.of(new SellerDto(2L, 20L, "온결", SellerStatus.APPROVED)));
+
+        CartItemResponse item = useCase.getCart(BUYER_ID).items().get(0);
+
+        assertThat(item.sellerName()).isEqualTo("온결");
+    }
+
+    @Test
+    @DisplayName("판매자 정보가 없으면 상호명만 비우고 조회는 성공한다")
+    void sellerMissing() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1)));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 5)));
+        given(memberApi.getSellers(List.of(2L))).willReturn(List.of());
+
+        CartItemResponse item = useCase.getCart(BUYER_ID).items().get(0);
+
+        assertThat(item.sellerName()).isNull();
         assertThat(item.orderable()).isTrue();
     }
 

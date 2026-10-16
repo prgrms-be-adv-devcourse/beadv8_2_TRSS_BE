@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -53,6 +54,11 @@ public class GlobalExceptionHandler {
             MissingServletRequestParameterException.class, HttpMediaTypeNotSupportedException.class})
     public ResponseEntity<RsData<Object>> handleBadRequest(Exception e) {
         return toResponse(GlobalErrorCode.INVALID_REQUEST, null);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)   // spring.servlet.multipart 크기 제한 초과
+    public ResponseEntity<RsData<Object>> handleUploadSize(MaxUploadSizeExceededException e) {
+        return toResponse(GlobalErrorCode.FILE_TOO_LARGE, null);
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)

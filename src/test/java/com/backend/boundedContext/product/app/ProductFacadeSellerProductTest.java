@@ -163,7 +163,7 @@ class ProductFacadeSellerProductTest {
     void modifyProduct() {
         Product product = create(SELLER_ID, "수분 크림", 10);
 
-        productFacade.modifyProduct(MEMBER_ID, product.getId(), "진정 크림", 30_000L, makeup.getId(), null);
+        productFacade.modifyProduct(MEMBER_ID, product.getId(), "진정 크림", 30_000L, makeup.getId(), null, null, null, null);
 
         assertThat(product.getName()).isEqualTo("진정 크림");
         assertThat(product.getPrice()).isEqualTo(30_000);
@@ -179,10 +179,10 @@ class ProductFacadeSellerProductTest {
         Product stopped = create(SELLER_ID, "중지된 크림", 10);
         stop(stopped, "사유");
 
-        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, other.getId(), "새 이름", null, null, null))
+        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, other.getId(), "새 이름", null, null, null, null, null, null))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-PRODUCT_NOT_FOUND");
-        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, stopped.getId(), "새 이름", null, null, null))
+        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, stopped.getId(), "새 이름", null, null, null, null, null, null))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
     }
@@ -193,10 +193,10 @@ class ProductFacadeSellerProductTest {
         Product product = create(SELLER_ID, "수분 크림", 10);
         Long beautyId = skincare.getParent().getId();
 
-        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, product.getId(), null, null, Long.MAX_VALUE, null))
+        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, product.getId(), null, null, Long.MAX_VALUE, null, null, null, null))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-CATEGORY_NOT_FOUND");
-        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, product.getId(), null, null, beautyId, null))
+        assertThatThrownBy(() -> productFacade.modifyProduct(MEMBER_ID, product.getId(), null, null, beautyId, null, null, null, null))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-CATEGORY_NOT_SELECTABLE");
     }

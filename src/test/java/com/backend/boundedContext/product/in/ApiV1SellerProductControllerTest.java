@@ -2,6 +2,7 @@ package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
+import com.backend.boundedContext.product.app.dto.ProductImageFile;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
@@ -14,6 +15,7 @@ import com.backend.global.security.SecurityErrorResponseWriter;
 import com.backend.shared.member.dto.MemberRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -30,6 +32,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.times;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -65,7 +70,8 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("상품 등록: 토큰의 회원 ID로 등록하고 상품 ID를 돌려준다")
     void createProduct_success() throws Exception {
-        given(productFacade.createProduct(2L, 5L, "수분 크림", "촉촉한 크림", 25_000, 30)).willReturn(11L);
+        given(productFacade.createProduct(eq(2L), eq(5L), eq("수분 크림"), eq("촉촉한 크림"), eq(25_000L), eq(30), any(), any()))
+                .willReturn(11L);
 
         create(MemberRole.SELLER, jsonPart(VALID_REQUEST))
                 .andExpect(status().isOk())
@@ -81,7 +87,7 @@ class ApiV1SellerProductControllerTest {
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("stock"));
 
-        verify(productFacade, never()).createProduct(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyInt());
+        verify(productFacade, never()).createProduct(any(), any(), any(), any(), anyLong(), anyInt(), any(), any());
     }
 
     @Test
@@ -104,29 +110,32 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("상품 등록: 대표 이미지가 없으면 400 THUMBNAIL_REQUIRED")
+    @DisplayName("상품 등록: 대표 이미지 파트가 없거나 비어 있으면 null로 넘긴다 (필수 검사는 Facade)")
     void createProduct_noThumbnail() throws Exception {
-        create(MemberRole.SELLER, new MockMultipartFile[]{jsonPart(VALID_REQUEST)})
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.resultCode").value("400-THUMBNAIL_REQUIRED"));
-
         MockMultipartFile emptyThumbnail = new MockMultipartFile("thumbnail", "a.png", MediaType.IMAGE_PNG_VALUE, new byte[0]);
-        create(MemberRole.SELLER, jsonPart(VALID_REQUEST), emptyThumbnail)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.resultCode").value("400-THUMBNAIL_REQUIRED"));
 
-        verify(productFacade, never()).createProduct(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyInt());
+        create(MemberRole.SELLER, new MockMultipartFile[]{jsonPart(VALID_REQUEST)}).andExpect(status().isOk());
+        create(MemberRole.SELLER, jsonPart(VALID_REQUEST), emptyThumbnail).andExpect(status().isOk());
+
+        verify(productFacade, times(2)).createProduct(any(), any(), any(), any(), anyLong(), anyInt(), isNull(), eq(List.of()));
     }
 
     @Test
-    @DisplayName("상품 등록: 상세 이미지를 함께 보내도 등록된다")
+    @DisplayName("상품 등록: 이미지 파일 내용을 그대로 넘기고, 상세 이미지는 보낸 순서를 지키며 빈 파트는 뺀다")
     void createProduct_withDetailImages() throws Exception {
-        given(productFacade.createProduct(2L, 5L, "수분 크림", "촉촉한 크림", 25_000, 30)).willReturn(11L);
-        MockMultipartFile detail = new MockMultipartFile("detailImages", "d.png", MediaType.IMAGE_PNG_VALUE, new byte[]{1});
+        MockMultipartFile first = new MockMultipartFile("detailImages", "1.png", MediaType.IMAGE_PNG_VALUE, new byte[]{1});
+        MockMultipartFile empty = new MockMultipartFile("detailImages", "e.png", MediaType.IMAGE_PNG_VALUE, new byte[0]);
+        MockMultipartFile second = new MockMultipartFile("detailImages", "2.png", MediaType.IMAGE_PNG_VALUE, new byte[]{2});
 
-        create(MemberRole.SELLER, jsonPart(VALID_REQUEST), THUMBNAIL, detail, detail)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.productId").value(11));
+        create(MemberRole.SELLER, jsonPart(VALID_REQUEST), THUMBNAIL, first, empty, second)
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ProductImageFile> thumbnail = ArgumentCaptor.captor();
+        ArgumentCaptor<List<ProductImageFile>> details = ArgumentCaptor.captor();
+        verify(productFacade).createProduct(eq(2L), eq(5L), any(), any(), anyLong(), anyInt(), thumbnail.capture(), details.capture());
+        assertThat(thumbnail.getValue().content()).isEqualTo(THUMBNAIL.getBytes());
+        assertThat(details.getValue()).extracting(ProductImageFile::content)
+                .containsExactly(new byte[]{1}, new byte[]{2});
     }
 
     @Test
@@ -182,7 +191,30 @@ class ApiV1SellerProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"));
 
-        verify(productFacade).modifyProduct(2L, 11L, "진정 크림", 30_000L, null, null);
+        verify(productFacade).modifyProduct(eq(2L), eq(11L), eq("진정 크림"), eq(30_000L), isNull(), isNull(),
+                isNull(), isNull(), eq(List.of()));
+    }
+
+    @Test
+    @DisplayName("상품 수정: 남길 상세 이미지 ID와 새 이미지 파일을 넘긴다")
+    void modifyProduct_withImages() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+        MockMultipartFile detail = new MockMultipartFile("detailImages", "d.png", MediaType.IMAGE_PNG_VALUE, new byte[]{3});
+
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/v1/seller/products/11")
+                        .file(jsonPart("""
+                                {"detailImageIds":[7,5]}"""))
+                        .file(THUMBNAIL)
+                        .file(detail)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ProductImageFile> thumbnail = ArgumentCaptor.captor();
+        ArgumentCaptor<List<ProductImageFile>> details = ArgumentCaptor.captor();
+        verify(productFacade).modifyProduct(eq(2L), eq(11L), isNull(), isNull(), isNull(), isNull(),
+                eq(List.of(7L, 5L)), thumbnail.capture(), details.capture());
+        assertThat(thumbnail.getValue().content()).isEqualTo(THUMBNAIL.getBytes());
+        assertThat(details.getValue()).extracting(ProductImageFile::content).containsExactly(new byte[]{3});
     }
 
     @Test
@@ -198,7 +230,7 @@ class ApiV1SellerProductControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("price"));
 
-        verify(productFacade, never()).modifyProduct(any(), any(), any(), any(), any(), any());
+        verify(productFacade, never()).modifyProduct(any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

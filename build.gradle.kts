@@ -49,6 +49,8 @@ dependencies {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	jvmArgs("-Duser.timezone=Asia/Seoul")
+	// 테스트가 저장하는 상품 이미지는 build 폴더에 둔다 (로컬 개발용 ./uploads와 섞이지 않게)
+	systemProperty("PRODUCT_IMAGE_DIR", layout.buildDirectory.dir("test-uploads").get().asFile.absolutePath)
 }
 
 tasks.named<JavaExec>("bootRun") {
