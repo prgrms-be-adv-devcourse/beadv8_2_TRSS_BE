@@ -105,6 +105,16 @@ public class Product extends BaseIdAndTime {
         stoppedAt = LocalDateTime.now();
     }
 
+    /**
+     * 판매자가 상품을 지운다 (소프트 삭제). 판매 중(품절 포함)인 상품만 지울 수 있고, 판매 중지 상품이면 409.
+     * 결제 대기 주문 취소와 심사 중인 중지 요청 정리는 app 계층이 함께 한다.
+     */
+    public void delete() {
+        checkEditable();
+        status = ProductSaleStatus.DELETED;
+        deletedAt = LocalDateTime.now();
+    }
+
     /** 판매자 철회로 멈춘 상품인지. 이 상품만 철회 거절 때 되돌린다. */
     public boolean isStoppedBySellerWithdrawal() {
         return status == ProductSaleStatus.STOPPED && stoppedBy == ProductStoppedBy.SELLER_WITHDRAWN;

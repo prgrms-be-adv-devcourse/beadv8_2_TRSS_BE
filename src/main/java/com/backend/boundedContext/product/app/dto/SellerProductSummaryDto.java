@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
  * @param stock         삭제되지 않은 옵션의 재고 합계
  * @param stoppedBy     판매 중지 주체. 판매 중지가 아니면 null
  * @param stoppedReason 판매 중지 사유. 판매 중지가 아니면 null
+ * @param stopRequestPending 판매자가 보낸 판매 중지 요청이 관리자 심사 중이면 true
  */
 public record SellerProductSummaryDto(
         Long productId,
@@ -25,6 +26,7 @@ public record SellerProductSummaryDto(
         ProductDisplayStatus status,
         ProductStoppedBy stoppedBy,
         String stoppedReason,
+        boolean stopRequestPending,
         LocalDateTime createdAt
 ) {
 }

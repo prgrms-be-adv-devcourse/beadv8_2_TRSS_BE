@@ -9,6 +9,7 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
@@ -60,6 +61,10 @@ class ProductFacadeSellerStopTest {
 
     @MockitoBean
     private OrderApi orderApi;
+
+    /** 쓰지 않지만 ProductFacadeSellerFinishTest와 mock 조합을 맞춰 테스트 컨텍스트(DB 연결 풀)를 같이 쓴다 */
+    @MockitoBean
+    private MemberApi memberApi;
 
     private Category skincare;
 

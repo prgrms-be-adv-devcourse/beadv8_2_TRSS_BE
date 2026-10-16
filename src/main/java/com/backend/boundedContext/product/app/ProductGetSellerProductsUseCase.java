@@ -6,7 +6,9 @@ import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.ProductStopRequestRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.page.PageResponse;
 import lombok.RequiredArgsConstructor;
@@ -17,8 +19,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.backend.boundedContext.product.out.ProductSpecifications.inStock;
 import static com.backend.boundedContext.product.out.ProductSpecifications.nameContains;
@@ -36,6 +40,7 @@ public class ProductGetSellerProductsUseCase {
     private final ProductImageSupport productImageSupport;
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ProductStopRequestRepository productStopRequestRepository;
 
     /** 판매자 본인 상품 목록. 삭제된 상품은 빼고 최신순이며, 상태 필터가 null이면 전체다. */
     public PageResponse<SellerProductSummaryDto> getSellerProducts(Long sellerId, ProductDisplayStatus status,
@@ -70,6 +75,8 @@ public class ProductGetSellerProductsUseCase {
         List<Long> productIds = products.map(Product::getId).getContent();
         Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(productIds);
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
+        Set<Long> stopRequestPending = productIds.isEmpty() ? Set.of() : new HashSet<>(
+                productStopRequestRepository.findProductIdsByProductIdInAndStatus(productIds, ProductStopRequestStatus.PENDING));
 
         return PageResponse.from(products, product -> {
             List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
@@ -85,6 +92,7 @@ public class ProductGetSellerProductsUseCase {
                     ProductDisplayStatus.of(product, soldOut),
                     product.getStoppedBy(),
                     product.getStoppedReason(),
+                    stopRequestPending.contains(product.getId()),
                     product.getCreatedAt());
         });
     }

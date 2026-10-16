@@ -3,6 +3,8 @@ package com.backend.boundedContext.product.in;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductImageFile;
+import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
+import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
@@ -42,6 +44,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -269,6 +272,64 @@ class ApiV1SellerProductControllerTest {
                 {"changeQty":1}""")
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("상품 삭제: 토큰의 회원 ID와 경로의 상품 ID로 삭제한다")
+    void deleteProduct() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+
+        mockMvc.perform(delete("/api/v1/seller/products/11").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"));
+
+        verify(productFacade).deleteProduct(2L, 11L);
+    }
+
+    @Test
+    @DisplayName("판매 중지 요청: 사유를 넘기고 요청 정보를 돌려준다")
+    void requestStop() throws Exception {
+        given(productFacade.requestStop(2L, 11L, "단종")).willReturn(
+                new ProductStopRequestDto(5L, 11L, ProductStopRequestStatus.PENDING, "단종", null));
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+
+        mockMvc.perform(post("/api/v1/seller/products/11/stop-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason":"단종"}""")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requestId").value(5))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+    }
+
+    @Test
+    @DisplayName("판매 중지 요청: 사유가 없거나 공백이거나 300자를 넘으면 400 VALIDATION_FAILED")
+    void requestStop_invalidReason() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+
+        for (String body : List.of("{}", "{\"reason\":\"  \"}", "{\"reason\":\"" + "가".repeat(301) + "\"}")) {
+            mockMvc.perform(post("/api/v1/seller/products/11/stop-requests")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.data.fieldErrors[0].field").value("reason"));
+        }
+        verify(productFacade, never()).requestStop(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("재고 이력: 경로의 상품·옵션 ID와 페이지를 넘기고 PageResponse로 돌려준다")
+    void getStockHistories() throws Exception {
+        given(productFacade.getStockHistories(eq(2L), eq(11L), eq(21L), any(Pageable.class)))
+                .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
+
+        getAsSeller("/api/v1/seller/products/11/options/21/stock-history")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.size").value(20));
     }
 
     private ResultActions adjust(MemberRole role, String json) throws Exception {
