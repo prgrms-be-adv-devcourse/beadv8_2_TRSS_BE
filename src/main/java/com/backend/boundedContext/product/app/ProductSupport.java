@@ -7,6 +7,7 @@ import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
@@ -81,6 +82,16 @@ public class ProductSupport {
         }
 
         return options.stream().collect(Collectors.toMap(ProductOption::getId, Function.identity()));
+    }
+
+    /**
+     * 판매자의 이 상태 상품을 ID 순으로 쓰기 잠금하고 DB 값으로 다시 읽는다 (판매자 전체 중지·재개용).
+     * 같은 트랜잭션에서 먼저 읽어 둔 상품이 있어도 잠근 뒤의 최신 상태로 판단하기 위해 refresh한다 (lockOptions와 같은 이유).
+     */
+    public List<Product> lockSellerProducts(Long sellerId, ProductSaleStatus status) {
+        List<Product> products = productRepository.findAllForUpdateBySellerIdAndStatus(sellerId, status);
+        products.forEach(entityManager::refresh);
+        return products;
     }
 
     /** 주문 항목 중 이 사유로 이미 재고 이력이 있는 것 */

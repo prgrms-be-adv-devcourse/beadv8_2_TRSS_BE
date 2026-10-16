@@ -7,6 +7,7 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
+import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
@@ -167,6 +168,47 @@ class ProductStockConcurrencyTest {
         other.get(10, TimeUnit.SECONDS);
         executor.shutdown();
         assertThat(stock()).isEqualTo(3);   // 10 - 4 - 3. 옛 값(10)으로 계산하면 7이 된다
+    }
+
+    @Test
+    @DisplayName("판매자 전체 중지가 커밋되기 전에 들어온 주문은 기다렸다가, 중지된 상태를 보고 PRODUCT_NOT_ON_SALE로 실패한다")
+    void deductWhileStoppingAllBySeller() throws Exception {
+        CountDownLatch stopLocked = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        // 주문: 중지 트랜잭션이 상품을 잠근 뒤에 차감을 시도한다
+        Future<Throwable> order = executor.submit(() -> {
+            await(stopLocked);
+            try {
+                productFacade.deductStock(List.of(item(ORDER_ITEM_ID_BASE, 1)));
+                return null;
+            } catch (Throwable e) {
+                return e;
+            }
+        });
+
+        // 판매자 철회: 상품을 잠그고 중지한 뒤, 주문이 잠금에 걸릴 시간을 두고 커밋한다
+        transactionTemplate.executeWithoutResult(status -> {
+            productFacade.stopAllBySeller(SELLER_ID, "판매자 철회 요청");
+            stopLocked.countDown();
+            sleep(500);
+        });
+
+        Throwable orderResult = order.get(10, TimeUnit.SECONDS);
+        executor.shutdown();
+        assertThat(orderResult).isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_ON_SALE");
+        assertThat(stock()).isEqualTo(10);
+        assertThat(historyCount(StockChangeType.ORDER_DEDUCT)).isZero();
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 
     private StockChangeDto item(long orderItemId, int quantity) {

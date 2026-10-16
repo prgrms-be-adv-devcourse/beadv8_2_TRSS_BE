@@ -38,6 +38,8 @@ public class ProductFacade {
     private final ProductCreateProductUseCase productCreateProductUseCase;
     private final ProductDeductStockUseCase productDeductStockUseCase;
     private final ProductRestoreStockUseCase productRestoreStockUseCase;
+    private final ProductStopAllBySellerUseCase productStopAllBySellerUseCase;
+    private final ProductResumeAllBySellerUseCase productResumeAllBySellerUseCase;
     private final ProductAdjustStockUseCase productAdjustStockUseCase;
     private final ProductSearchProductsUseCase productSearchProductsUseCase;
     private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
@@ -59,6 +61,16 @@ public class ProductFacade {
     @Transactional
     public void restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
         productRestoreStockUseCase.restoreStock(items, reason);
+    }
+
+    @Transactional
+    public void stopAllBySeller(Long sellerId, String reason) {
+        productStopAllBySellerUseCase.stopAllBySeller(sellerId, reason);
+    }
+
+    @Transactional
+    public void resumeAllBySeller(Long sellerId) {
+        productResumeAllBySellerUseCase.resumeAllBySeller(sellerId);
     }
 
     @Transactional(readOnly = true)

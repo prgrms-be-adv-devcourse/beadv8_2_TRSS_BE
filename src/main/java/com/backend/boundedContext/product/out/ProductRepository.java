@@ -1,6 +1,7 @@
 package com.backend.boundedContext.product.out;
 
 import com.backend.boundedContext.product.domain.Product;
+import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -19,4 +20,12 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("select p from Product p where p.id in :ids order by p.id")
     List<Product> findAllForShareByIdIn(Collection<Long> ids);
+
+    /**
+     * 판매자의 이 상태 상품을 ID 순으로 쓰기 잠금(SELECT ... FOR UPDATE)한다 (판매자 전체 중지·재개용).
+     * 주문이 상품을 잠그는 순서(ID 순)와 같아서 동시에 들어와도 서로 기다릴 뿐 데드락이 나지 않는다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.sellerId = :sellerId and p.status = :status order by p.id")
+    List<Product> findAllForUpdateBySellerIdAndStatus(Long sellerId, ProductSaleStatus status);
 }
