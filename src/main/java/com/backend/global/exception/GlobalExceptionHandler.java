@@ -4,6 +4,7 @@ import com.backend.global.rsData.RsData;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -79,6 +80,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<RsData<Object>> handleOptimisticLock(Exception e) {
         return toResponse(GlobalErrorCode.CONCURRENT_UPDATE, null);
+    }
+
+    // 비관적 잠금 실패 (데드락·잠금 대기 시간 초과). 트랜잭션은 이미 롤백됐으므로 다시 시도하면 된다
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<RsData<Object>> handlePessimisticLock(PessimisticLockingFailureException e, HttpServletRequest req) {
+        log.warn("PessimisticLockingFailure {} {} {}", req.getMethod(), req.getRequestURI(), e.getMostSpecificCause().getMessage());
+        return toResponse(GlobalErrorCode.LOCK_CONFLICT, null);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

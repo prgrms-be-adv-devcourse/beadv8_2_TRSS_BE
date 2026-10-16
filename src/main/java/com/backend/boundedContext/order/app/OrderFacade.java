@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderSummaryDto;
 import com.backend.shared.order.dto.OrderStatus;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -35,6 +37,7 @@ public class OrderFacade {
     private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
+    private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -120,7 +123,7 @@ public class OrderFacade {
         return orderExpireOrdersUseCase.findTargetIds(now, afterId, limit);
     }
 
-    // 결제 만료 취소 한 건 (스케줄러) - 취소와 재고 복원을 한 트랜잭션으로, 주문마다 따로 연다
+    // 결제 만료 취소 한 건 (스케줄러)
     @Transactional
     public boolean expireOrder(Long orderId, LocalDateTime now) {
         return orderExpireOrdersUseCase.expire(orderId, now);
@@ -142,5 +145,11 @@ public class OrderFacade {
     @Transactional(readOnly = true)
     public boolean hasActiveSales(Long sellerId) {
         return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
+    }
+
+    // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi)
+    @Transactional
+    public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
+        return orderCancelPendingOrdersUseCase.cancel(productIds, cancelType, LocalDateTime.now());
     }
 }
