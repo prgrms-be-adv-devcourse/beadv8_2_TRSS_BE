@@ -165,4 +165,32 @@ class ProductTest {
         Product onSale = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
         assertThatThrownBy(onSale::resumeFromSellerWithdrawal).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    @DisplayName("삭제하면 DELETED와 삭제 시각이 남는다. 품절(재고 0)이어도 판매 중이면 지울 수 있다")
+    void delete() {
+        Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+
+        product.delete();
+
+        assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.DELETED);
+        assertThat(product.getDeletedAt()).isNotNull();
+        assertThat(product.isDisplayable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("판매 중지·삭제된 상품은 지울 수 없다 (PRODUCT_NOT_EDITABLE)")
+    void deleteNotEditable() {
+        Product stopped = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        stopped.stopBySellerWithdrawal("철회");
+        Product deleted = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        deleted.delete();
+
+        for (Product product : List.of(stopped, deleted)) {
+            assertThatThrownBy(product::delete)
+                    .isInstanceOf(DomainException.class)
+                    .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
+        }
+        assertThat(stopped.getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
+    }
 }
