@@ -8,10 +8,12 @@ import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import com.backend.boundedContext.product.domain.ProductStopRequest;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
+import com.backend.boundedContext.product.out.ProductStopRequestRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
@@ -39,6 +41,7 @@ public class ProductSupport {
     private final ProductRepository productRepository;
     private final ProductOptionRepository productOptionRepository;
     private final StockHistoryRepository stockHistoryRepository;
+    private final ProductStopRequestRepository productStopRequestRepository;
     private final MemberApi memberApi;
     private final ProductImageSupport productImageSupport;
     private final EntityManager entityManager;
@@ -167,13 +170,50 @@ public class ProductSupport {
      * 주문이 같은 상품을 잠그고 있으면 끝날 때까지 기다린다. 없거나 다른 판매자 상품이거나 삭제됐으면 404.
      */
     public Product lockSellerProduct(Long sellerId, Long productId) {
-        Product product = productRepository.findForUpdateById(productId)
-                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
-        entityManager.refresh(product);
+        Product product = lockProduct(productId);
         if (!product.getSellerId().equals(sellerId) || product.isDeleted()) {
             throw new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND);
         }
         return product;
+    }
+
+    /**
+     * 상품을 쓰기 잠금하고 DB 값으로 다시 읽는다 (관리자 중지용). 삭제된 상품도 돌려준다. 없으면 404.
+     * 주문이 같은 상품을 잠그고 있으면 끝날 때까지 기다린다.
+     */
+    public Product lockProduct(Long productId) {
+        Product product = productRepository.findForUpdateById(productId)
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+        entityManager.refresh(product);
+        return product;
+    }
+
+    /**
+     * 판매 중지 요청의 상품을 먼저 쓰기 잠금한 뒤 요청을 DB 값으로 다시 읽는다 (관리자 승인·반려용). 없으면 404.
+     * 상품 삭제·판매자 중지 요청·다른 관리자의 처리도 같은 상품을 먼저 잠그므로, 겹치면 한쪽이 끝난 뒤의 상태로 판단한다.
+     */
+    public ProductStopRequest lockStopRequest(Long requestId) {
+        ProductStopRequest request = productStopRequestRepository.findById(requestId)
+                .orElseThrow(() -> new DomainException(ProductErrorCode.STOP_REQUEST_NOT_FOUND));
+        lockProduct(request.getProduct().getId());
+        entityManager.refresh(request);
+        return request;
+    }
+
+    /**
+     * 관리자 상품 목록의 카테고리 조건. null이면 조건 없음, 대분류면 그 자신과 아래 소분류, 소분류면 그것 하나.
+     * 사용 중지된 카테고리도 포함한다. 없는 카테고리면 404.
+     */
+    public List<Long> getCategoryIdsForAdmin(Long categoryId) {
+        if (categoryId == null) return null;
+
+        Category category = getCategory(categoryId);
+        if (!category.isRoot()) return List.of(categoryId);
+
+        return categoryRepository.findAll().stream()
+                .filter(c -> c.getId().equals(categoryId) || (!c.isRoot() && c.getParent().getId().equals(categoryId)))
+                .map(Category::getId)
+                .toList();
     }
 
     /** 판매자 본인 상품(삭제 안 됨)의 옵션. 상품이 없거나 남의 것이거나, 옵션이 그 상품의 것이 아니면 404. */

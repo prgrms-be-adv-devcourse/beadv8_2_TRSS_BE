@@ -22,7 +22,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     @Query("select p from Product p where p.id in :ids order by p.id")
     List<Product> findAllForShareByIdIn(Collection<Long> ids);
 
-    /** 상품 하나를 쓰기 잠금(SELECT ... FOR UPDATE)한다 (삭제·중지 요청처럼 상품 상태를 보고 바꾸는 작업용) */
+    /** 상품 하나를 쓰기 잠금(SELECT ... FOR UPDATE)한다 (삭제·중지 요청·관리자 중지처럼 상품 상태를 보고 바꾸는 작업용) */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id = :id")
     Optional<Product> findForUpdateById(Long id);
