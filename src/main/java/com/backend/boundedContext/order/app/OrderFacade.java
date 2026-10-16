@@ -35,6 +35,7 @@ public class OrderFacade {
     private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
+    private final OrderGetSellerOrderItemsUseCase orderGetSellerOrderItemsUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -142,5 +143,13 @@ public class OrderFacade {
     @Transactional(readOnly = true)
     public boolean hasActiveSales(Long sellerId) {
         return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
+    }
+
+    // 판매자 주문 항목 조회
+    @Transactional(readOnly = true)
+    public PageResponse<SellerOrderItemResponse> getSellerOrderItems(Long memberId, OrderStatus status,
+                                                                     LocalDate from, LocalDate to,
+                                                                     String keyword, Pageable pageable) {
+        return orderGetSellerOrderItemsUseCase.getSellerOrderItems(memberId, status, from, to, keyword, pageable);
     }
 }
