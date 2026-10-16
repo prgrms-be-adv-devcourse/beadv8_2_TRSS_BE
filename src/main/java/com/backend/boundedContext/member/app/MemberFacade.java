@@ -36,6 +36,7 @@ public class MemberFacade {
     private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
     private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
     private final MemberGetWithdrawalCheckUseCase memberGetWithdrawalCheckUseCase;
+    private final MemberWithdrawUseCase memberWithdrawUseCase;
     private final MemberSupport memberSupport;
 
     // 가입 가능한 이메일인지 확인
@@ -117,5 +118,11 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public WithdrawalCheckDto getWithdrawalCheck(Long memberId) {
         return memberGetWithdrawalCheckUseCase.getWithdrawalCheck(memberId);
+    }
+
+    // 회원 탈퇴 (비식별화까지 한 트랜잭션)
+    @Transactional
+    public void withdraw(Long memberId, String password) {
+        memberWithdrawUseCase.withdraw(memberId, password);
     }
 }
