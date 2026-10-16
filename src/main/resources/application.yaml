@@ -85,9 +85,14 @@ custom:
   product:
     image:
       maxDetailImages: 10      # 상품 하나의 상세 이미지 최대 개수 (대표 이미지는 별도 1개)
-      storage: local           # 이미지 저장소. local(로컬 파일 시스템)만 있고, s3는 다음 이슈에서 추가한다
+      storage: ${PRODUCT_IMAGE_STORAGE:local}   # 이미지 저장소: local(로컬 파일 시스템) | s3. s3 구현이 들어오기 전에는 local만 동작한다
       localDir: ${PRODUCT_IMAGE_DIR:./uploads}                          # local 저장 폴더 (Git에 올리지 않는다)
       baseUrl: ${PRODUCT_IMAGE_BASE_URL:http://localhost:8080/images}   # local 이미지 URL 앞부분. 앱이 /images/**로 파일을 내려 준다
+      # s3 저장소 설정 (storage가 s3일 때만 쓴다). 인증은 액세스 키 없이 EC2 IAM 역할로 한다
+      s3:
+        bucket: ${PRODUCT_IMAGE_S3_BUCKET:}                  # 버킷 이름
+        region: ${PRODUCT_IMAGE_S3_REGION:ap-northeast-2}    # 버킷 리전 (서울)
+        baseUrl: ${PRODUCT_IMAGE_S3_BASE_URL:}               # 이미지 URL 앞부분 (예: https://{버킷}.s3.ap-northeast-2.amazonaws.com)
   order:
     cartMaxQuantity: 99        # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
