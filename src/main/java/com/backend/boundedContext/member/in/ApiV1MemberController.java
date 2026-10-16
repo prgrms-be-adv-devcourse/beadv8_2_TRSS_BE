@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.backend.boundedContext.member.app.MemberFacade;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
+import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
 
@@ -14,7 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
-@Tag(name = "회원", description = "내 정보")
+@Tag(name = "회원", description = "내 정보, 탈퇴")
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -26,5 +27,11 @@ public class ApiV1MemberController {
     @GetMapping("/me")
     public RsData<MyInfoDto> getMyInfo(@AuthenticationPrincipal AuthMember authMember) {
         return RsData.of("200-1", "내 정보를 조회했습니다.", memberFacade.getMyInfo(authMember.memberId()));
+    }
+
+    @Operation(summary = "탈퇴 조건 조회", description = "진행 중인 주문 여부, 정산받지 않은 판매 금액, 남은 예치금을 돌려준다. reasons가 비어 있으면(withdrawable: true) 탈퇴할 수 있다")
+    @GetMapping("/me/withdrawal")
+    public RsData<WithdrawalCheckDto> getWithdrawalCheck(@AuthenticationPrincipal AuthMember authMember) {
+        return RsData.of("200-1", "탈퇴 조건을 조회했습니다.", memberFacade.getWithdrawalCheck(authMember.memberId()));
     }
 }

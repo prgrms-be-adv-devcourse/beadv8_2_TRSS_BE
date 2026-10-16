@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.app.MemberFacade;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
+import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
+import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
 import com.backend.global.security.JwtAccessDeniedHandler;
@@ -70,6 +73,30 @@ class ApiV1MemberControllerTest {
         String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
 
         mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+    }
+
+    @Test
+    @DisplayName("탈퇴 조건 조회: 남은 조건과 탈퇴 가능 여부를 돌려준다")
+    void getWithdrawalCheck() throws Exception {
+        given(memberFacade.getWithdrawalCheck(3L)).willReturn(new WithdrawalCheckDto(
+                false, true, 0, 30_000, List.of(WithdrawalBlockReason.ACTIVE_ORDERS, WithdrawalBlockReason.BALANCE_REMAINING)));
+        String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/users/me/withdrawal").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.withdrawable").value(false))
+                .andExpect(jsonPath("$.data.hasActiveOrders").value(true))
+                .andExpect(jsonPath("$.data.balance").value(30000))
+                .andExpect(jsonPath("$.data.reasons[0]").value("ACTIVE_ORDERS"))
+                .andExpect(jsonPath("$.data.reasons[1]").value("BALANCE_REMAINING"));
+    }
+
+    @Test
+    @DisplayName("탈퇴 조건 조회: 토큰이 없으면 401 UNAUTHORIZED")
+    void getWithdrawalCheck_noToken() throws Exception {
+        mockMvc.perform(get("/api/v1/users/me/withdrawal"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
     }

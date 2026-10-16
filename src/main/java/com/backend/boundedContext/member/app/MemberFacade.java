@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
+import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberRole;
@@ -34,6 +35,7 @@ public class MemberFacade {
     private final MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
     private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
     private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
+    private final MemberGetWithdrawalCheckUseCase memberGetWithdrawalCheckUseCase;
     private final MemberSupport memberSupport;
 
     // 가입 가능한 이메일인지 확인
@@ -109,5 +111,11 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public MyInfoDto getMyInfo(Long memberId) {
         return memberGetMyInfoUseCase.getMyInfo(memberId);
+    }
+
+    // 탈퇴 조건 조회
+    @Transactional(readOnly = true)
+    public WithdrawalCheckDto getWithdrawalCheck(Long memberId) {
+        return memberGetWithdrawalCheckUseCase.getWithdrawalCheck(memberId);
     }
 }
