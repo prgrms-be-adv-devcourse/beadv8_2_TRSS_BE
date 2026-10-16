@@ -91,6 +91,46 @@ public class Product extends BaseIdAndTime {
         if (description != null) this.description = description.strip();
     }
 
+    /**
+     * 판매자 철회 요청·제재로 판매를 멈춘다 (stoppedBy = SELLER_WITHDRAWN). 판매 중인 상품에만 쓴다.
+     * 철회가 거절되면 {@link #resumeFromSellerWithdrawal()}으로 되돌린다.
+     */
+    public void stopBySellerWithdrawal(String reason) {
+        if (status != ProductSaleStatus.ON_SALE) {
+            throw new IllegalStateException("판매 중인 상품만 중지할 수 있습니다. status=" + status);
+        }
+        status = ProductSaleStatus.STOPPED;
+        stoppedBy = ProductStoppedBy.SELLER_WITHDRAWN;
+        stoppedReason = reason;
+        stoppedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 판매자가 상품을 지운다 (소프트 삭제). 판매 중(품절 포함)인 상품만 지울 수 있고, 판매 중지 상품이면 409.
+     * 결제 대기 주문 취소와 심사 중인 중지 요청 정리는 app 계층이 함께 한다.
+     */
+    public void delete() {
+        checkEditable();
+        status = ProductSaleStatus.DELETED;
+        deletedAt = LocalDateTime.now();
+    }
+
+    /** 판매자 철회로 멈춘 상품인지. 이 상품만 철회 거절 때 되돌린다. */
+    public boolean isStoppedBySellerWithdrawal() {
+        return status == ProductSaleStatus.STOPPED && stoppedBy == ProductStoppedBy.SELLER_WITHDRAWN;
+    }
+
+    /** 판매자 철회로 멈춘 상품을 다시 판매 중으로 되돌리고 중지 정보를 비운다. 관리자가 멈춘 상품에는 쓰지 않는다. */
+    public void resumeFromSellerWithdrawal() {
+        if (!isStoppedBySellerWithdrawal()) {
+            throw new IllegalStateException("판매자 철회로 중지된 상품만 되돌릴 수 있습니다. status=" + status + ", stoppedBy=" + stoppedBy);
+        }
+        status = ProductSaleStatus.ON_SALE;
+        stoppedBy = null;
+        stoppedReason = null;
+        stoppedAt = null;
+    }
+
     public boolean isDeleted() {
         return status == ProductSaleStatus.DELETED;
     }

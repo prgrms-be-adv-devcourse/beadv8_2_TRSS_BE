@@ -127,4 +127,70 @@ class ProductTest {
         assertThat(history.getOrderId()).isNull();
         assertThat(history.getOrderItemId()).isNull();
     }
+
+    @Test
+    @DisplayName("판매자 철회로 중지하면 STOPPED·SELLER_WITHDRAWN과 사유·시각이 남고, 되돌리면 판매 중으로 돌아가 중지 정보가 비워진다")
+    void stopAndResumeBySellerWithdrawal() {
+        Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+
+        product.stopBySellerWithdrawal("판매자 철회 요청");
+
+        assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
+        assertThat(product.getStoppedBy()).isEqualTo(ProductStoppedBy.SELLER_WITHDRAWN);
+        assertThat(product.getStoppedReason()).isEqualTo("판매자 철회 요청");
+        assertThat(product.getStoppedAt()).isNotNull();
+        assertThat(product.isStoppedBySellerWithdrawal()).isTrue();
+
+        product.resumeFromSellerWithdrawal();
+
+        assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.ON_SALE);
+        assertThat(product.getStoppedBy()).isNull();
+        assertThat(product.getStoppedReason()).isNull();
+        assertThat(product.getStoppedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("판매 중이 아닌 상품은 철회로 중지할 수 없고, 관리자가 중지한 상품은 되돌릴 수 없다 (IllegalStateException)")
+    void stopAndResumeNotAllowed() {
+        Product stopped = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        stopped.stopBySellerWithdrawal("철회");
+        assertThatThrownBy(() -> stopped.stopBySellerWithdrawal("다시")).isInstanceOf(IllegalStateException.class);
+
+        Product stoppedByAdmin = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        ReflectionTestUtils.setField(stoppedByAdmin, "status", ProductSaleStatus.STOPPED);
+        ReflectionTestUtils.setField(stoppedByAdmin, "stoppedBy", ProductStoppedBy.ADMIN);
+        assertThat(stoppedByAdmin.isStoppedBySellerWithdrawal()).isFalse();
+        assertThatThrownBy(stoppedByAdmin::resumeFromSellerWithdrawal).isInstanceOf(IllegalStateException.class);
+
+        Product onSale = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        assertThatThrownBy(onSale::resumeFromSellerWithdrawal).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("삭제하면 DELETED와 삭제 시각이 남는다. 품절(재고 0)이어도 판매 중이면 지울 수 있다")
+    void delete() {
+        Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+
+        product.delete();
+
+        assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.DELETED);
+        assertThat(product.getDeletedAt()).isNotNull();
+        assertThat(product.isDisplayable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("판매 중지·삭제된 상품은 지울 수 없다 (PRODUCT_NOT_EDITABLE)")
+    void deleteNotEditable() {
+        Product stopped = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        stopped.stopBySellerWithdrawal("철회");
+        Product deleted = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        deleted.delete();
+
+        for (Product product : List.of(stopped, deleted)) {
+            assertThatThrownBy(product::delete)
+                    .isInstanceOf(DomainException.class)
+                    .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
+        }
+        assertThat(stopped.getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
+    }
 }

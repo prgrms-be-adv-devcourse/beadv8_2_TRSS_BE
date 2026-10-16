@@ -3,6 +3,8 @@ package com.backend.boundedContext.product.in;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductImageFile;
+import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
+import com.backend.boundedContext.product.app.dto.StockHistoryDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
@@ -10,6 +12,7 @@ import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.in.dto.ProductCreateRequest;
 import com.backend.boundedContext.product.in.dto.ProductCreateResponse;
 import com.backend.boundedContext.product.in.dto.ProductModifyRequest;
+import com.backend.boundedContext.product.in.dto.ProductStopRequestCreateRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustResponse;
 import com.backend.global.page.PageResponse;
@@ -27,6 +30,7 @@ import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -133,6 +137,41 @@ public class ApiV1SellerProductController {
                 request.categoryId(), request.description(), request.detailImageIds(),
                 toImageFile(thumbnail), toImageFiles(detailImages));
         return RsData.of("200-1", "상품을 수정했습니다.");
+    }
+
+    @Operation(
+            summary = "상품 삭제",
+            description = "본인 상품을 지웁니다(소프트 삭제). 판매 중(품절 포함)인 상품만 지울 수 있고, 판매 중지 상품은 409입니다. "
+                    + "결제 대기 중인 주문은 취소되고, 심사 중인 판매 중지 요청은 닫힙니다.")
+    @DeleteMapping("/{productId}")
+    public RsData<Void> deleteProduct(@AuthenticationPrincipal AuthMember authMember, @PathVariable Long productId) {
+        productFacade.deleteProduct(authMember.memberId(), productId);
+        return RsData.of("200-1", "상품을 삭제했습니다.");
+    }
+
+    @Operation(
+            summary = "판매 중지 요청",
+            description = "관리자에게 판매 중지를 요청합니다(사유 필수). 승인될 때까지 판매는 계속됩니다. "
+                    + "판매 중지 상품은 409, 심사 중인 요청이 이미 있으면 409-STOP_REQUEST_PENDING입니다.")
+    @PostMapping("/{productId}/stop-requests")
+    public RsData<ProductStopRequestDto> requestStop(@AuthenticationPrincipal AuthMember authMember,
+                                                     @PathVariable Long productId,
+                                                     @Valid @RequestBody ProductStopRequestCreateRequest request) {
+        return RsData.of("200-1", "판매 중지를 요청했습니다.",
+                productFacade.requestStop(authMember.memberId(), productId, request.reason()));
+    }
+
+    @Operation(
+            summary = "옵션 재고 이력",
+            description = "본인 상품 옵션의 재고 이력을 최신순으로 줍니다. 판매 중지 상품도 볼 수 있습니다. "
+                    + "changeType: INIT(등록) · ADJUST(조정) · ORDER_DEDUCT(주문) · ORDER_RESTORE(주문 취소) · RETURN_RESTORE(반품)")
+    @GetMapping("/{productId}/options/{optionId}/stock-history")
+    public RsData<PageResponse<StockHistoryDto>> getStockHistories(@AuthenticationPrincipal AuthMember authMember,
+                                                                   @PathVariable Long productId,
+                                                                   @PathVariable Long optionId,
+                                                                   @ParameterObject Pageable pageable) {
+        return RsData.of("200-1", "재고 이력을 조회했습니다.",
+                productFacade.getStockHistories(authMember.memberId(), productId, optionId, pageable));
     }
 
     @Operation(

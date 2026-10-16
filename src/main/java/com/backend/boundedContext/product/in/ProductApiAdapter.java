@@ -36,4 +36,14 @@ public class ProductApiAdapter implements ProductApi {
     public void restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
         productFacade.restoreStock(items, reason);
     }
+
+    @Override
+    public void stopAllBySeller(Long sellerId, String reason) {
+        productFacade.stopAllBySeller(sellerId, reason);
+    }
+
+    @Override
+    public void resumeAllBySeller(Long sellerId) {
+        productFacade.resumeAllBySeller(sellerId);
+    }
 }

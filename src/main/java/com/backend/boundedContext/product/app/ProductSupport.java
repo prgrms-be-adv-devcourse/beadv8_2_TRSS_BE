@@ -7,6 +7,7 @@ import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
@@ -83,6 +84,16 @@ public class ProductSupport {
         return options.stream().collect(Collectors.toMap(ProductOption::getId, Function.identity()));
     }
 
+    /**
+     * 판매자의 이 상태 상품을 ID 순으로 쓰기 잠금하고 DB 값으로 다시 읽는다 (판매자 전체 중지·재개용).
+     * 같은 트랜잭션에서 먼저 읽어 둔 상품이 있어도 잠근 뒤의 최신 상태로 판단하기 위해 refresh한다 (lockOptions와 같은 이유).
+     */
+    public List<Product> lockSellerProducts(Long sellerId, ProductSaleStatus status) {
+        List<Product> products = productRepository.findAllForUpdateBySellerIdAndStatus(sellerId, status);
+        products.forEach(entityManager::refresh);
+        return products;
+    }
+
     /** 주문 항목 중 이 사유로 이미 재고 이력이 있는 것 */
     public Set<Long> findProcessedOrderItemIds(Collection<Long> orderItemIds, StockChangeType changeType) {
         return new HashSet<>(stockHistoryRepository.findOrderItemIds(orderItemIds, changeType));
@@ -148,6 +159,28 @@ public class ProductSupport {
     public Product getSellerProduct(Long sellerId, Long productId) {
         return productRepository.findById(productId)
                 .filter(product -> product.getSellerId().equals(sellerId) && !product.isDeleted())
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /**
+     * 판매자 본인의 삭제되지 않은 상품을 쓰기 잠금하고 DB 값으로 다시 읽는다 (삭제·중지 요청용).
+     * 주문이 같은 상품을 잠그고 있으면 끝날 때까지 기다린다. 없거나 다른 판매자 상품이거나 삭제됐으면 404.
+     */
+    public Product lockSellerProduct(Long sellerId, Long productId) {
+        Product product = productRepository.findForUpdateById(productId)
+                .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
+        entityManager.refresh(product);
+        if (!product.getSellerId().equals(sellerId) || product.isDeleted()) {
+            throw new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return product;
+    }
+
+    /** 판매자 본인 상품(삭제 안 됨)의 옵션. 상품이 없거나 남의 것이거나, 옵션이 그 상품의 것이 아니면 404. */
+    public ProductOption getSellerOption(Long sellerId, Long productId, Long optionId) {
+        Product product = getSellerProduct(sellerId, productId);
+        return productOptionRepository.findById(optionId)
+                .filter(option -> option.getProduct().getId().equals(product.getId()))
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 

@@ -56,4 +56,28 @@ public interface ProductApi {
      * </ul>
      */
     void restoreStock(List<StockChangeDto> items, StockRestoreReason reason);
+
+    /**
+     * 판매자의 판매 중 상품을 모두 중지한다. 판매자 철회 요청·관리자 제재 때 회원 컨텍스트가 같은 트랜잭션에서 호출한다.
+     *
+     * <ul>
+     *   <li>ON_SALE 상품만 STOPPED로 바꾸고 stoppedBy = SELLER_WITHDRAWN, 사유·시각을 남긴다.</li>
+     *   <li>이미 중지(관리자·판매 중지 요청)되었거나 삭제된 상품은 건드리지 않는다.</li>
+     *   <li>중지한 상품이 들어 있는 결제 대기 주문은 OrderApi.cancelPendingOrders(PRODUCT_STOPPED)로 취소한다.</li>
+     *   <li>판매 중 상품이 없으면 아무것도 하지 않는다. 다시 호출해도 결과가 같다.</li>
+     * </ul>
+     */
+    void stopAllBySeller(Long sellerId, String reason);
+
+    /**
+     * 판매자 철회로 중지된 상품을 다시 판매 중으로 되돌린다. 철회 거절 때 회원 컨텍스트가 같은 트랜잭션에서 호출한다.
+     *
+     * <ul>
+     *   <li>stoppedBy = SELLER_WITHDRAWN인 STOPPED 상품만 ON_SALE로 바꾸고 중지 사유·주체·시각을 비운다.</li>
+     *   <li>관리자·판매 중지 요청으로 중지된 상품과 삭제된 상품은 그대로 둔다.</li>
+     *   <li>철회 요청 때 취소된 결제 대기 주문은 되살리지 않는다.</li>
+     *   <li>되돌릴 상품이 없으면 아무것도 하지 않는다. 다시 호출해도 결과가 같다.</li>
+     * </ul>
+     */
+    void resumeAllBySeller(Long sellerId);
 }
