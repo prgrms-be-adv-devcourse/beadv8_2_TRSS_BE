@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.Set;
@@ -147,6 +148,25 @@ public class SettlementPolicy {
      */
     public static String idempotencyKeyOf(Long settlementId) {
         return IDEMPOTENCY_KEY_PREFIX + settlementId;
+    }
+
+    // ===== 값이 필요한 규칙(인스턴스) =====
+
+    /**
+     * 정산 예정일(판매자 화면 안내용 추정값)
+     *
+     * 정산월 m의 후보는 "m+1월 정산일(payDayOfMonth) 00:00"에 실행되는 월 정산 Job이 처음 집계한다.
+     * 그 Job이 이미 지나갔으면(늦게 생긴 후보 = 이월) 앞으로 다가올 가장 가까운 정산일에 집계된다.
+     * 그래서 둘 중 늦은 날짜를 돌려준다. 정산일 당일은 00:00에 이미 Job이 실행됐으므로 다음 달 정산일로 본다.
+     * 실패·보류는 고려하지 않는 안내용 값이다.
+     */
+    public LocalDate expectedPayDate(String settlementMonth, LocalDateTime now) {
+        LocalDate firstRun = YearMonth.parse(settlementMonth).plusMonths(1).atDay(payDayOfMonth);
+        YearMonth thisMonth = YearMonth.from(now);
+        LocalDate nextRun = now.getDayOfMonth() < payDayOfMonth
+                ? thisMonth.atDay(payDayOfMonth)
+                : thisMonth.plusMonths(1).atDay(payDayOfMonth);
+        return firstRun.isAfter(nextRun) ? firstRun : nextRun;
     }
 
     /** 재시도해도 결과가 같은 실패인지 */

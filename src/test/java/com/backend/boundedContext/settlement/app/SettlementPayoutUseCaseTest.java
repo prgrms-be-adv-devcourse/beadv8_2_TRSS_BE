@@ -73,7 +73,7 @@ class SettlementPayoutUseCaseTest {
                 }));
         MemberApi memberApi = fake(MemberApi.class, Map.of("getSeller", args -> seller.get()));
         useCase = new SettlementPayoutUseCase(
-                new SettlementSupport(settlementRepository, candidateRepository, historyRepository),
+                new SettlementSupport(settlementRepository, candidateRepository, historyRepository, memberApi),
                 candidateRepository, historyRepository, fakePaymentApi(), memberApi,
                 new SettlementPolicy(10, 10, 3, 10, 100, 50) /* 10/14 리뷰 반영: 정적 값 대입 대신 정책 객체를 직접 만들어 넘긴다 */, new ResourcelessTransactionManager());
     }

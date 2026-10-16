@@ -110,6 +110,18 @@ class SettlementTest {
     }
 
     @Test
+    @DisplayName("다음 재시도 일시는 실패 시각을 분 단위로 잘라 정한다(10분 정각 스케줄 회차를 놓치지 않게)")
+    void markFailed_truncatesToMinute() {
+        Settlement s = ready();
+        s.markFailed("1차", NOW.plusSeconds(5).plusNanos(123), MAX_ATTEMPTS, RETRY_MINUTES);   // 00:00:05에 실패
+        assertEquals(NOW.plusMinutes(10), s.getNextRetryAt());   // 00:10:00 → 00:10 정각 회차에 재시도 대상
+        assertTrue(s.isPayable(false, NOW.plusMinutes(10)));
+
+        s.markFailed("2차", NOW.plusMinutes(10).plusSeconds(7), MAX_ATTEMPTS, RETRY_MINUTES);   // 00:10:07에 실패
+        assertEquals(NOW.plusMinutes(20), s.getNextRetryAt());   // 00:20:00 → 3회차가 00:30 안에 끝난다
+    }
+
+    @Test
     @DisplayName("실패 사유는 300자로 자른다")
     void markFailed_truncate() {
         Settlement s = ready();
