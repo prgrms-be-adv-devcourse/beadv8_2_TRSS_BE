@@ -30,6 +30,7 @@ public enum ProductErrorCode implements ErrorCode {
     // 판매 중지 요청
     STOP_REQUEST_PENDING(409, "심사 중인 판매 중지 요청이 이미 있습니다."),
     STOP_REQUEST_NOT_PENDING(409, "심사 중인 요청만 처리할 수 있습니다."),
+    STOP_REQUEST_NOT_FOUND(404, "판매 중지 요청을 찾을 수 없습니다."),
     PRODUCT_DELETED(409, "삭제된 상품입니다."),
     OPTION_DELETED(409, "삭제된 옵션입니다.");
 

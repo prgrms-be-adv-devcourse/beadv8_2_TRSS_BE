@@ -2,6 +2,7 @@ package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
@@ -255,6 +256,54 @@ class ProductStockConcurrencyTest {
         assertThat(productStopRequestRepository.findAll().stream()
                 .filter(r -> r.getProduct().getId().equals(productId) && r.getStatus() == ProductStopRequestStatus.PENDING)
                 .count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("관리자 즉시 중지가 커밋되기 전에 들어온 주문은 기다렸다가, 중지된 상태를 보고 PRODUCT_NOT_ON_SALE로 실패한다")
+    void deductWhileStoppingByAdmin() throws Exception {
+        CountDownLatch stopLocked = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        Future<Throwable> order = executor.submit(() -> {
+            await(stopLocked);
+            try {
+                productFacade.deductStock(List.of(item(ORDER_ITEM_ID_BASE, 1)));
+                return null;
+            } catch (Throwable e) {
+                return e;
+            }
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            productFacade.stopProductByAdmin(productId, "허위 광고");
+            stopLocked.countDown();
+            sleep(500);
+        });
+
+        Throwable orderResult = order.get(10, TimeUnit.SECONDS);
+        executor.shutdown();
+        assertThat(orderResult).isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_ON_SALE");
+        assertThat(stock()).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("같은 판매 중지 요청을 여러 관리자가 동시에 승인·반려해도 하나만 처리된다")
+    void concurrentReviewStopRequest() throws Exception {
+        givenApprovedSeller();
+        Long requestId = productFacade.requestStop(SELLER_MEMBER_ID, productId, "단종").requestId();
+        AtomicInteger success = new AtomicInteger();
+
+        runConcurrently(6, i -> {
+            if (i % 2 == 0) productFacade.approveStopRequest(requestId);
+            else productFacade.rejectStopRequest(requestId, "반려");
+            success.incrementAndGet();
+        });
+
+        assertThat(success.get()).isEqualTo(1);
+        ProductStopRequestStatus status = productStopRequestRepository.findById(requestId).orElseThrow().getStatus();
+        ProductSaleStatus productStatus = productRepository.findById(productId).orElseThrow().getStatus();
+        assertThat(productStatus).isEqualTo(status == ProductStopRequestStatus.APPROVED ? ProductSaleStatus.STOPPED : ProductSaleStatus.ON_SALE);
     }
 
     private void givenApprovedSeller() {

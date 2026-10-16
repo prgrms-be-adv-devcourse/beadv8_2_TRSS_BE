@@ -1,6 +1,10 @@
 package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
+import com.backend.boundedContext.product.app.dto.AdminProductStopRequestDto;
+import com.backend.boundedContext.product.app.dto.AdminProductSummaryDto;
+import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.app.dto.CategoryDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
@@ -50,6 +54,11 @@ public class ProductFacade {
     private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
     private final ProductGetSellerProductsUseCase productGetSellerProductsUseCase;
     private final ProductModifyProductUseCase productModifyProductUseCase;
+    private final ProductGetAdminProductsUseCase productGetAdminProductsUseCase;
+    private final ProductStopByAdminUseCase productStopByAdminUseCase;
+    private final ProductGetStopRequestsUseCase productGetStopRequestsUseCase;
+    private final ProductApproveStopRequestUseCase productApproveStopRequestUseCase;
+    private final ProductRejectStopRequestUseCase productRejectStopRequestUseCase;
 
     // 내부 API (ProductApiAdapter). 호출한 쪽 트랜잭션에 참여한다
 
@@ -159,6 +168,39 @@ public class ProductFacade {
     public OptionStockDto adjustStock(Long memberId, Long productId, Long optionId, int changeQty) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         return OptionStockDto.from(productAdjustStockUseCase.adjustStock(sellerId, productId, optionId, changeQty));
+    }
+
+    // 관리자 상품 관리
+
+    /** 관리자 상품 목록 (삭제된 상품 포함, 최신순). null인 조건은 적용하지 않는다 */
+    @Transactional(readOnly = true)
+    public PageResponse<AdminProductSummaryDto> getProductsForAdmin(Long sellerId, ProductSaleStatus status, Long categoryId,
+                                                                    String keyword, Pageable pageable) {
+        return productGetAdminProductsUseCase.getProducts(sellerId, status, categoryId, keyword, pageable);
+    }
+
+    /** 관리자가 상품 판매를 바로 멈춘다. 결제 대기 주문 취소와 심사 중인 중지 요청 정리를 함께 한다 */
+    @Transactional
+    public void stopProductByAdmin(Long productId, String reason) {
+        productStopByAdminUseCase.stopProduct(productId, reason);
+    }
+
+    /** 관리자 판매 중지 요청 목록 (오래된 순) */
+    @Transactional(readOnly = true)
+    public PageResponse<AdminProductStopRequestDto> getStopRequestsForAdmin(ProductStopRequestStatus status, Pageable pageable) {
+        return productGetStopRequestsUseCase.getStopRequests(status, pageable);
+    }
+
+    /** 판매 중지 요청을 승인해 상품을 판매 중지한다 */
+    @Transactional
+    public AdminProductStopRequestDto approveStopRequest(Long requestId) {
+        return AdminProductStopRequestDto.from(productApproveStopRequestUseCase.approve(requestId));
+    }
+
+    /** 판매 중지 요청을 반려한다. 상품은 그대로 판매 중이다 */
+    @Transactional
+    public AdminProductStopRequestDto rejectStopRequest(Long requestId, String rejectReason) {
+        return AdminProductStopRequestDto.from(productRejectStopRequestUseCase.reject(requestId, rejectReason));
     }
 
     @Transactional(readOnly = true)

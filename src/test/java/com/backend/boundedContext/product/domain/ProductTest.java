@@ -193,4 +193,34 @@ class ProductTest {
         }
         assertThat(stopped.getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
     }
+
+    @Test
+    @DisplayName("관리자 중지: STOPPED(ADMIN)와 앞뒤 공백을 지운 사유, 중지 시각이 남고 판매자 철회 재개 대상이 아니다")
+    void stopByAdmin() {
+        Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+
+        product.stopByAdmin("  허위 광고 ");
+
+        assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
+        assertThat(product.getStoppedBy()).isEqualTo(ProductStoppedBy.ADMIN);
+        assertThat(product.getStoppedReason()).isEqualTo("허위 광고");
+        assertThat(product.getStoppedAt()).isNotNull();
+        assertThat(product.isStoppedBySellerWithdrawal()).isFalse();
+    }
+
+    @Test
+    @DisplayName("관리자 중지: 이미 판매 중지·삭제된 상품은 중지할 수 없다 (PRODUCT_NOT_ON_SALE)")
+    void stopByAdminNotOnSale() {
+        Product stopped = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        stopped.stopBySellerWithdrawal("철회");
+        Product deleted = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        deleted.delete();
+
+        for (Product product : List.of(stopped, deleted)) {
+            assertThatThrownBy(() -> product.stopByAdmin("허위 광고"))
+                    .isInstanceOf(DomainException.class)
+                    .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_ON_SALE");
+        }
+        assertThat(stopped.getStoppedBy()).isEqualTo(ProductStoppedBy.SELLER_WITHDRAWN);
+    }
 }
