@@ -39,6 +39,7 @@ public class ProductSupport {
     private final ProductOptionRepository productOptionRepository;
     private final StockHistoryRepository stockHistoryRepository;
     private final MemberApi memberApi;
+    private final ProductImageSupport productImageSupport;
     private final EntityManager entityManager;
 
     /**
@@ -150,14 +151,15 @@ public class ProductSupport {
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 
-    /** 판매자 상품 수정 폼을 채우는 값. 이미지는 이미지 기능 전까지 비어 있다. */
+    /** 판매자 상품 수정 폼을 채우는 값. 이미지 ID는 수정할 때 남길 상세 이미지를 고르는 데 쓴다. */
     public SellerProductFormDto getSellerProductForm(Long sellerId, Long productId) {
         Product product = getSellerProduct(sellerId, productId);
         Category category = product.getCategory();
 
         return new SellerProductFormDto(
                 product.getId(), product.getName(), product.getPrice(), product.getDescription(),
-                category.getParent().getId(), category.getId(), null, List.of());
+                category.getParent().getId(), category.getId(),
+                productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId));
     }
 
     /** 삭제되지 않은 옵션이 없거나 모두 재고 0이면 품절 */

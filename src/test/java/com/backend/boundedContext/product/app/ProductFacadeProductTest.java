@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import static com.backend.boundedContext.product.ProductImageFixtures.THUMBNAIL;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
@@ -61,7 +62,7 @@ class ProductFacadeProductTest {
     void createProduct() {
         givenApprovedSeller();
 
-        Long productId = productFacade.createProduct(MEMBER_ID, skincareId(), "수분 크림", "촉촉한 크림", 25_000, 30);
+        Long productId = productFacade.createProduct(MEMBER_ID, skincareId(), "수분 크림", "촉촉한 크림", 25_000, 30, THUMBNAIL, List.of());
 
         Product product = productRepository.findById(productId).orElseThrow();
         assertThat(product.getSellerId()).isEqualTo(SELLER_ID);
@@ -92,7 +93,7 @@ class ProductFacadeProductTest {
         Long skincareId = skincareId();
         long productCount = productRepository.count();
 
-        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, skincareId, "수분 크림", "설명", 25_000, 30))
+        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, skincareId, "수분 크림", "설명", 25_000, 30, THUMBNAIL, List.of()))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("403-SELLER_NOT_APPROVED");
         assertThat(productRepository.count()).isEqualTo(productCount);
@@ -105,13 +106,13 @@ class ProductFacadeProductTest {
         Long beautyId = beauty().categoryId();
         Long skincareId = skincareId();
 
-        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, beautyId, "수분 크림", "설명", 25_000, 30))
+        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, beautyId, "수분 크림", "설명", 25_000, 30, THUMBNAIL, List.of()))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-CATEGORY_NOT_SELECTABLE");
 
         productFacade.modifyCategory(skincareId, null, false);
 
-        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, skincareId, "수분 크림", "설명", 25_000, 30))
+        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, skincareId, "수분 크림", "설명", 25_000, 30, THUMBNAIL, List.of()))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-CATEGORY_NOT_SELECTABLE");
     }
@@ -121,7 +122,7 @@ class ProductFacadeProductTest {
     void createWithUnknownCategory() {
         givenApprovedSeller();
 
-        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, Long.MAX_VALUE, "수분 크림", "설명", 25_000, 30))
+        assertThatThrownBy(() -> productFacade.createProduct(MEMBER_ID, Long.MAX_VALUE, "수분 크림", "설명", 25_000, 30, THUMBNAIL, List.of()))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-CATEGORY_NOT_FOUND");
     }

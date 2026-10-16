@@ -2,17 +2,16 @@ package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
+import com.backend.boundedContext.product.app.dto.ProductImageFile;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
-import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.in.dto.ProductCreateRequest;
 import com.backend.boundedContext.product.in.dto.ProductCreateResponse;
 import com.backend.boundedContext.product.in.dto.ProductModifyRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustResponse;
-import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
@@ -39,12 +38,15 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 등록·수정은 multipart로 받는다. 상품 정보는 request 파트(application/json)이고, 이미지는 thumbnail·detailImages 파일 파트다.
  * request 파트에 Content-Type이 없으면 JSON으로 읽지 못하므로, Swagger에서도 application/json으로 보내도록 지정한다.
- * 이미지 파일은 이미지 기능 전까지 저장하지 않는다 (대표 이미지 필수 검사만 한다).
+ * 빈 파일 파트는 보내지 않은 것으로 본다. 이미지 형식·개수 검사와 대표 이미지 필수 검사는 app 계층에서 한다.
  */
 @Tag(name = "판매자 상품", description = "판매자 상품 관리 (SELLER)")
 @RestController
@@ -56,7 +58,8 @@ public class ApiV1SellerProductController {
     @Operation(
             summary = "상품 등록",
             description = "승인된 판매자만 등록할 수 있습니다. 사용 중인 소분류만 고를 수 있고, 초기 재고는 기본 옵션의 재고가 됩니다. "
-                    + "대표 이미지(thumbnail)는 필수, 상세 이미지(detailImages)는 선택(최대 10개)입니다.",
+                    + "대표 이미지(thumbnail)는 필수, 상세 이미지(detailImages)는 선택(최대 10개)입니다. "
+                    + "이미지는 jpg·png·webp, 장당 5MB까지입니다.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
                     encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE))))
@@ -67,12 +70,9 @@ public class ApiV1SellerProductController {
             @RequestPart(value = "thumbnail", required = false) MultipartFile thumbnail,
             @RequestPart(value = "detailImages", required = false) List<MultipartFile> detailImages
     ) {
-        if (thumbnail == null || thumbnail.isEmpty()) {
-            throw new DomainException(ProductErrorCode.THUMBNAIL_REQUIRED);
-        }
-
         Long productId = productFacade.createProduct(authMember.memberId(), request.categoryId(),
-                request.name(), request.description(), request.price(), request.stock());
+                request.name(), request.description(), request.price(), request.stock(),
+                toImageFile(thumbnail), toImageFiles(detailImages));
         return RsData.of("200-1", "상품을 등록했습니다.", new ProductCreateResponse(productId));
     }
 
@@ -116,8 +116,8 @@ public class ApiV1SellerProductController {
     @Operation(
             summary = "상품 수정",
             description = "보낸 항목만 수정하며 재고는 바꿀 수 없습니다. 판매 중지·삭제된 상품은 수정할 수 없습니다. "
-                    + "thumbnail을 보내면 대표 이미지를 교체하고, detailImageIds에 없는 상세 이미지는 삭제, detailImages는 뒤에 추가합니다"
-                    + "(이미지 동작은 이미지 기능에서 구현).",
+                    + "thumbnail을 보내면 대표 이미지를 교체합니다. detailImageIds를 보내면 그 상세 이미지만 그 순서대로 남기고 "
+                    + "나머지는 지우며(보내지 않으면 그대로), detailImages는 남긴 이미지 뒤에 추가합니다. 상세 이미지는 합쳐서 최대 10개입니다.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
                     encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE))))
@@ -130,7 +130,8 @@ public class ApiV1SellerProductController {
             @RequestPart(value = "detailImages", required = false) List<MultipartFile> detailImages
     ) {
         productFacade.modifyProduct(authMember.memberId(), productId, request.name(), request.price(),
-                request.categoryId(), request.description());
+                request.categoryId(), request.description(), request.detailImageIds(),
+                toImageFile(thumbnail), toImageFiles(detailImages));
         return RsData.of("200-1", "상품을 수정했습니다.");
     }
 
@@ -145,5 +146,20 @@ public class ApiV1SellerProductController {
                                                    @Valid @RequestBody StockAdjustRequest request) {
         OptionStockDto result = productFacade.adjustStock(authMember.memberId(), productId, optionId, request.changeQty());
         return RsData.of("200-1", "재고를 조정했습니다.", new StockAdjustResponse(result.optionId(), result.stock()));
+    }
+
+    /** 빈 파트는 보내지 않은 것(null)으로 본다 */
+    private static ProductImageFile toImageFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) return null;
+        try {
+            return new ProductImageFile(file.getBytes());
+        } catch (IOException e) {
+            throw new UncheckedIOException("업로드한 이미지를 읽지 못했습니다.", e);
+        }
+    }
+
+    private static List<ProductImageFile> toImageFiles(List<MultipartFile> files) {
+        if (files == null) return List.of();
+        return files.stream().map(ApiV1SellerProductController::toImageFile).filter(Objects::nonNull).toList();
     }
 }

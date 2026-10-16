@@ -33,6 +33,7 @@ public class ProductGetSellerProductsUseCase {
     private static final Sort LATEST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     private final ProductSupport productSupport;
+    private final ProductImageSupport productImageSupport;
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
 
@@ -66,8 +67,9 @@ public class ProductGetSellerProductsUseCase {
 
     private PageResponse<SellerProductSummaryDto> toSummaries(Page<Product> products) {
         categoryRepository.findAll();   // 카테고리는 십여 개라 한 번에 읽어 두면 상품마다 따로 조회하지 않는다
-        Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(
-                products.map(Product::getId).getContent());
+        List<Long> productIds = products.map(Product::getId).getContent();
+        Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(productIds);
+        Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
 
         return PageResponse.from(products, product -> {
             List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
@@ -75,7 +77,7 @@ public class ProductGetSellerProductsUseCase {
             return new SellerProductSummaryDto(
                     product.getId(),
                     productOptions.isEmpty() ? null : productOptions.getFirst().getId(),
-                    null,
+                    thumbnailUrls.get(product.getId()),
                     product.getName(),
                     product.getCategory().getName(),
                     product.getPrice(),

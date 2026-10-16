@@ -26,6 +26,7 @@ public class ProductSearchProductsUseCase {
     static final int MAX_PAGE_SIZE = 50;
 
     private final ProductSupport productSupport;
+    private final ProductImageSupport productImageSupport;
     private final ProductSearchPort productSearchPort;
     private final ProductRepository productRepository;
 
@@ -54,13 +55,15 @@ public class ProductSearchProductsUseCase {
         Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(productIds);
         Map<Long, String> businessNames = productSupport.getBusinessNames(
                 products.stream().map(Product::getSellerId).collect(Collectors.toSet()));
+        Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
 
         return products.stream()
                 .map(product -> {
                     List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
                     return new ProductSummaryDto(
                             product.getId(), product.getName(), product.getPrice(), product.getCategory().getId(),
-                            product.getSellerId(), businessNames.get(product.getSellerId()), null,
+                            product.getSellerId(), businessNames.get(product.getSellerId()),
+                            thumbnailUrls.get(product.getId()),
                             ProductSupport.isSoldOut(productOptions),
                             ProductSupport.getLowStockRemaining(productOptions));
                 })

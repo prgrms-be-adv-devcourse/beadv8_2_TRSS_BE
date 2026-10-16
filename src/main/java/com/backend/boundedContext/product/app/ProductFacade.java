@@ -5,6 +5,7 @@ import com.backend.boundedContext.product.app.dto.CategoryDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
+import com.backend.boundedContext.product.app.dto.ProductImageFile;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
@@ -71,12 +72,13 @@ public class ProductFacade {
         return productGetProductDetailUseCase.getProductDetail(productId);
     }
 
-    /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. */
+    /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. 대표 이미지는 필수, 상세 이미지는 선택이다. */
     @Transactional
     public Long createProduct(Long memberId, Long categoryId, String name, String description,
-                              long price, int stock) {
+                              long price, int stock, ProductImageFile thumbnail, List<ProductImageFile> detailImages) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
-        return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock).getId();
+        return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock,
+                thumbnail, detailImages).getId();
     }
 
     /** 승인된 판매자의 본인 상품 목록 */
@@ -101,12 +103,17 @@ public class ProductFacade {
         return productSupport.getSellerProductForm(sellerId, productId);
     }
 
-    /** 승인된 판매자가 본인 상품 정보를 수정한다. null인 항목은 그대로 둔다. */
+    /**
+     * 승인된 판매자가 본인 상품 정보와 이미지를 수정한다. null인 항목은 그대로 둔다.
+     * keepDetailImageIds: 남길 상세 이미지(순서대로, null이면 그대로), thumbnail: 교체할 대표 이미지, newDetailImages: 뒤에 붙일 상세 이미지
+     */
     @Transactional
     public void modifyProduct(Long memberId, Long productId, String name, Long price, Long categoryId,
-                              String description) {
+                              String description, List<Long> keepDetailImageIds, ProductImageFile thumbnail,
+                              List<ProductImageFile> newDetailImages) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
-        productModifyProductUseCase.modifyProduct(sellerId, productId, name, price, categoryId, description);
+        productModifyProductUseCase.modifyProduct(sellerId, productId, name, price, categoryId, description,
+                keepDetailImageIds, thumbnail, newDetailImages);
     }
 
     /** 승인된 판매자가 자기 상품 옵션의 재고를 증감량만큼 조정하고, 조정 후 재고를 돌려준다. */
@@ -154,11 +161,11 @@ public class ProductFacade {
     }
 
     /**
-     * 시드 판매자의 샘플 상품을 등록하고 등록한 개수를 돌려준다.
+     * 시드 판매자의 샘플 상품을 등록하고 등록한 개수를 돌려준다. 대표 이미지는 모두 sampleThumbnail을 쓴다(상품마다 파일은 따로 저장).
      * 상품이 이미 있거나 승인된 판매자가 아니면 아무것도 하지 않고 0을 돌려준다.
      */
     @Transactional
-    public int createSampleProducts(Long sellerMemberId, List<ProductSampleDto> samples) {
+    public int createSampleProducts(Long sellerMemberId, List<ProductSampleDto> samples, ProductImageFile sampleThumbnail) {
         if (productSupport.countProducts() > 0) return 0;
 
         Optional<Long> sellerId = productSupport.findSellableSellerId(sellerMemberId);
@@ -167,7 +174,7 @@ public class ProductFacade {
         for (ProductSampleDto sample : samples) {
             Category category = productSupport.getChildCategory(sample.parentCategoryName(), sample.categoryName());
             productCreateProductUseCase.createProduct(sellerId.get(), category.getId(), sample.name(),
-                    sample.name() + " 샘플 상품입니다.", sample.price(), sample.stock());
+                    sample.name() + " 샘플 상품입니다.", sample.price(), sample.stock(), sampleThumbnail, List.of());
         }
         return samples.size();
     }
