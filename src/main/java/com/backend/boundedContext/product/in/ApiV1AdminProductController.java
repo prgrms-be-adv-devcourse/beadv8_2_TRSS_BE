@@ -2,7 +2,7 @@ package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.AdminProductSummaryDto;
-import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import com.backend.boundedContext.product.domain.AdminProductDisplayStatus;
 import com.backend.boundedContext.product.in.dto.ProductReasonRequest;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
@@ -37,8 +37,8 @@ public class ApiV1AdminProductController {
     public RsData<PageResponse<AdminProductSummaryDto>> getProducts(
             @Parameter(description = "판매자 ID (seller.id)")
             @RequestParam(required = false) Long sellerId,
-            @Parameter(description = "ON_SALE(품절 포함) · STOPPED · DELETED")
-            @RequestParam(required = false) ProductSaleStatus status,
+            @Parameter(description = "ON_SALE(재고 있음) · SOLD_OUT(재고 0) · STOPPED(판매 중지) · DELETED(삭제됨)")
+            @RequestParam(required = false) AdminProductDisplayStatus status,
             @Parameter(description = "대분류 또는 소분류 ID")
             @RequestParam(required = false) Long categoryId,
             @Parameter(description = "상품명 일부 (최대 100자)")

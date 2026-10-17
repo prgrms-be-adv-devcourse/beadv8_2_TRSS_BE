@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.AdminProductStopRequestDto;
 import com.backend.boundedContext.product.app.dto.AdminProductSummaryDto;
 import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
+import com.backend.boundedContext.product.domain.AdminProductDisplayStatus;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
@@ -104,13 +105,13 @@ class ProductFacadeAdminProductTest {
 
         assertThat(result.totalElements()).isEqualTo(4);
         assertThat(result.items())
-                .extracting(AdminProductSummaryDto::productId, AdminProductSummaryDto::status, AdminProductSummaryDto::soldOut,
+                .extracting(AdminProductSummaryDto::productId, AdminProductSummaryDto::status,
                         AdminProductSummaryDto::stock, AdminProductSummaryDto::stoppedBy, AdminProductSummaryDto::stoppedReason)
                 .containsExactly(
-                        tuple(deleted.getId(), ProductSaleStatus.DELETED, false, 5, null, null),
-                        tuple(stopped.getId(), ProductSaleStatus.STOPPED, false, 5, ProductStoppedBy.ADMIN, "허위 광고"),
-                        tuple(soldOut.getId(), ProductSaleStatus.ON_SALE, true, 0, null, null),
-                        tuple(onSale.getId(), ProductSaleStatus.ON_SALE, false, 10, null, null));
+                        tuple(deleted.getId(), AdminProductDisplayStatus.DELETED, 5, null, null),
+                        tuple(stopped.getId(), AdminProductDisplayStatus.STOPPED, 5, ProductStoppedBy.ADMIN, "허위 광고"),
+                        tuple(soldOut.getId(), AdminProductDisplayStatus.SOLD_OUT, 0, null, null),
+                        tuple(onSale.getId(), AdminProductDisplayStatus.ON_SALE, 10, null, null));
         assertThat(result.items().getFirst().sellerId()).isEqualTo(SELLER_ID);
     }
 
@@ -121,13 +122,29 @@ class ProductFacadeAdminProductTest {
         Product lipstick = create(SELLER_ID, makeup, "립스틱", 5);
         productFacade.stopProductByAdmin(lipstick.getId(), "허위 광고");
 
-        assertThat(ids(list(SELLER_ID, ProductSaleStatus.STOPPED, null, null))).containsExactly(lipstick.getId());
+        assertThat(ids(list(SELLER_ID, AdminProductDisplayStatus.STOPPED, null, null))).containsExactly(lipstick.getId());
         assertThat(ids(list(SELLER_ID, null, skincare.getId(), null))).containsExactly(cream.getId());
         assertThat(ids(list(SELLER_ID, null, skincare.getParent().getId(), null))).containsExactly(lipstick.getId(), cream.getId());
         assertThat(ids(list(SELLER_ID, null, null, " 크림 "))).containsExactly(cream.getId());
         assertThatThrownBy(() -> list(SELLER_ID, null, Long.MAX_VALUE, null))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-CATEGORY_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("목록: 상태 필터는 화면 상태 기준이다 (판매중=재고 있음, 품절=판매 중 재고 0, 판매 중지, 삭제됨)")
+    void getProductsByDisplayStatus() {
+        Product onSale = create(SELLER_ID, skincare, "수분 크림", 10);
+        Product soldOut = create(SELLER_ID, skincare, "수분 토너", 0);
+        Product stopped = create(SELLER_ID, skincare, "수분 세럼", 5);
+        productFacade.stopProductByAdmin(stopped.getId(), "허위 광고");
+        Product deleted = create(SELLER_ID, skincare, "수분 젤", 5);
+        productFacade.deleteProduct(MEMBER_ID, deleted.getId());
+
+        assertThat(ids(list(SELLER_ID, AdminProductDisplayStatus.ON_SALE, null, null))).containsExactly(onSale.getId());
+        assertThat(ids(list(SELLER_ID, AdminProductDisplayStatus.SOLD_OUT, null, null))).containsExactly(soldOut.getId());
+        assertThat(ids(list(SELLER_ID, AdminProductDisplayStatus.STOPPED, null, null))).containsExactly(stopped.getId());
+        assertThat(ids(list(SELLER_ID, AdminProductDisplayStatus.DELETED, null, null))).containsExactly(deleted.getId());
     }
 
     // 즉시 판매 중지
@@ -257,7 +274,7 @@ class ProductFacadeAdminProductTest {
         return product;
     }
 
-    private PageResponse<AdminProductSummaryDto> list(Long sellerId, ProductSaleStatus status, Long categoryId, String keyword) {
+    private PageResponse<AdminProductSummaryDto> list(Long sellerId, AdminProductDisplayStatus status, Long categoryId, String keyword) {
         return productFacade.getProductsForAdmin(sellerId, status, categoryId, keyword, PageRequest.of(0, 20));
     }
 

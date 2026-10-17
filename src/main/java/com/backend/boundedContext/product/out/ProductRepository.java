@@ -22,6 +22,11 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     @Query("select p from Product p where p.id in :ids order by p.id")
     List<Product> findAllForShareByIdIn(Collection<Long> ids);
 
+    /** 이 상태 상품의 소분류별 개수 (카테고리 트리의 상품 수). 상품이 없는 소분류는 결과에 없다 */
+    @Query("select new com.backend.boundedContext.product.out.CategoryProductCount(p.category.id, count(p)) "
+            + "from Product p where p.status = :status group by p.category.id")
+    List<CategoryProductCount> countByCategory(ProductSaleStatus status);
+
     /** 상품 하나를 쓰기 잠금(SELECT ... FOR UPDATE)한다 (삭제·중지 요청·관리자 중지처럼 상품 상태를 보고 바꾸는 작업용) */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id = :id")

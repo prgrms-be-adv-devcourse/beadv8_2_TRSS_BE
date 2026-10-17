@@ -1,5 +1,6 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
 import com.backend.boundedContext.product.app.dto.ProductOptionDto;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
@@ -250,6 +251,40 @@ class ProductFacadeSearchTest {
                     .isInstanceOf(DomainException.class)
                     .extracting("resultCode").isEqualTo("404-PRODUCT_NOT_FOUND");
         }
+    }
+
+    @Test
+    @DisplayName("카테고리 트리 상품 수: 판매 중 상품(품절 포함)만 세고, 대분류는 소분류 합이며, 검색 결과 개수와 같다")
+    void categoryProductCount() {
+        long skincareBefore = child("뷰티", "스킨케어").productCount();
+        long beautyBefore = root("뷰티").productCount();
+        long topBefore = child("의류", "상의").productCount();
+
+        create(skincare, KEY + " 크림", 10_000, 10);
+        Product soldOut = create(skincare, KEY + " 토너", 10_000, 10);
+        setStock(soldOut, 0);
+        setStatus(create(skincare, KEY + " 중지", 10_000, 10), ProductSaleStatus.STOPPED);
+        setStatus(create(skincare, KEY + " 삭제", 10_000, 10), ProductSaleStatus.DELETED);
+        create(makeup, KEY + " 립", 10_000, 10);
+        productRepository.flush();
+
+        CategoryTreeDto beauty = root("뷰티");
+        assertThat(child("뷰티", "스킨케어").productCount()).isEqualTo(skincareBefore + 2);
+        assertThat(beauty.productCount()).isEqualTo(beautyBefore + 3);
+        assertThat(beauty.productCount()).isEqualTo(beauty.children().stream().mapToLong(CategoryTreeDto::productCount).sum());
+        assertThat(child("의류", "상의").productCount()).isEqualTo(topBefore);
+        assertThat(search(null, skincare.getId(), ProductSort.LATEST, false).totalElements())
+                .isEqualTo(child("뷰티", "스킨케어").productCount());
+        assertThat(search(null, skincare.getParent().getId(), ProductSort.LATEST, false).totalElements())
+                .isEqualTo(beauty.productCount());
+    }
+
+    private CategoryTreeDto root(String name) {
+        return productFacade.getCategoryTree().stream().filter(root -> root.name().equals(name)).findFirst().orElseThrow();
+    }
+
+    private CategoryTreeDto child(String parentName, String name) {
+        return root(parentName).children().stream().filter(child -> child.name().equals(name)).findFirst().orElseThrow();
     }
 
     private PageResponse<ProductSummaryDto> search(String keyword, Long categoryId, ProductSort sort, boolean excludeSoldOut) {
