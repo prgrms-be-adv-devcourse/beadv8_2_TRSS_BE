@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.in;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.context.annotation.Lazy;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
+import com.backend.shared.payment.dto.PaymentAttemptDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
 import com.backend.shared.payment.dto.WalletSummaryDto;
@@ -33,6 +35,11 @@ public class PaymentApiAdapter implements PaymentApi {
     @Override
     public PayResultDto pay(PayCommand command) {
         return paymentFacade.pay(command);
+    }
+
+    @Override
+    public List<PaymentAttemptDto> getPaymentAttempts(Long orderId) {
+        return paymentFacade.getPaymentAttempts(orderId);
     }
 
     @Override

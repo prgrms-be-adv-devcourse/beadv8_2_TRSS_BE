@@ -1,9 +1,11 @@
 package com.backend.shared.payment.out;
 
+import java.util.List;
 import java.util.Optional;
 
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
+import com.backend.shared.payment.dto.PaymentAttemptDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
 import com.backend.shared.payment.dto.WalletSummaryDto;
@@ -24,6 +26,13 @@ public interface PaymentApi {
      * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다.
      */
     PayResultDto pay(PayCommand command);
+
+    /**
+     * 주문의 결제 시도 목록 (주문 상세의 결제 내역). 오래된 순, 실패 시도 포함.
+     * 내 주문인지는 주문 쪽에서 확인하고 호출한다. 결제 시도가 없으면 빈 목록을 반환한다.
+     * 실패 사유는 상태(FAILED_*)로만 알려 주고, 부족 금액은 담지 않는다.
+     */
+    List<PaymentAttemptDto> getPaymentAttempts(Long orderId);
 
     /**
      * 정산 지급: 홀딩 → 판매자 지갑(SETTLEMENT), 홀딩 → 관리자 지갑(FEE).
