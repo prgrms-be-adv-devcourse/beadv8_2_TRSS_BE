@@ -3,7 +3,7 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.AdminProductStopRequestDto;
 import com.backend.boundedContext.product.app.dto.AdminProductSummaryDto;
-import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import com.backend.boundedContext.product.domain.AdminProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.app.dto.CategoryDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
@@ -181,7 +181,7 @@ public class ProductFacade {
 
     /** 관리자 상품 목록 (삭제된 상품 포함, 최신순). null인 조건은 적용하지 않는다 */
     @Transactional(readOnly = true)
-    public PageResponse<AdminProductSummaryDto> getProductsForAdmin(Long sellerId, ProductSaleStatus status, Long categoryId,
+    public PageResponse<AdminProductSummaryDto> getProductsForAdmin(Long sellerId, AdminProductDisplayStatus status, Long categoryId,
                                                                     String keyword, Pageable pageable) {
         return productGetAdminProductsUseCase.getProducts(sellerId, status, categoryId, keyword, pageable);
     }
