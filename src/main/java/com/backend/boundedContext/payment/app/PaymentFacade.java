@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.payment.app.dto.AdminPaymentDto;
+import com.backend.boundedContext.payment.app.dto.AdminTopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
@@ -34,6 +35,7 @@ public class PaymentFacade {
     private final PaymentGetWalletUseCase paymentGetWalletUseCase;
     private final PaymentGetWalletTransactionsUseCase paymentGetWalletTransactionsUseCase;
     private final PaymentGetAdminPaymentsUseCase paymentGetAdminPaymentsUseCase;
+    private final PaymentGetAdminTopupsUseCase paymentGetAdminTopupsUseCase;
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentPayUseCase paymentPayUseCase;
@@ -68,6 +70,12 @@ public class PaymentFacade {
     @Transactional(readOnly = true)
     public PageResponse<AdminPaymentDto> getAdminPayments(String keyword, LocalDate from, LocalDate to, Pageable pageable) {
         return paymentGetAdminPaymentsUseCase.getPayments(keyword, from, to, pageable);
+    }
+
+    // 관리자 결제 조회 충전 탭
+    @Transactional(readOnly = true)
+    public PageResponse<AdminTopupDto> getAdminTopups(String keyword, LocalDate from, LocalDate to, Pageable pageable) {
+        return paymentGetAdminTopupsUseCase.getTopups(keyword, from, to, pageable);
     }
 
     // 충전 준비
