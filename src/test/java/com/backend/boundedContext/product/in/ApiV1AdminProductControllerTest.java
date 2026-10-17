@@ -2,7 +2,7 @@ package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.AdminProductStopRequestDto;
-import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import com.backend.boundedContext.product.domain.AdminProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.global.page.PageResponse;
 import com.backend.global.security.JwtAccessDeniedHandler;
@@ -56,10 +56,10 @@ class ApiV1AdminProductControllerTest {
     @Test
     @DisplayName("상품 목록: 조건을 그대로 넘기고 PageResponse로 돌려준다")
     void getProducts() throws Exception {
-        given(productFacade.getProductsForAdmin(eq(3L), eq(ProductSaleStatus.STOPPED), eq(7L), eq("크림"), any(Pageable.class)))
+        given(productFacade.getProductsForAdmin(eq(3L), eq(AdminProductDisplayStatus.SOLD_OUT), eq(7L), eq("크림"), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
 
-        perform(MemberRole.ADMIN, get("/api/v1/admin/products?sellerId=3&status=STOPPED&categoryId=7&keyword=크림"))
+        perform(MemberRole.ADMIN, get("/api/v1/admin/products?sellerId=3&status=SOLD_OUT&categoryId=7&keyword=크림"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray())
                 .andExpect(jsonPath("$.data.size").value(20));
