@@ -32,6 +32,6 @@ public class SettlementHoldUseCase {
         settlementProcessHistoryRepository.save(
                 SettlementProcessHistory.held(settlementId, strippedReason, LocalDateTime.now()));
         log.info("정산서 보류 settlementId={} sellerId={}", settlementId, settlement.getSellerId());
-        return SettlementResponse.from(settlement);
+        return SettlementResponse.of(settlement, settlementSupport.findBusinessName(settlement.getSellerId()));
     }
 }

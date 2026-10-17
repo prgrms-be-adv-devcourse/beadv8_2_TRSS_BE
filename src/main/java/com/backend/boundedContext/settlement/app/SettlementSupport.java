@@ -26,7 +26,9 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 여러 UseCase와 Facade가 함께 쓰는 조회 모음. Facade는 Repository를 직접 알지 않고 이 클래스를 거친다.
@@ -60,6 +62,22 @@ public class SettlementSupport {
     public Settlement getSettlement(Long settlementId) {
         return settlementRepository.findById(settlementId)
                 .orElseThrow(() -> new DomainException(SettlementErrorCode.SETTLEMENT_NOT_FOUND));
+    }
+
+    /**
+     * 판매자 ID → 상호명. MemberApi.getSellers로 한 번에 조회한다(관리자 목록 1페이지 = 쿼리 1번)
+     * 회원 컨텍스트에 없는 판매자는 맵에서 빠지므로 get(sellerId)가 null이 된다
+     */
+    public Map<Long, String> findBusinessNames(Collection<Long> sellerIds) {
+        if (sellerIds.isEmpty()) return Map.of();
+        return memberApi.getSellers(sellerIds).stream()
+                .filter(seller -> seller.businessName() != null)
+                .collect(Collectors.toMap(SellerDto::sellerId, SellerDto::businessName, (a, b) -> a));
+    }
+
+    /** 판매자 1명의 상호명. 없으면 null */
+    public String findBusinessName(Long sellerId) {
+        return findBusinessNames(List.of(sellerId)).get(sellerId);
     }
 
     /** 상태를 바꾸기 전에 쓰는 잠금 조회 */

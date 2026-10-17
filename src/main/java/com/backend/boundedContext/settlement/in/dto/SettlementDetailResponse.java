@@ -10,8 +10,9 @@ public record SettlementDetailResponse(
         SettlementResponse settlement,
         List<SettlementCandidateResponse> candidates
 ) {
-    public static SettlementDetailResponse of(Settlement settlement, List<SettlementCandidate> candidates) {
-        return new SettlementDetailResponse(SettlementResponse.from(settlement),
+    public static SettlementDetailResponse of(Settlement settlement, String businessName,
+                                              List<SettlementCandidate> candidates) {
+        return new SettlementDetailResponse(SettlementResponse.of(settlement, businessName),
                 candidates.stream().map(SettlementCandidateResponse::from).toList());
     }
 }
