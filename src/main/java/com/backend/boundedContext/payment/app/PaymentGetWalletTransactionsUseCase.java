@@ -38,7 +38,7 @@ public class PaymentGetWalletTransactionsUseCase {
     // 내 예치금 거래 내역
     public PageResponse<WalletTransactionDto> getTransactions(Long memberId, WalletTransactionType type, LocalDate from, LocalDate to, Pageable pageable) {
         if (from != null && to != null && from.isAfter(to)) {
-            throw new DomainException(PaymentErrorCode.WALLET_TRANSACTION_PERIOD_INVALID);
+            throw new DomainException(PaymentErrorCode.PAYMENT_PERIOD_INVALID);
         }
 
         Wallet wallet = walletRepository.findByMemberId(memberId)

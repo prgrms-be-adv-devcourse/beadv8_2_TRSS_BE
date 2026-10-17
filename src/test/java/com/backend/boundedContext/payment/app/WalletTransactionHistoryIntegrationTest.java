@@ -105,13 +105,13 @@ class WalletTransactionHistoryIntegrationTest {
     }
 
     @Test
-    @DisplayName("시작일이 종료일보다 늦으면 400 WALLET_TRANSACTION_PERIOD_INVALID, 지갑이 없으면 404 WALLET_NOT_FOUND")
+    @DisplayName("시작일이 종료일보다 늦으면 400 PAYMENT_PERIOD_INVALID, 지갑이 없으면 404 WALLET_NOT_FOUND")
     void invalidRequests() {
         LocalDate today = LocalDate.now();
 
         assertThatThrownBy(() -> paymentFacade.getWalletTransactions(memberId, null, today, today.minusDays(1), PageRequest.of(0, 20)))
                 .isInstanceOf(DomainException.class)
-                .extracting("resultCode").isEqualTo("400-WALLET_TRANSACTION_PERIOD_INVALID");
+                .extracting("resultCode").isEqualTo("400-PAYMENT_PERIOD_INVALID");
         assertThatThrownBy(() -> paymentFacade.getWalletTransactions(memberId, null, null, null, PageRequest.of(0, 20)))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-WALLET_NOT_FOUND");

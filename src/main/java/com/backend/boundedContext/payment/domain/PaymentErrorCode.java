@@ -13,7 +13,9 @@ public enum PaymentErrorCode implements ErrorCode {
 
     // 지갑
     WALLET_NOT_FOUND(404, "지갑을 찾을 수 없습니다."),
-    WALLET_TRANSACTION_PERIOD_INVALID(400, "조회 시작일은 종료일보다 늦을 수 없습니다."),
+
+    // 조회 (내 거래 내역·관리자 결제 조회 공통)
+    PAYMENT_PERIOD_INVALID(400, "조회 시작일은 종료일보다 늦을 수 없습니다."),
 
     // 충전
     TOPUP_NOT_FOUND(404, "충전 내역을 찾을 수 없습니다."),

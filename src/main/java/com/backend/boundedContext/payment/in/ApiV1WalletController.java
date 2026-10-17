@@ -43,7 +43,7 @@ public class ApiV1WalletController {
             잔액이 바뀐 거래(원장)를 최신순으로 돌려준다. amount는 입금이면 +, 차감이면 -다.
             유형(type)·기간(from~to, 양 끝 날짜 포함)은 선택이다. page(0부터)·size(기본 20, 최대 100), 정렬은 고정이라 sort는 무시한다""")
     @ApiResponse(responseCode = "200", description = "200-1 조회 성공")
-    @ApiResponse(responseCode = "400", description = "400-WALLET_TRANSACTION_PERIOD_INVALID 시작일이 종료일보다 늦음")
+    @ApiResponse(responseCode = "400", description = "400-PAYMENT_PERIOD_INVALID 시작일이 종료일보다 늦음")
     @ApiResponse(responseCode = "404", description = "404-WALLET_NOT_FOUND 지갑 없음")
     @GetMapping("/transactions")
     public RsData<PageResponse<WalletTransactionDto>> getTransactions(

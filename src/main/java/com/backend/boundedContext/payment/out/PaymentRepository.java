@@ -3,11 +3,13 @@ package com.backend.boundedContext.payment.out;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
 
-public interface PaymentRepository extends JpaRepository<Payment, Long> {
+// 관리자 결제 조회는 AdminPaymentSpecifications 조건으로 findAll(spec, pageable)을 씀
+public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpecificationExecutor<Payment> {
 
     // 같은 멱등 키로 이미 처리한 결제 (멱등 키는 UNIQUE라 최대 1건)
     Optional<Payment> findByIdempotencyKey(String idempotencyKey);

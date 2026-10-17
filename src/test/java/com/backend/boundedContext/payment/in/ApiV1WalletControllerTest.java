@@ -101,17 +101,17 @@ class ApiV1WalletControllerTest {
     }
 
     @Test
-    @DisplayName("거래 내역: 시작일이 종료일보다 늦으면 400 WALLET_TRANSACTION_PERIOD_INVALID")
+    @DisplayName("거래 내역: 시작일이 종료일보다 늦으면 400 PAYMENT_PERIOD_INVALID")
     void getTransactions_invalidPeriod() throws Exception {
         given(paymentFacade.getWalletTransactions(eq(3L), any(), any(), any(), any(Pageable.class)))
-                .willThrow(new DomainException(PaymentErrorCode.WALLET_TRANSACTION_PERIOD_INVALID));
+                .willThrow(new DomainException(PaymentErrorCode.PAYMENT_PERIOD_INVALID));
 
         mockMvc.perform(get("/api/v1/wallet/transactions")
                         .param("from", "2026-10-17")
                         .param("to", "2026-10-01")
                         .header("Authorization", "Bearer " + token(3L)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.resultCode").value("400-WALLET_TRANSACTION_PERIOD_INVALID"));
+                .andExpect(jsonPath("$.resultCode").value("400-PAYMENT_PERIOD_INVALID"));
     }
 
     @Test
