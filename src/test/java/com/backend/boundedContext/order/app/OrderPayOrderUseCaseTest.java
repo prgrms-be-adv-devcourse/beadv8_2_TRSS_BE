@@ -67,7 +67,9 @@ class OrderPayOrderUseCaseTest {
         assertThat(response.status()).isEqualTo(OrderStatus.PAID);
         assertThat(response.paymentId()).isEqualTo(77L);
         verify(orderSupport).getSaleableOptions(List.of(100L));
-        verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 20_000 && cmd.orderId().equals(ORDER_ID)));
+        verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 20_000
+                && cmd.orderId().equals(ORDER_ID)
+                && cmd.orderNumber().equals(order.getOrderNumber())));
         verify(cart).removeItems(List.of(1L));
     }
 
