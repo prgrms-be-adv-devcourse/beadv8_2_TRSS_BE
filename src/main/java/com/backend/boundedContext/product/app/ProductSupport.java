@@ -10,6 +10,7 @@ import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequest;
 import com.backend.boundedContext.product.domain.StockChangeType;
+import com.backend.boundedContext.product.out.CategoryProductCount;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
@@ -280,21 +281,30 @@ public class ProductSupport {
         return categoryRepository.count();
     }
 
-    /** 사용 중인 카테고리만 정렬 순서대로 트리로 만든다. */
+    /**
+     * 사용 중인 카테고리만 정렬 순서대로 트리로 만든다.
+     * 상품 수는 구매자 검색 기본값과 같은 기준(판매 중, 품절 포함)이고, 대분류는 아래 소분류 상품 수의 합이다.
+     */
     public List<CategoryTreeDto> getCategoryTree() {
         List<Category> categories = categoryRepository.findAllByOrderBySortOrderAscIdAsc().stream()
                 .filter(Category::isActive)
                 .toList();
         Map<Long, List<Category>> childrenByParentId = groupChildrenByParentId(categories);
+        Map<Long, Long> productCounts = productRepository.countByCategory(ProductSaleStatus.ON_SALE).stream()
+                .collect(Collectors.toMap(CategoryProductCount::categoryId, CategoryProductCount::productCount));
 
         return categories.stream()
                 .filter(Category::isRoot)
-                .map(root -> new CategoryTreeDto(
-                        root.getId(), root.getName(), root.getDepth(), root.getSortOrder(),
-                        childrenByParentId.getOrDefault(root.getId(), List.of()).stream()
-                                .map(child -> new CategoryTreeDto(
-                                        child.getId(), child.getName(), child.getDepth(), child.getSortOrder(), List.of()))
-                                .toList()))
+                .map(root -> {
+                    List<CategoryTreeDto> children = childrenByParentId.getOrDefault(root.getId(), List.of()).stream()
+                            .map(child -> new CategoryTreeDto(
+                                    child.getId(), child.getName(), child.getDepth(), child.getSortOrder(),
+                                    productCounts.getOrDefault(child.getId(), 0L), List.of()))
+                            .toList();
+                    return new CategoryTreeDto(
+                            root.getId(), root.getName(), root.getDepth(), root.getSortOrder(),
+                            children.stream().mapToLong(CategoryTreeDto::productCount).sum(), children);
+                })
                 .toList();
     }
 
