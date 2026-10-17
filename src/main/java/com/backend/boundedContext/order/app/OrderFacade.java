@@ -37,6 +37,7 @@ public class OrderFacade {
     private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
+    private final OrderGetSellerOrderItemsUseCase orderGetSellerOrderItemsUseCase;
     private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
 
     // 장바구니 조회
@@ -145,6 +146,14 @@ public class OrderFacade {
     @Transactional(readOnly = true)
     public boolean hasActiveSales(Long sellerId) {
         return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
+    }
+
+    // 판매자 주문 항목 조회
+    @Transactional(readOnly = true)
+    public PageResponse<SellerOrderItemResponse> getSellerOrderItems(Long memberId, OrderStatus status,
+                                                                     LocalDate from, LocalDate to,
+                                                                     String keyword, Pageable pageable) {
+        return orderGetSellerOrderItemsUseCase.getSellerOrderItems(memberId, status, from, to, keyword, pageable);
     }
 
     // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi)
