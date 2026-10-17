@@ -41,7 +41,7 @@ public class OrderPayOrderUseCase {
         order.pay(now);
         validateSaleable(order.getItems());
 
-        PayResultDto result = paymentApi.pay(new PayCommand(order.getId(), buyerId,
+        PayResultDto result = paymentApi.pay(new PayCommand(order.getId(), order.getOrderNumber(), buyerId,
                 order.getTotalPrice(), order.getExpiresAt(), newIdempotencyKey(order)));
         handleFailure(result, remainingSeconds);
         removeCartItems(buyerId, order.getItems());
