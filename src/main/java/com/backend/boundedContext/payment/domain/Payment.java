@@ -70,7 +70,13 @@ public class Payment extends BaseIdAndTime {
     public static Payment failed(Long orderId, Wallet wallet, long amount, String idempotencyKey,
                                  PaymentStatus failStatus, String failReason) {
         if (!failStatus.isFailure()) throw new IllegalArgumentException("실패 상태가 아닙니다: " + failStatus);
-        Payment payment = create(orderId, wallet, amount, idempotencyKey, failStatus);
+        Payment payment = create(
+                orderId,
+                wallet,
+                amount,
+                idempotencyKey,
+                failStatus
+        );
         payment.failReason = failReason;
         return payment;
     }
