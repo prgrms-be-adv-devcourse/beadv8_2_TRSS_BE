@@ -306,6 +306,7 @@ class PaymentPayIntegrationTest {
         PayResultDto result = paymentFacade.pay(
                 new PayCommand(
                         orderId,
+                        "ORD-TEST-" + orderId,
                         buyerMemberId,
                         amount,
                         orderExpiresAt,
