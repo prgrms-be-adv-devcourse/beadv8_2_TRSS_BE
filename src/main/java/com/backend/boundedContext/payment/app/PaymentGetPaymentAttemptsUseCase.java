@@ -44,8 +44,6 @@ public class PaymentGetPaymentAttemptsUseCase {
             case FAILED_INSUFFICIENT_BALANCE -> PaymentAttemptStatus.FAILED_INSUFFICIENT_BALANCE;
             case FAILED_ORDER_EXPIRED -> PaymentAttemptStatus.FAILED_ORDER_EXPIRED;
             case FAILED_SYSTEM_ERROR -> PaymentAttemptStatus.FAILED_SYSTEM_ERROR;
-            // 결제 건은 PAID·FAILED_*로만 저장되므로 나올 수 없음
-            case PROCESSING -> throw new IllegalStateException("진행 중 상태의 결제 건이 저장되어 있습니다: " + status);
         };
     }
 }

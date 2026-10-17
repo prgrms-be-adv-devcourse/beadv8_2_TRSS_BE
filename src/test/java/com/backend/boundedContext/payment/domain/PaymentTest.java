@@ -61,7 +61,6 @@ class PaymentTest {
         assertThat(PaymentStatus.FAILED_INSUFFICIENT_BALANCE.isFailure()).isTrue();
         assertThat(PaymentStatus.FAILED_ORDER_EXPIRED.isFailure()).isTrue();
         assertThat(PaymentStatus.FAILED_SYSTEM_ERROR.isFailure()).isTrue();
-        assertThat(PaymentStatus.PROCESSING.isFailure()).isFalse();
         assertThat(PaymentStatus.PAID.isFailure()).isFalse();
         assertThat(PaymentStatus.REFUNDED.isFailure()).isFalse();
     }
