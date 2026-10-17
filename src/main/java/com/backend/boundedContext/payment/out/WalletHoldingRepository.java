@@ -17,6 +17,9 @@ public interface WalletHoldingRepository extends JpaRepository<WalletHolding, Lo
 
     boolean existsByOrderId(Long orderId);
 
+    // 결제 건들의 홀딩 (관리자 결제 조회의 보관 금액 상태). 결제 성공 건만 홀딩이 있음
+    List<WalletHolding> findAllByPaymentIdIn(Collection<Long> paymentIds);
+
     // 지갑의 홀딩 중 남은 금액(홀딩 금액 - 정산 누적 금액) 합계. 홀딩이 없으면 0
     @Query("""
             select coalesce(sum(h.amount - h.settledAmount), 0) from WalletHolding h

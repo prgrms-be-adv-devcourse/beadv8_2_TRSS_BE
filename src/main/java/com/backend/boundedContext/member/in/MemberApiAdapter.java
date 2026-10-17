@@ -31,6 +31,16 @@ public class MemberApiAdapter implements MemberApi {
     }
 
     @Override
+    public List<MemberDto> getMembers(Collection<Long> memberIds) {
+        return memberFacade.getMembersByIds(memberIds);
+    }
+
+    @Override
+    public Optional<MemberDto> findMemberByEmail(String email) {
+        return memberFacade.findMemberByEmail(email);
+    }
+
+    @Override
     public Optional<SellerDto> findSellerByMemberId(Long memberId) {
         return memberSellerFacade.findSellerByMemberId(memberId);
     }

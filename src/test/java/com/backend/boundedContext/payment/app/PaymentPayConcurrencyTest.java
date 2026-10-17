@@ -122,7 +122,7 @@ class PaymentPayConcurrencyTest {
     }
 
     private PayResultDto pay(long orderId, long amount) {
-        return paymentApi.pay(new PayCommand(orderId, buyerMemberId, amount,
+        return paymentApi.pay(new PayCommand(orderId, "ORD-TEST-" + orderId, buyerMemberId, amount,
                 LocalDateTime.now().plusMinutes(15), "TEST-" + UUID.randomUUID()));
     }
 

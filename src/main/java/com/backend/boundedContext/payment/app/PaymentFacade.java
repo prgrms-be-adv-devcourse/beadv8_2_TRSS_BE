@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.app;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -8,11 +9,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.backend.boundedContext.payment.app.dto.AdminPaymentDto;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
+import com.backend.boundedContext.payment.app.dto.WalletTransactionDto;
+import com.backend.boundedContext.payment.domain.WalletTransactionType;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
@@ -28,6 +32,8 @@ public class PaymentFacade {
 
     private final PaymentCreateWalletUseCase paymentCreateWalletUseCase;
     private final PaymentGetWalletUseCase paymentGetWalletUseCase;
+    private final PaymentGetWalletTransactionsUseCase paymentGetWalletTransactionsUseCase;
+    private final PaymentGetAdminPaymentsUseCase paymentGetAdminPaymentsUseCase;
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentPayUseCase paymentPayUseCase;
@@ -50,6 +56,18 @@ public class PaymentFacade {
     @Transactional(readOnly = true)
     public WalletSummaryDto getWallet(Long memberId) {
         return paymentGetWalletUseCase.getWallet(memberId);
+    }
+
+    // 내 예치금 거래 내역
+    @Transactional(readOnly = true)
+    public PageResponse<WalletTransactionDto> getWalletTransactions(Long memberId, WalletTransactionType type, LocalDate from, LocalDate to, Pageable pageable) {
+        return paymentGetWalletTransactionsUseCase.getTransactions(memberId, type, from, to, pageable);
+    }
+
+    // 관리자 결제 조회 결제 탭
+    @Transactional(readOnly = true)
+    public PageResponse<AdminPaymentDto> getAdminPayments(String keyword, LocalDate from, LocalDate to, Pageable pageable) {
+        return paymentGetAdminPaymentsUseCase.getPayments(keyword, from, to, pageable);
     }
 
     // 충전 준비
