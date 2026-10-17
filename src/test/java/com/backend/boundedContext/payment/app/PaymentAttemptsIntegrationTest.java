@@ -58,14 +58,34 @@ class PaymentAttemptsIntegrationTest {
     void getPaymentAttempts() {
         Wallet wallet = saveWallet();
         LocalDateTime paidAt = LocalDateTime.now();
-        Payment failed = save(Payment.failed(orderId, wallet, 72_900, newKey(),
-                PaymentStatus.FAILED_INSUFFICIENT_BALANCE, "잔액 부족"));
-        Payment paid = save(Payment.paid(orderId, wallet, 72_900, newKey(), paidAt));
-        save(Payment.paid(otherOrderId, wallet, 10_000, newKey(), paidAt));
+        Payment failed = save(Payment.failed(
+                        orderId,
+                        wallet,
+                        72_900,
+                        newKey(),
+                        PaymentStatus.FAILED_INSUFFICIENT_BALANCE,
+                        "잔액 부족"
+        ));
+        Payment paid = save(Payment.paid(
+                        orderId,
+                        wallet,
+                        72_900,
+                        newKey(),
+                        paidAt
+        ));
+        Payment otherOrderPaid = save(Payment.paid(
+                otherOrderId,
+                wallet,
+                10_000,
+                newKey(),
+                paidAt
+        ));
 
         List<PaymentAttemptDto> attempts = paymentApi.getPaymentAttempts(orderId);
 
-        assertThat(attempts).extracting(PaymentAttemptDto::paymentId).containsExactly(failed.getId(), paid.getId());
+        assertThat(attempts).extracting(PaymentAttemptDto::paymentId)
+                .containsExactly(failed.getId(), paid.getId())
+                .doesNotContain(otherOrderPaid.getId());
         assertThat(attempts).extracting(PaymentAttemptDto::status)
                 .containsExactly(PaymentAttemptStatus.FAILED_INSUFFICIENT_BALANCE, PaymentAttemptStatus.PAID);
 
