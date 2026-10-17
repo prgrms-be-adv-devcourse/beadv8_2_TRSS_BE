@@ -30,6 +30,6 @@ public class SettlementReleaseUseCase {
         settlement.release();   // HOLD가 아니면 409
         settlementProcessHistoryRepository.save(SettlementProcessHistory.released(settlementId, LocalDateTime.now()));
         log.info("정산서 보류 해제 settlementId={} sellerId={}", settlementId, settlement.getSellerId());
-        return SettlementResponse.from(settlement);
+        return SettlementResponse.of(settlement, settlementSupport.findBusinessName(settlement.getSellerId()));
     }
 }

@@ -92,7 +92,11 @@ class SettlementAdminActionsUseCaseTest {
                         return Optional.of(new SellerDto(OTHER_SELLER_ID, OTHER_MEMBER_ID, "다른상점", SellerStatus.APPROVED));
                     }
                     return Optional.empty();
-                }));
+                },
+                "getSellers", args -> ((Collection<?>) args[0]).stream()
+                        .filter(SELLER_ID::equals)
+                        .map(id -> new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.APPROVED))
+                        .toList()));
         support = new SettlementSupport(settlementRepository, candidateRepository, historyRepository, memberApi);
         holdUseCase = new SettlementHoldUseCase(support, historyRepository);
         releaseUseCase = new SettlementReleaseUseCase(support, historyRepository);
@@ -110,6 +114,7 @@ class SettlementAdminActionsUseCaseTest {
 
         assertEquals(SettlementStatus.HOLD, result.status());
         assertEquals("판매자 확인 필요", result.holdReason());
+        assertEquals("팔레트상점", result.businessName());
         SettlementProcessHistory h = histories.get(0);
         assertEquals(SettlementHistoryStage.HOLD, h.getStage());
         assertEquals(SettlementTrigger.ADMIN, h.getTriggerType());
@@ -138,6 +143,7 @@ class SettlementAdminActionsUseCaseTest {
 
         assertEquals(SettlementStatus.READY, result.status());
         assertNull(result.holdReason());
+        assertEquals("팔레트상점", result.businessName());
         assertEquals(SettlementHistoryStage.RELEASE, histories.get(0).getStage());
         assertEquals("409-SETTLEMENT_STATE_INVALID",
                 assertThrows(DomainException.class, () -> releaseUseCase.release(31L)).getResultCode());

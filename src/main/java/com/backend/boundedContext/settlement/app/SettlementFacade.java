@@ -1,6 +1,5 @@
 package com.backend.boundedContext.settlement.app;
 
-import com.backend.boundedContext.settlement.domain.Settlement;
 import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
 import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
@@ -43,6 +42,8 @@ public class SettlementFacade {
     private final SettlementPayoutUseCase settlementPayoutUseCase;
     private final SettlementRunMonthlyJobUseCase settlementRunMonthlyJobUseCase;
     private final SettlementGetRunsUseCase settlementGetRunsUseCase;
+    private final SettlementGetSettlementListUseCase settlementGetSettlementListUseCase;
+    private final SettlementGetSettlementDetailUseCase settlementGetSettlementDetailUseCase;
     private final SettlementGetSellerSettlementsUseCase settlementGetSellerSettlementsUseCase;
     private final SettlementGetSellerSettlementUseCase settlementGetSellerSettlementUseCase;
     private final SettlementGetExpectedAmountsUseCase settlementGetExpectedAmountsUseCase;
@@ -127,14 +128,12 @@ public class SettlementFacade {
     @Transactional(readOnly = true)
     public PageResponse<SettlementResponse> getSettlements(String month, SettlementStatus status, Long sellerId,
                                                            Pageable pageable) {
-        return PageResponse.from(settlementSupport.findSettlements(month, status, sellerId, pageable),
-                SettlementResponse::from);
+        return settlementGetSettlementListUseCase.getSettlements(month, status, sellerId, pageable);
     }
 
     @Transactional(readOnly = true)
     public SettlementDetailResponse getSettlement(Long settlementId) {
-        Settlement settlement = settlementSupport.getSettlement(settlementId);
-        return SettlementDetailResponse.of(settlement, settlementSupport.findCandidatesOf(settlementId));
+        return settlementGetSettlementDetailUseCase.getSettlement(settlementId);
     }
 
     /** 정산서 1건의 처리 이력(시도 순). 없는 정산서는 404 */
