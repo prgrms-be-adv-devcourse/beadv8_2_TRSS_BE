@@ -1,5 +1,9 @@
 package com.backend.boundedContext.member.app;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +12,7 @@ import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
+import com.backend.boundedContext.member.domain.Member;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberRole;
@@ -65,6 +70,18 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public MemberDto getMember(Long memberId) {
         return memberSupport.getMember(memberId).toDto();
+    }
+
+    // 여러 회원 조회 (다른 컨텍스트용). 없는 ID는 결과에서 빠짐
+    @Transactional(readOnly = true)
+    public List<MemberDto> getMembersByIds(Collection<Long> memberIds) {
+        return memberSupport.getMembers(memberIds).stream().map(Member::toDto).toList();
+    }
+
+    // 이메일로 회원 조회 (다른 컨텍스트용)
+    @Transactional(readOnly = true)
+    public Optional<MemberDto> findMemberByEmail(String email) {
+        return memberSupport.findMemberByEmail(email).map(Member::toDto);
     }
 
     // 로그인 (Access·Refresh Token 발급)
