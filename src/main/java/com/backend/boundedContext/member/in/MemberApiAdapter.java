@@ -1,0 +1,62 @@
+package com.backend.boundedContext.member.in;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
+
+import com.backend.boundedContext.member.app.MemberFacade;
+import com.backend.boundedContext.member.app.MemberSellerFacade;
+import com.backend.shared.member.dto.MemberDto;
+import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.member.out.MemberApi;
+
+import lombok.RequiredArgsConstructor;
+
+@Component
+@RequiredArgsConstructor
+public class MemberApiAdapter implements MemberApi {
+
+    @Lazy  // 컨텍스트 간 순환 참조 방지
+    private final MemberFacade memberFacade;
+
+    @Lazy
+    private final MemberSellerFacade memberSellerFacade;
+
+    @Override
+    public MemberDto getMember(Long memberId) {
+        return memberFacade.getMember(memberId);
+    }
+
+    @Override
+    public List<MemberDto> getMembers(Collection<Long> memberIds) {
+        return memberFacade.getMembersByIds(memberIds);
+    }
+
+    @Override
+    public Optional<MemberDto> findMemberByEmail(String email) {
+        return memberFacade.findMemberByEmail(email);
+    }
+
+    @Override
+    public Optional<SellerDto> findSellerByMemberId(Long memberId) {
+        return memberSellerFacade.findSellerByMemberId(memberId);
+    }
+
+    @Override
+    public SellerDto getApprovedSellerByMemberId(Long memberId) {
+        return memberSellerFacade.getApprovedSellerByMemberId(memberId);
+    }
+
+    @Override
+    public SellerDto getSeller(Long sellerId) {
+        return memberSellerFacade.getSeller(sellerId);
+    }
+
+    @Override
+    public List<SellerDto> getSellers(Collection<Long> sellerIds) {
+        return memberSellerFacade.getSellers(sellerIds);
+    }
+}
