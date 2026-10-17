@@ -3,6 +3,7 @@ package com.backend.boundedContext.member.in;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,7 +28,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.app.MemberSellerFacade;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
+import com.backend.boundedContext.member.app.dto.AdminSellerCountsDto;
 import com.backend.boundedContext.member.app.dto.AdminSellerDto;
+import com.backend.boundedContext.member.app.dto.AdminSellerListDto;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
@@ -45,6 +48,7 @@ import com.backend.shared.member.dto.SellerStatus;
 class ApiV1AdminSellerControllerTest {
 
     private static final LocalDateTime APPLIED_AT = LocalDateTime.of(2026, 10, 13, 10, 0);
+    private static final AdminSellerCountsDto COUNTS = new AdminSellerCountsDto(18, 3, 12, 2, 1, 0, 0);
 
     @Autowired
     private MockMvc mockMvc;
@@ -60,26 +64,46 @@ class ApiV1AdminSellerControllerTest {
     }
 
     @Test
-    @DisplayName("판매자 목록: 관리자는 상태 필터와 페이지로 조회하고 PageResponse 형식으로 받는다")
+    @DisplayName("판매자 목록: 관리자는 상태 필터와 페이지로 조회하고, 목록(PageResponse)과 탭별 건수를 함께 받는다")
     void getSellers_admin() throws Exception {
         AdminSellerDto item = new AdminSellerDto(5L, APPLIED_AT, "팔레트 뷰티", "1234567890", "seller@palette.test", SellerStatus.PENDING);
         given(memberSellerFacade.getSellersForAdmin(eq(SellerStatus.PENDING), any(Pageable.class)))
-                .willReturn(new PageResponse<>(List.of(item), 1, 10, 11, 2));
+                .willReturn(new AdminSellerListDto(new PageResponse<>(List.of(item), 1, 10, 11, 2), COUNTS));
 
         mockMvc.perform(get("/api/v1/admin/sellers")
                         .param("status", "PENDING").param("page", "1").param("size", "10")
                         .header("Authorization", bearer(MemberRole.ADMIN)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].sellerId").value(5))
-                .andExpect(jsonPath("$.data.items[0].status").value("PENDING"))
-                .andExpect(jsonPath("$.data.items[0].email").value("seller@palette.test"))
-                .andExpect(jsonPath("$.data.page").value(1))
-                .andExpect(jsonPath("$.data.totalElements").value(11));
+                .andExpect(jsonPath("$.data.sellers.items[0].sellerId").value(5))
+                .andExpect(jsonPath("$.data.sellers.items[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.data.sellers.items[0].email").value("seller@palette.test"))
+                .andExpect(jsonPath("$.data.sellers.page").value(1))
+                .andExpect(jsonPath("$.data.sellers.totalElements").value(11))
+                .andExpect(jsonPath("$.data.counts.all").value(18))
+                .andExpect(jsonPath("$.data.counts.pending").value(3))
+                .andExpect(jsonPath("$.data.counts.approved").value(12))
+                .andExpect(jsonPath("$.data.counts.rejected").value(2))
+                .andExpect(jsonPath("$.data.counts.withdrawRequested").value(1))
+                .andExpect(jsonPath("$.data.counts.withdrawn").value(0))
+                .andExpect(jsonPath("$.data.counts.sanctioned").value(0));
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(memberSellerFacade).getSellersForAdmin(eq(SellerStatus.PENDING), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("판매자 목록: status를 비우면 전체(null)로 조회한다")
+    void getSellers_all() throws Exception {
+        given(memberSellerFacade.getSellersForAdmin(isNull(), any(Pageable.class)))
+                .willReturn(new AdminSellerListDto(new PageResponse<>(List.of(), 0, 20, 0, 0), COUNTS));
+
+        mockMvc.perform(get("/api/v1/admin/sellers").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.counts.all").value(18));
+
+        verify(memberSellerFacade).getSellersForAdmin(isNull(), any(Pageable.class));
     }
 
     @Test

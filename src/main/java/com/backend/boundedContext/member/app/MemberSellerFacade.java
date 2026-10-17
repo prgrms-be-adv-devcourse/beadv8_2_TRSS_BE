@@ -9,12 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
-import com.backend.boundedContext.member.app.dto.AdminSellerDto;
+import com.backend.boundedContext.member.app.dto.AdminSellerListDto;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerApplyResponse;
 import com.backend.boundedContext.member.in.dto.SellerUpdateRequest;
-import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 
@@ -90,9 +89,9 @@ public class MemberSellerFacade {
         return memberGetSellerUseCase.getSellers(sellerIds);
     }
 
-    // 관리자 판매자 목록 (PENDING 먼저, 상태 필터, 페이징)
+    // 관리자 판매자 목록 + 탭별 건수
     @Transactional(readOnly = true)
-    public PageResponse<AdminSellerDto> getSellersForAdmin(SellerStatus status, Pageable pageable) {
+    public AdminSellerListDto getSellersForAdmin(SellerStatus status, Pageable pageable) {
         return memberGetSellersUseCase.getSellers(status, pageable);
     }
 

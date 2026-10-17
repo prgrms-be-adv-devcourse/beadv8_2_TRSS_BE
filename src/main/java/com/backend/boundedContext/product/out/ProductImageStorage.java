@@ -2,7 +2,8 @@ package com.backend.boundedContext.product.out;
 
 /**
  * 상품 이미지 파일 저장소. 키(예: products/12/uuid.png)로 저장·삭제하고, 응답에 쓸 URL을 만든다.
- * 구현은 custom.product.image.storage로 고른다. 지금은 로컬 파일 시스템({@link LocalProductImageStorage})만 있다.
+ * 구현은 custom.product.image.storage로 고른다.
+ * local: 로컬 파일 시스템({@link LocalProductImageStorage}, 로컬 개발·테스트), s3: S3 버킷({@link S3ProductImageStorage}, 배포 환경)
  */
 public interface ProductImageStorage {
 

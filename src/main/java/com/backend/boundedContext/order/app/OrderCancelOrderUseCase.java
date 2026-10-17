@@ -10,10 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 주문 취소
- * 결제 전 주문을 전체 취소하고 재고를 복원한다.
  */
 @Component
 @RequiredArgsConstructor
@@ -25,6 +25,13 @@ public class OrderCancelOrderUseCase {
     private final OrderCancelSupport orderCancelSupport;
 
     public OrderCancelResponse cancel(Long buyerId, Long orderId) {
+        // 잠금 순서: 상품 -> 주문
+        List<Long> productIds = orderRepository.findProductIdsByOrderIdAndBuyerId(orderId, buyerId);
+        if (productIds.isEmpty()) {
+            throw new DomainException(OrderErrorCode.ORDER_NOT_FOUND);
+        }
+        orderCancelSupport.lockProducts(productIds);
+
         Order order = orderRepository.findByIdAndBuyerIdForUpdate(orderId, buyerId)
                 .orElseThrow(() -> new DomainException(OrderErrorCode.ORDER_NOT_FOUND));
 

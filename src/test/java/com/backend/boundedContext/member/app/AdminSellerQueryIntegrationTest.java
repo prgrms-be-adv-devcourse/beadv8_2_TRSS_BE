@@ -1,7 +1,9 @@
 package com.backend.boundedContext.member.app;
 
+import com.backend.boundedContext.member.app.dto.AdminSellerCountsDto;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminSellerDto;
+import com.backend.boundedContext.member.app.dto.AdminSellerListDto;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
@@ -88,7 +90,7 @@ class AdminSellerQueryIntegrationTest {
     @Test
     @DisplayName("목록: 상태 필터를 걸면 그 상태만 나온다")
     void getSellers_statusFilter() {
-        PageResponse<AdminSellerDto> result = memberSellerFacade.getSellersForAdmin(SellerStatus.PENDING, PageRequest.of(0, 100));
+        PageResponse<AdminSellerDto> result = memberSellerFacade.getSellersForAdmin(SellerStatus.PENDING, PageRequest.of(0, 100)).sellers();
 
         assertThat(result.items()).extracting(AdminSellerDto::status).containsOnly(SellerStatus.PENDING);
         assertThat(result.items()).extracting(AdminSellerDto::sellerId)
@@ -104,11 +106,37 @@ class AdminSellerQueryIntegrationTest {
     @Test
     @DisplayName("목록: 페이지 크기만큼 나눠 조회한다")
     void getSellers_paging() {
-        PageResponse<AdminSellerDto> first = memberSellerFacade.getSellersForAdmin(null, PageRequest.of(0, 2));
+        PageResponse<AdminSellerDto> first = memberSellerFacade.getSellersForAdmin(null, PageRequest.of(0, 2)).sellers();
 
         assertThat(first.items()).hasSize(2);
         assertThat(first.size()).isEqualTo(2);
         assertThat(first.totalElements()).isGreaterThanOrEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("건수: 판매자가 늘면 그 상태와 전체(all)만 늘고, all은 상태별 건수의 합이다")
+    void getSellers_counts() {
+        AdminSellerCountsDto before = counts(null);
+
+        apply("E상회");
+        AdminSellerCountsDto after = counts(null);
+
+        assertThat(after.pending()).isEqualTo(before.pending() + 1);
+        assertThat(after.all()).isEqualTo(before.all() + 1);
+        assertThat(after.approved()).isEqualTo(before.approved());
+        assertThat(after.all()).isEqualTo(after.pending() + after.approved() + after.rejected()
+                + after.withdrawRequested() + after.withdrawn() + after.sanctioned());
+    }
+
+    @Test
+    @DisplayName("건수: 상태 필터와 관계없이 전체 판매자 기준이고, 전체 건수는 전체 목록의 totalElements와 같다")
+    void getSellers_countsIgnoreStatusFilter() {
+        AdminSellerListDto all = memberSellerFacade.getSellersForAdmin(null, PageRequest.of(0, 1));
+        AdminSellerListDto pendingOnly = memberSellerFacade.getSellersForAdmin(SellerStatus.PENDING, PageRequest.of(0, 1));
+
+        assertThat(pendingOnly.counts()).isEqualTo(all.counts());
+        assertThat(all.counts().all()).isEqualTo(all.sellers().totalElements());
+        assertThat(all.counts().pending()).isEqualTo(pendingOnly.sellers().totalElements());
     }
 
     @Test
@@ -139,10 +167,14 @@ class AdminSellerQueryIntegrationTest {
         int page = 0;
         PageResponse<AdminSellerDto> result;
         do {
-            result = memberSellerFacade.getSellersForAdmin(status, PageRequest.of(page++, 100));
+            result = memberSellerFacade.getSellersForAdmin(status, PageRequest.of(page++, 100)).sellers();
             result.items().forEach(item -> ids.add(item.sellerId()));
         } while (page < result.totalPages());
         return ids;
+    }
+
+    private AdminSellerCountsDto counts(SellerStatus status) {
+        return memberSellerFacade.getSellersForAdmin(status, PageRequest.of(0, 1)).counts();
     }
 
     private Long apply(String businessName) {

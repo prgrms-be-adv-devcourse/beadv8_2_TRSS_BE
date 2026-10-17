@@ -39,7 +39,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     // 구매자에게 해당 상태의 주문이 있는지
     boolean existsByBuyerIdAndStatusIn(Long buyerId, Collection<OrderStatus> statuses);
 
-    // 판매자 상품이 들어간 해당 상태의 주문이 있는지
+    // 판매자 상품이 들어간 주문이 있는지
     @Query("""
             select count(i) > 0
             from OrderItem i
@@ -68,7 +68,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Query("select o from Order o where o.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
-    // 결제 만료 처리 대상 주문 id - 만료 시각이 expiredBefore 이전인 결제 대기 주문
+    // 결제 만료 처리 대상 주문 id 조회
     @Query("""
             select o.id
             from Order o
@@ -81,4 +81,36 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
                                    @Param("expiredBefore") LocalDateTime expiredBefore,
                                    @Param("afterId") Long afterId,
                                    Pageable pageable);
+
+    // 상품이 하나라도 들어 있는 해당 상태의 주문 id 조회
+    @Query("""
+            select distinct i.order.id
+            from OrderItem i
+            where i.productId in :productIds
+              and i.order.status in :statuses
+            """)
+    List<Long> findIdsByProductIdsAndStatusIn(@Param("productIds") Collection<Long> productIds,
+                                              @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 주문 여러 건을 id 순서대로 잠가서 조회
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id in :ids order by o.id")
+    List<Order> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
+
+    // 주문에 들어 있는 상품 id 조회
+    @Query("""
+            select distinct i.productId
+            from OrderItem i
+            where i.order.id = :orderId
+            """)
+    List<Long> findProductIdsByOrderId(@Param("orderId") Long orderId);
+
+    // 본인 주문에 들어 있는 상품 id
+    @Query("""
+            select distinct i.productId
+            from OrderItem i
+            where i.order.id = :orderId
+              and i.order.buyerId = :buyerId
+            """)
+    List<Long> findProductIdsByOrderIdAndBuyerId(@Param("orderId") Long orderId, @Param("buyerId") Long buyerId);
 }
