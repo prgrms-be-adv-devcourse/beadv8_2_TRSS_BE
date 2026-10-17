@@ -17,6 +17,12 @@ public final class AdminPaymentSpecifications {
         return (root, query, cb) -> cb.equal(root.get("memberId"), memberId);
     }
 
+    // 주문번호 정확히 일치 (idx_payment_order_number)
+    public static Specification<Payment> orderNumberEquals(String orderNumber) {
+        if (orderNumber == null) return Specification.unrestricted();
+        return (root, query, cb) -> cb.equal(root.get("orderNumber"), orderNumber);
+    }
+
     // 결제 시도일이 from 이후 (from 당일 포함)
     public static Specification<Payment> createdFrom(LocalDate from) {
         if (from == null) return Specification.unrestricted();

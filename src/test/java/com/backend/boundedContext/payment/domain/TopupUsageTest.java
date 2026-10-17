@@ -13,7 +13,7 @@ class TopupUsageTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 14, 10, 0);
 
     private final Wallet wallet = Wallet.create(3L);
-    private final Payment payment = Payment.paid(10L, wallet, 25_000, "PAY-10-a", NOW);
+    private final Payment payment = Payment.paid(10L, "ORD-TEST-10", wallet, 25_000, "PAY-10-a", NOW);
 
     @Test
     @DisplayName("차감 내역을 만들면 충전 건의 남은 금액이 그만큼 준다")

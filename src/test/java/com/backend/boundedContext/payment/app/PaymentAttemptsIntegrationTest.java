@@ -60,6 +60,7 @@ class PaymentAttemptsIntegrationTest {
         LocalDateTime paidAt = LocalDateTime.now();
         Payment failed = save(Payment.failed(
                         orderId,
+                        "ORD-TEST-" + orderId,
                         wallet,
                         72_900,
                         newKey(),
@@ -68,6 +69,7 @@ class PaymentAttemptsIntegrationTest {
         ));
         Payment paid = save(Payment.paid(
                         orderId,
+                        "ORD-TEST-" + orderId,
                         wallet,
                         72_900,
                         newKey(),
@@ -75,6 +77,7 @@ class PaymentAttemptsIntegrationTest {
         ));
         Payment otherOrderPaid = save(Payment.paid(
                 otherOrderId,
+                "ORD-TEST-" + otherOrderId,
                 wallet,
                 10_000,
                 newKey(),

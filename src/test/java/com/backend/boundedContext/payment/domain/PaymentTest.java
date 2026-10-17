@@ -17,9 +17,10 @@ class PaymentTest {
     @Test
     @DisplayName("결제 성공 건은 PAID이고 결제 일시가 남으며, 회원 ID는 지갑에서 가져온다")
     void paid() {
-        Payment payment = Payment.paid(10L, wallet, 25_000, "PAY-10-a", NOW);
+        Payment payment = Payment.paid(10L, "ORD-TEST-10", wallet, 25_000, "PAY-10-a", NOW);
 
         assertThat(payment.getOrderId()).isEqualTo(10L);
+        assertThat(payment.getOrderNumber()).isEqualTo("ORD-TEST-10");
         assertThat(payment.getMemberId()).isEqualTo(3L);
         assertThat(payment.getWallet()).isSameAs(wallet);
         assertThat(payment.getAmount()).isEqualTo(25_000);
@@ -32,10 +33,11 @@ class PaymentTest {
     @Test
     @DisplayName("결제 실패 건은 FAILED_* 상태와 실패 사유가 남고 결제 일시는 없다")
     void failed() {
-        Payment payment = Payment.failed(10L, wallet, 25_000, "PAY-10-a",
+        Payment payment = Payment.failed(10L, "ORD-TEST-10", wallet, 25_000, "PAY-10-a",
                 PaymentStatus.FAILED_INSUFFICIENT_BALANCE, "잔액 부족");
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED_INSUFFICIENT_BALANCE);
+        assertThat(payment.getOrderNumber()).isEqualTo("ORD-TEST-10");
         assertThat(payment.getFailReason()).isEqualTo("잔액 부족");
         assertThat(payment.getPaidAt()).isNull();
         assertThat(payment.isPaid()).isFalse();
@@ -44,14 +46,24 @@ class PaymentTest {
     @Test
     @DisplayName("실패가 아닌 상태로는 실패 건을 만들 수 없다")
     void failed_notFailureStatus() {
-        assertThatThrownBy(() -> Payment.failed(10L, wallet, 25_000, "PAY-10-a", PaymentStatus.PAID, "사유"))
+        assertThatThrownBy(() -> Payment.failed(10L, "ORD-TEST-10", wallet, 25_000, "PAY-10-a", PaymentStatus.PAID, "사유"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("결제 금액은 0보다 커야 한다")
     void paid_nonPositiveAmount() {
-        assertThatThrownBy(() -> Payment.paid(10L, wallet, 0, "PAY-10-a", NOW))
+        assertThatThrownBy(() -> Payment.paid(10L, "ORD-TEST-10", wallet, 0, "PAY-10-a", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("주문번호 없이는 결제 건을 만들 수 없다 (성공·실패 모두)")
+    void orderNumberRequired() {
+        assertThatThrownBy(() -> Payment.paid(10L, null, wallet, 25_000, "PAY-10-a", NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Payment.failed(10L, " ", wallet, 25_000, "PAY-10-a",
+                PaymentStatus.FAILED_INSUFFICIENT_BALANCE, "잔액 부족"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

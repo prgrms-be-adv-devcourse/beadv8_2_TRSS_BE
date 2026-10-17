@@ -246,7 +246,7 @@ class PaymentTransferIntegrationTest {
 
     // 결제 완료 건과 HELD 홀딩을 만든다 (pay 실제 구현 전이라 직접 저장)
     private void hold(long orderId, long amount) {
-        Payment payment = paymentRepository.save(Payment.paid(orderId, buyerWallet, amount,
+        Payment payment = paymentRepository.save(Payment.paid(orderId, "ORD-TEST-" + orderId, buyerWallet, amount,
                 "TEST-" + UUID.randomUUID(), LocalDateTime.now()));
         holdings.add(walletHoldingRepository.save(WalletHolding.hold(payment, LocalDateTime.now())));
     }

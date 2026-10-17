@@ -54,12 +54,20 @@ class PaymentAdminSearchResolverTest {
     }
 
     @Test
-    @DisplayName("이메일에 맞는 회원이 없거나, 주문번호처럼 지원하지 않는 검색어면 결과 없음")
-    void noMatch() {
+    @DisplayName("이메일에 맞는 회원이 없으면 결과 없음")
+    void email_notFound() {
         given(memberApi.findMemberByEmail("nobody@palette.test")).willReturn(Optional.empty());
 
         assertThat(resolver.resolve("nobody@palette.test", FROM, TO)).isEqualTo(AdminPaymentSearch.none(FROM, TO));
-        assertThat(resolver.resolve("ORD-20261009-0142", FROM, TO)).isEqualTo(AdminPaymentSearch.none(FROM, TO));
+    }
+
+    @Test
+    @DisplayName("@가 없으면 앞뒤 공백을 빼고 주문번호 조건으로 조회한다 (회원은 찾지 않음)")
+    void orderNumber() {
+        AdminPaymentSearch search = resolver.resolve(" ORD-20261009-A1B2C3D4 ", FROM, TO);
+
+        assertThat(search).isEqualTo(AdminPaymentSearch.ofOrderNumber("ORD-20261009-A1B2C3D4", FROM, TO));
+        verifyNoInteractions(memberApi);
     }
 
     @Test

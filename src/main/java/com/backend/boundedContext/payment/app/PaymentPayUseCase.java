@@ -92,6 +92,7 @@ public class PaymentPayUseCase {
         Payment payment = paymentRepository.save(
                 Payment.paid(
                         command.orderId(),
+                        command.orderNumber(),
                         wallet,
                         command.amount(),
                         command.idempotencyKey(),

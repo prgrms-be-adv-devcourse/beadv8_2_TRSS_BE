@@ -83,7 +83,7 @@ class WalletHoldingRepositoryTest {
     // 결제 완료 건과 홀딩을 만들고, settled만큼 정산된 상태로 저장한다
     private void hold(Wallet wallet, long amount, long settled) {
         long orderId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
-        Payment payment = paymentRepository.save(Payment.paid(orderId, wallet, amount, "TEST-" + UUID.randomUUID(), NOW));
+        Payment payment = paymentRepository.save(Payment.paid(orderId, "ORD-TEST-" + orderId, wallet, amount, "TEST-" + UUID.randomUUID(), NOW));
         WalletHolding holding = WalletHolding.hold(payment, NOW);
         if (settled > 0) holding.settle(settled, NOW);
         holdings.add(walletHoldingRepository.save(holding));
