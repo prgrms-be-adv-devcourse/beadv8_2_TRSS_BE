@@ -29,7 +29,7 @@
 | 기능 | 사용자 | 핵심 내용 | 세미 프로젝트 개발 범위 |
 | --- | --- | --- | --- |
 | 회원/인증 | 비회원, 회원 | 이메일 인증 가입, 지갑 자동 생성, JWT 로그인, 회원 탈퇴 | 포함 |
-| 판매자 | 회원, 관리자 | 판매자 입점 신청, 관리자 승인(SELLER 권한), 철회 요청·관리자 제재, 계좌/상품 관리 | 포함 |
+| 판매자 | 회원, 관리자 | 판매자 입점 신청, 관리자 승인(판매자 상태 APPROVED), 철회 요청·관리자 제재, 계좌/상품 관리 | 포함 |
 | 관리자 | 관리자 | 판매자 심사·제재, 상품 판매 중지·중지 요청 심사, 결제·실패 거래 조회, 반품 승인, 수동 정산 | 포함 |
 | 상품·카테고리·재고 | 판매자, 관리자 | 상품 등록·수정·삭제, 판매 중지(해제 없음), 2단계 카테고리, 재고 조정 및 변경 이력 관리 | 포함 |
 | 검색 | 모두 | 상품명·카테고리 검색, 최신/가격순 정렬, 품절 상품 제외 | 포함 |
@@ -43,7 +43,7 @@
 - 가입 순서는 이메일 중복 확인 → 6자리 인증코드(5분 유효) → 가입이며, 회원과 예치금 지갑을 한 트랜잭션으로 만든다
 - 휴대폰 번호는 판매자에게만 받고, 휴대폰 본인인증 절차는 진행하지 않는다
 - 로그인은 Access Token 30분, Refresh Token 14일(재발급 시 회전)이다
-- 역할은 USER·SELLER·ADMIN이며 인증 실패는 401, 권한 부족은 403으로 구분한다
+- 역할은 USER·ADMIN이며 인증 실패는 401, 권한 부족은 403으로 구분한다. 판매자는 역할이 아니라 판매자 상태로 구분한다
 - 탈퇴는 진행 중인 주문, 미정산 금액, 예치금 잔액이 모두 0일 때만 가능하고, 탈퇴 시 개인정보를 비식별화한다
     - 예치금이 남아 있으면 탈퇴를 거절하고, 미사용 충전 건은 충전 취소로 환불받도록 안내한다
     - 탈퇴 시 시스템 차원의 자동 환불은 하지 않는다
@@ -51,16 +51,16 @@
 
 **판매자**
 
-- 사업자번호·상호명·연락처·정산 계좌를 받아 신청하고, 관리자가 승인하면 기존 계정에 SELLER 권한이 더해진다
+- 사업자번호·상호명·연락처·정산 계좌를 받아 신청하고, 관리자가 승인하면 판매자 상태가 APPROVED가 되어 판매 기능을 쓸 수 있다
 - 상태는 PENDING → APPROVED/REJECTED, 철회는 WITHDRAW_REQUESTED → WITHDRAWN이다
 - 회원·사업자번호당 활성 신청은 1건만 허용하고, 판매자 기능은 요청마다 DB의 승인 상태를 다시 확인한다
-- 판매 기능은 role이 SELLER이고 판매자 상태가 APPROVED일 때만 쓸 수 있다
+- 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인)
 - 판매자도 일반 회원처럼 구매할 수 있다. 단, 본인 상품은 장바구니에 담거나 주문할 수 없다
 - 판매자 정산금은 해당 회원의 기존 예치금 지갑에 지급하며, 판매자는 정산받은 예치금으로 상품을 구매할 수 있다
 - **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN → 판매 상품 전체 판매 중지
     - 미정산 금액이 있으면 철회를 요청할 수 없고, 없으면 일반 사용자로 전환한다(판매 불가, 구매 가능)
 - **관리자 제재:** 관리자가 판매자를 바로 WITHDRAWN으로 전환한다
-    - role은 SELLER로 두고 판매자 상태만 WITHDRAWN으로 바꾼다
+    - 판매자 상태만 WITHDRAWN으로 바꾼다
     - 결제 완료(PAID)된 주문은 그대로 진행하고, 결제 대기(CREATED·PAYMENT_FAILED) 주문은 취소하고 재고를 복원한다
     - 판매자의 상품은 모두 판매 중지(STOPPED)하고, 정산은 HOLD로 두어 지급하지 않는다
 
@@ -200,7 +200,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 ### 3.0 공통 규칙
 
 - Base URL: `/api/v1`, 요청·응답은 JSON(파일 업로드만 multipart)
-- 인증: `Authorization: Bearer <Access Token>`. 판매자 API는 `/seller/**`(SELLER + APPROVED), 관리자 API는 `/admin/**`(ADMIN) 경로로 묶어 권한을 검사한다
+- 인증: `Authorization: Bearer <Access Token>`. 판매자 API는 `/seller/**`, 관리자 API는 `/admin/**`(ADMIN) 경로로 묶어 권한을 검사한다. `/seller/**`는 URL에서 관리자만 막고(USER 통과), 판매 기능에서 판매자 상태(APPROVED)를 확인한다. 아래 표의 권한 SELLER는 역할이 아니라 "판매자 상태가 APPROVED인 회원"을 뜻한다
 - 응답 형식: 성공·실패 모두 `RsData { resultCode, msg, data }`로 감싼다. HTTP 상태는 `resultCode` 앞자리와 같다. 성공은 모두 200이고, 실패 상태는 `GlobalExceptionHandler`가 맞춘다
   - 성공 `resultCode`는 `200-{순번}`이다(조회·생성·처리 모두 `200-1`). 생성도 201이 아니라 200으로 응답한다. `data`에는 응답 DTO를 담는다
   - 실패 `resultCode`는 `{HTTP 상태}-{오류 이름}`이다(예: `402-INSUFFICIENT_BALANCE`). `data`에는 추가 정보가 필요한 오류만 담고(입력 검증 필드 오류, 잔액 부족의 부족액 등) 없으면 `null`이다
@@ -297,7 +297,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /admin/users/{userId} | GET | 회원 | ADMIN | 회원 상세(역할, 판매자 상태, 지갑, 최근 주문) | 404 |
 | /admin/sellers | GET | 회원 | ADMIN | 판매자 목록(PENDING 우선) | - |
 | /admin/sellers/{sellerId} | GET | 회원 | ADMIN | 판매자 상세 | 404 |
-| /admin/sellers/{sellerId}/approve | POST | 회원 | ADMIN | 판매자 승인 → SELLER 권한 부여 | 409 SELLER_STATE_INVALID |
+| /admin/sellers/{sellerId}/approve | POST | 회원 | ADMIN | 판매자 승인 → 판매자 상태 APPROVED (판매 기능 사용 가능) | 409 SELLER_STATE_INVALID |
 | /admin/sellers/{sellerId}/reject | POST | 회원 | ADMIN | 판매자 반려(사유 필수) | 409 SELLER_STATE_INVALID |
 | /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN, 상품 전체 판매 중지 | 409 |
 | /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절 | 409 |
