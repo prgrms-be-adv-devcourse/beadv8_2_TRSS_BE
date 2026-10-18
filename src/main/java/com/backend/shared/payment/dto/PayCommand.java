@@ -11,9 +11,4 @@ public record PayCommand(
         LocalDateTime orderExpiresAt,
         String idempotencyKey
 ) {
-    // 주문번호 없이 만드는 생성자 (orderNumber = null). 주문 쪽이 orderNumber를 넘기도록 바뀌기 전까지 기존 호출을 유지하려고 둠
-    // TODO 주문 쪽(OrderPayOrderUseCase)이 위 생성자로 orderNumber를 넘기면 삭제
-    public PayCommand(Long orderId, Long buyerId, long amount, LocalDateTime orderExpiresAt, String idempotencyKey) {
-        this(orderId, null, buyerId, amount, orderExpiresAt, idempotencyKey);
-    }
 }

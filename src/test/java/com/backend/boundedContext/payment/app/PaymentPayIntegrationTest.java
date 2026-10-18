@@ -174,6 +174,7 @@ class PaymentPayIntegrationTest {
         Payment payment = paymentRepository.findById(result.paymentId()).orElseThrow();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(payment.getOrderId()).isEqualTo(orderId);
+        assertThat(payment.getOrderNumber()).isEqualTo("ORD-TEST-" + orderId);
         assertThat(payment.getMemberId()).isEqualTo(buyerMemberId);
         assertThat(payment.getAmount()).isEqualTo(25_000);
         assertThat(payment.getPaidAt()).isNotNull();
@@ -250,6 +251,7 @@ class PaymentPayIntegrationTest {
 
         Payment failed = paymentRepository.findById(result.paymentId()).orElseThrow();
         assertThat(failed.getStatus()).isEqualTo(PaymentStatus.FAILED_INSUFFICIENT_BALANCE);
+        assertThat(failed.getOrderNumber()).isEqualTo("ORD-TEST-" + orderId);
         assertThat(failed.getFailReason()).contains("잔액 부족");
         assertThat(failed.getPaidAt()).isNull();
         assertThat(walletTransactionRepository.findByIdempotencyKey("PAYMENT-" + failed.getId())).isEmpty();

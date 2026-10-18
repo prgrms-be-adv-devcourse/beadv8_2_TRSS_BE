@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.out;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,4 +17,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
 
     // 주문에 이 상태의 결제가 있는지 (PAID는 주문당 1건)
     boolean existsByOrderIdAndStatus(Long orderId, PaymentStatus status);
+
+    // 주문의 결제 시도 전체, 오래된 순 (같은 시각이면 ID 순). idx_payment_order(order_id, created_at) 사용
+    List<Payment> findByOrderIdOrderByCreatedAtAscIdAsc(Long orderId);
 }

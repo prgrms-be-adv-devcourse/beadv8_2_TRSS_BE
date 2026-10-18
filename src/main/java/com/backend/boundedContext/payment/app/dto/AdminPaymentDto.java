@@ -17,8 +17,7 @@ public record AdminPaymentDto(
         @Schema(description = "주문 ID", example = "142")
         Long orderId,
 
-        // TODO OrderApi에 주문번호 일괄 조회가 생기면 채움
-        @Schema(description = "주문번호. 주문 모듈의 주문번호 조회 API가 생기기 전까지 항상 null", example = "ORD-20261009-0142")
+        @Schema(description = "주문번호. 결제 시점에 저장한 값 (개발용 시드 결제 건은 SEED-ORDER-1 형식)", example = "ORD-20261009-A1B2C3D4")
         String orderNumber,
 
         @Schema(description = "구매자 회원 ID", example = "3")
@@ -56,7 +55,7 @@ public record AdminPaymentDto(
         LocalDateTime paidAt
 ) {
     public static AdminPaymentDto of(Payment payment, String memberEmail, WalletHoldingStatus holdingStatus) {
-        return new AdminPaymentDto(payment.getId(), payment.getOrderId(), null, payment.getMemberId(), memberEmail,
+        return new AdminPaymentDto(payment.getId(), payment.getOrderId(), payment.getOrderNumber(), payment.getMemberId(), memberEmail,
                 payment.getAmount(), payment.getStatus(), payment.getFailReason(), holdingStatus,
                 payment.getCreatedAt(), payment.getPaidAt());
     }

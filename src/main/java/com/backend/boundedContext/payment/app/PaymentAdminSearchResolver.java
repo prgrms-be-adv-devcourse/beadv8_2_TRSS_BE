@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 관리자 결제 조회 검색창에 들어온 검색어를 해석 (정확히 일치)
  * - @ 포함 : 회원 이메일 → 그 회원의 결제
- * - 그 외(주문번호 ORD-… 포함) : 결과 없음. TODO 주문번호 검색은 OrderApi에 주문번호 조회가 생기면 추가
+ * - 그 외 : 주문번호 (ORD-…) → 그 주문의 결제 시도 (결제 건에 저장된 주문번호로 찾음)
  */
 @Component
 @RequiredArgsConstructor
@@ -38,6 +38,6 @@ public class PaymentAdminSearchResolver {
                     .map(memberId -> AdminPaymentSearch.ofMember(memberId, from, to))
                     .orElseGet(() -> AdminPaymentSearch.none(from, to));
         }
-        return AdminPaymentSearch.none(from, to);
+        return AdminPaymentSearch.ofOrderNumber(trimmed, from, to);
     }
 }

@@ -2,6 +2,7 @@ package com.backend.boundedContext.payment.app;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -21,6 +22,7 @@ import com.backend.boundedContext.payment.domain.WalletTransactionType;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
+import com.backend.shared.payment.dto.PaymentAttemptDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
 import com.backend.shared.payment.dto.WalletSummaryDto;
@@ -39,6 +41,7 @@ public class PaymentFacade {
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentPayUseCase paymentPayUseCase;
+    private final PaymentGetPaymentAttemptsUseCase paymentGetPaymentAttemptsUseCase;
     private final PaymentFailTopupUseCase paymentFailTopupUseCase;
     private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
     private final PaymentGetTopupUseCase paymentGetTopupUseCase;
@@ -93,6 +96,12 @@ public class PaymentFacade {
     @Transactional
     public PayResultDto pay(PayCommand command) {
         return paymentPayUseCase.pay(command);
+    }
+
+    // 주문의 결제 시도 목록 (주문 상세의 결제 내역)
+    @Transactional(readOnly = true)
+    public List<PaymentAttemptDto> getPaymentAttempts(Long orderId) {
+        return paymentGetPaymentAttemptsUseCase.getPaymentAttempts(orderId);
     }
 
     // 충전 실패 기록 (토스 결제창에서 실패·취소)

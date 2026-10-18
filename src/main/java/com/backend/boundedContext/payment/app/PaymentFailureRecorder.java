@@ -31,6 +31,7 @@ public class PaymentFailureRecorder {
         return paymentRepository.save(
                 Payment.failed(
                     command.orderId(),
+                    command.orderNumber(),
                     walletRepository.getReferenceById(walletId),
                     command.amount(),
                     command.idempotencyKey(),
