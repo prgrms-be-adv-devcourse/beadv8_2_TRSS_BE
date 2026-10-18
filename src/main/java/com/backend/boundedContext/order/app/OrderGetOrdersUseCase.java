@@ -17,12 +17,13 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.backend.boundedContext.order.out.OrderSpecifications.buyerEquals;
 import static com.backend.boundedContext.order.out.OrderSpecifications.orderedFrom;
 import static com.backend.boundedContext.order.out.OrderSpecifications.orderedTo;
-import static com.backend.boundedContext.order.out.OrderSpecifications.statusEquals;
+import static com.backend.boundedContext.order.out.OrderSpecifications.statusIn;
 
 /**
  * 내 주문 목록
@@ -35,12 +36,13 @@ public class OrderGetOrdersUseCase {
 
     private final OrderRepository orderRepository;
 
-    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, OrderStatus status, LocalDate from, LocalDate to, Pageable pageable) {
+    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, List<OrderStatus> statuses, LocalDate from, LocalDate to, Pageable pageable) {
         validatePeriod(from, to);
+        LocalDateTime now = LocalDateTime.now();
 
         Specification<Order> spec = Specification.allOf(
                 buyerEquals(buyerId),
-                statusEquals(status),
+                statusIn(statuses),
                 orderedFrom(from),
                 orderedTo(to)
         );
@@ -48,7 +50,7 @@ public class OrderGetOrdersUseCase {
 
         Page<Order> orders = orderRepository.findAll(spec, latestFirst);
 
-        return PageResponse.from(orders, this::toSummary);
+        return PageResponse.from(orders, order -> toSummary(order, now));
     }
 
     // 조회기간 검증
@@ -58,7 +60,7 @@ public class OrderGetOrdersUseCase {
         }
     }
 
-    private OrderSummaryResponse toSummary(Order order) {
+    private OrderSummaryResponse toSummary(Order order, LocalDateTime now) {
         List<OrderItem> items = order.getItems();   // @BatchSize: 이 페이지 주문들의 항목을 한 번에 조회
 
         return new OrderSummaryResponse(
@@ -69,7 +71,9 @@ public class OrderGetOrdersUseCase {
                 items.get(0).getProductName(),
                 items.size(),
                 order.getCreatedAt(),
-                order.getExpiresAt()
+                order.getExpiresAt(),
+                order.remainingPaymentSeconds(now),
+                order.getPaidAt()
         );
     }
 }
