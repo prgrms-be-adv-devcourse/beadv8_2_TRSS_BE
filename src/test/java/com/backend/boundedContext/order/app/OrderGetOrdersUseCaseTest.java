@@ -8,6 +8,8 @@ import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.out.ProductApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,11 +34,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class OrderGetOrdersUseCaseTest {
 
     @Mock OrderRepository orderRepository;
+    @Mock ProductApi productApi;
 
     @InjectMocks OrderGetOrdersUseCase useCase;
 
@@ -116,6 +120,38 @@ class OrderGetOrdersUseCaseTest {
     }
 
     @Test
+    @DisplayName("대표 상품(첫 항목) 옵션의 현재 대표 이미지를 담고, 상품 조회는 페이지당 한 번만 한다")
+    @SuppressWarnings("unchecked")
+    void thumbnailUrl() {
+        Order withImage = orderWith(500L, "립스틱", "아이섀도");        // 대표 옵션 100
+        Order sameOption = orderWith(501L, "립스틱");                  // 대표 옵션 100 (중복 제거)
+        given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(withImage, sameOption), PAGE, 2));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 10_000, 5, true, null, "https://img/lip.jpg")));
+
+        List<OrderSummaryResponse> items = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items();
+
+        assertThat(items).extracting(OrderSummaryResponse::thumbnailUrl)
+                .containsExactly("https://img/lip.jpg", "https://img/lip.jpg");
+        verify(productApi).getOptions(List.of(100L));
+    }
+
+    @Test
+    @DisplayName("상품이 삭제돼 옵션이 조회되지 않거나 이미지가 없으면 대표 이미지는 null이다")
+    @SuppressWarnings("unchecked")
+    void thumbnailUrlMissing() {
+        Order order = orderWith(500L, "립스틱");
+        given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(order), PAGE, 1));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of());
+
+        OrderSummaryResponse summary = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items().get(0);
+
+        assertThat(summary.thumbnailUrl()).isNull();
+    }
+
+    @Test
     @DisplayName("요청한 정렬과 관계없이 주문일 최신순으로 조회한다")
     @SuppressWarnings("unchecked")
     void latestFirst() {
@@ -141,6 +177,7 @@ class OrderGetOrdersUseCaseTest {
 
         assertThat(response.items()).isEmpty();
         assertThat(response.totalElements()).isZero();
+        verifyNoInteractions(productApi);
     }
 
     @Test
