@@ -88,8 +88,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_API_URLS).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_API_URLS).permitAll()
                         .requestMatchers(ADMIN_API_URLS).hasRole("ADMIN")
-                        .requestMatchers(SELLER_API_URLS).hasRole("SELLER")
-                        .requestMatchers(BUYER_API_URLS).hasAnyRole("USER", "SELLER")  // 토큰에 역할이 하나라 판매자도 함께 허용
+                        // 판매자 여부는 역할이 아니라 판매자 상태(APPROVED)로 판단하므로, URL에서는 관리자만 막고 판매 기능에서 상태를 확인한다
+                        .requestMatchers(SELLER_API_URLS).hasRole("USER")
+                        .requestMatchers(BUYER_API_URLS).hasRole("USER")
                         .anyRequest().authenticated()
                 )
                 // 필터는 빈으로 등록하지 않음 (빈이면 서블릿 필터로도 자동 등록됨)

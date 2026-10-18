@@ -68,18 +68,6 @@ public class Member extends BaseIdAndTime {
         return new Member(email, encodedPassword, name, MemberRole.ADMIN);
     }
 
-    // 개발용 시드 판매자 (실제 판매자 권한은 판매자 승인 시 부여)
-    public static Member seller(String email, String encodedPassword, String name) {
-        return new Member(email, encodedPassword, name, MemberRole.SELLER);
-    }
-
-    // 판매자 승인 때 판매자 권한을 준다. 철회 뒤 재승인처럼 이미 SELLER면 그대로 둔다 (관리자는 판매자 신청 대상이 아님)
-    public void grantSeller() {
-        if (role == MemberRole.USER) {
-            role = MemberRole.SELLER;
-        }
-    }
-
     // 탈퇴: DELETED로 바꾸고 개인정보를 비식별화한다.
     // 이메일은 회원 ID로 만든 값으로 바꿔 원래 이메일로 다시 가입할 수 있게 하고, 비밀번호는 어떤 입력과도 맞지 않는 값으로 바꾼다
     public void withdraw() {

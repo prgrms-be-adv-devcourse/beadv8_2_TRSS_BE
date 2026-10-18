@@ -23,9 +23,9 @@ class JwtTokenProviderTest {
     @Test
     @DisplayName("발급한 Access Token을 검증하면 회원 ID와 역할이 나온다")
     void createAndParse() {
-        String token = jwtTokenProvider.createAccessToken(7L, MemberRole.SELLER);
+        String token = jwtTokenProvider.createAccessToken(7L, MemberRole.ADMIN);
 
-        assertThat(jwtTokenProvider.parseAccessToken(token)).isEqualTo(new AuthMember(7L, MemberRole.SELLER));
+        assertThat(jwtTokenProvider.parseAccessToken(token)).isEqualTo(new AuthMember(7L, MemberRole.ADMIN));
     }
 
     @Test

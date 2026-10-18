@@ -100,7 +100,7 @@ class MemberWithdrawalSupportTest {
     }
 
     private void givenSeller(SellerStatus status, long unsettledAmount) {
-        Seller seller = Seller.apply(Member.seller("seller@palette.test", "encoded", "판매자"),
+        Seller seller = Seller.apply(Member.signUp("seller@palette.test", "encoded", "판매자"),
                 "팔레트 뷰티", "1234567890", "홍길동", "01012345678", "국민은행", "12345601123456", "홍길동");
         ReflectionTestUtils.setField(seller, "id", SELLER_ID);
         ReflectionTestUtils.setField(seller, "status", status);

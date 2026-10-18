@@ -60,7 +60,7 @@ class ApiV1AdminMemberControllerTest {
     @Test
     @DisplayName("회원 목록: 관리자는 검색 조건과 페이지로 조회하고 PageResponse 형식으로 받는다")
     void getMembers_admin() throws Exception {
-        AdminMemberDto item = new AdminMemberDto(3L, "buyer@palette.test", "구매자", MemberRole.SELLER, MemberStatus.ACTIVE,
+        AdminMemberDto item = new AdminMemberDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, MemberStatus.ACTIVE,
                 LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED);
         given(memberFacade.getMembers(eq("buyer"), eq(MemberStatus.ACTIVE), isNull(), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(item), 1, 10, 11, 2));
@@ -84,7 +84,7 @@ class ApiV1AdminMemberControllerTest {
     @Test
     @DisplayName("회원 목록: 관리자가 아니면 403 FORBIDDEN")
     void getMembers_forbidden() throws Exception {
-        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER}) {
             mockMvc.perform(get("/api/v1/admin/users").header("Authorization", bearer(role)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
@@ -111,7 +111,7 @@ class ApiV1AdminMemberControllerTest {
     @DisplayName("회원 상세: 판매자 상태, 지갑 잔액, 최근 주문을 함께 돌려준다")
     void getMemberDetail_admin() throws Exception {
         given(memberFacade.getMemberDetail(2L)).willReturn(new AdminMemberDetailDto(
-                2L, "seller@palette.test", "판매자", MemberRole.SELLER, MemberStatus.ACTIVE,
+                2L, "seller@palette.test", "판매자", MemberRole.USER, MemberStatus.ACTIVE,
                 LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED, new AdminMemberDetailDto.Wallet(30_000L, 0L),
                 List.of(new AdminMemberDetailDto.RecentOrder(101L, OrderStatus.PAID, 25_000L, LocalDateTime.of(2026, 10, 12, 10, 0)))));
 

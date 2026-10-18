@@ -78,14 +78,6 @@ class BuyerApiAccessTest {
                 .andExpect(status().isOk());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/api/v1/cart", "/api/v1/orders", "/api/v1/topups", "/api/v1/wallet", "/api/v1/sellers/me"})
-    @DisplayName("판매자(SELLER)도 구매자 API를 호출할 수 있다")
-    void seller_allowed(String url) throws Exception {
-        mockMvc.perform(get(url).header("Authorization", "Bearer " + token(MemberRole.SELLER)))
-                .andExpect(status().isOk());
-    }
-
     private String token(MemberRole role) {
         return jwtTokenProvider.createAccessToken(1L, role);
     }

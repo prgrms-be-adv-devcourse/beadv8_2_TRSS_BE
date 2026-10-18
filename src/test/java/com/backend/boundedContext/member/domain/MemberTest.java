@@ -9,33 +9,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.global.exception.DomainException;
-import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 
 class MemberTest {
-
-    @Test
-    @DisplayName("grantSeller: 일반 회원(USER)은 SELLER가 된다")
-    void grantSeller_user() {
-        Member member = Member.signUp("buyer@palette.test", "encoded", "구매자");
-
-        member.grantSeller();
-
-        assertThat(member.getRole()).isEqualTo(MemberRole.SELLER);
-    }
-
-    @Test
-    @DisplayName("grantSeller: 이미 SELLER(철회 뒤 재승인)나 ADMIN이면 그대로다")
-    void grantSeller_keep() {
-        Member seller = Member.seller("seller@palette.test", "encoded", "판매자");
-        Member admin = Member.admin("admin@palette.test", "encoded", "관리자");
-
-        seller.grantSeller();
-        admin.grantSeller();
-
-        assertThat(seller.getRole()).isEqualTo(MemberRole.SELLER);
-        assertThat(admin.getRole()).isEqualTo(MemberRole.ADMIN);
-    }
 
     @Test
     @DisplayName("withdraw: DELETED로 바꾸고 이메일·이름·비밀번호를 비식별화한다")

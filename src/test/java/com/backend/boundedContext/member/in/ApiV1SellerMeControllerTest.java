@@ -53,7 +53,7 @@ class ApiV1SellerMeControllerTest {
                 LocalDateTime.of(2026, 10, 12, 10, 0), LocalDateTime.of(2026, 10, 12, 11, 0), 0L));
 
         mockMvc.perform(patch("/api/v1/seller/me")
-                        .header("Authorization", "Bearer " + token(MemberRole.SELLER))
+                        .header("Authorization", "Bearer " + token(MemberRole.USER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"businessName": "팔레트 뷰티 2호점"}
@@ -71,7 +71,7 @@ class ApiV1SellerMeControllerTest {
     @DisplayName("판매자 정보 수정: 상호를 공백으로 보내면 400")
     void update_blankName() throws Exception {
         mockMvc.perform(patch("/api/v1/seller/me")
-                        .header("Authorization", "Bearer " + token(MemberRole.SELLER))
+                        .header("Authorization", "Bearer " + token(MemberRole.USER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"businessName": "  "}
@@ -80,10 +80,10 @@ class ApiV1SellerMeControllerTest {
     }
 
     @Test
-    @DisplayName("판매자 정보 수정: SELLER가 아니면 403")
-    void update_notSeller() throws Exception {
+    @DisplayName("판매자 정보 수정: 관리자면 403 (판매자 URL은 회원만 통과)")
+    void update_admin() throws Exception {
         mockMvc.perform(patch("/api/v1/seller/me")
-                        .header("Authorization", "Bearer " + token(MemberRole.USER))
+                        .header("Authorization", "Bearer " + token(MemberRole.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"businessName": "팔레트 뷰티 2호점"}
@@ -112,7 +112,7 @@ class ApiV1SellerMeControllerTest {
                 LocalDateTime.of(2026, 10, 12, 10, 0), LocalDateTime.of(2026, 10, 12, 11, 0), 0L));
 
         mockMvc.perform(post("/api/v1/seller/me/withdrawal")
-                        .header("Authorization", "Bearer " + token(MemberRole.SELLER))
+                        .header("Authorization", "Bearer " + token(MemberRole.USER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reason": "폐업 예정"}
@@ -127,7 +127,7 @@ class ApiV1SellerMeControllerTest {
     @DisplayName("철회 요청: 사유가 없으면 400")
     void requestWithdrawal_blankReason() throws Exception {
         mockMvc.perform(post("/api/v1/seller/me/withdrawal")
-                        .header("Authorization", "Bearer " + token(MemberRole.SELLER))
+                        .header("Authorization", "Bearer " + token(MemberRole.USER))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reason": " "}
@@ -136,10 +136,10 @@ class ApiV1SellerMeControllerTest {
     }
 
     @Test
-    @DisplayName("철회 요청: SELLER가 아니면 403")
-    void requestWithdrawal_notSeller() throws Exception {
+    @DisplayName("철회 요청: 관리자면 403 (판매자 URL은 회원만 통과)")
+    void requestWithdrawal_admin() throws Exception {
         mockMvc.perform(post("/api/v1/seller/me/withdrawal")
-                        .header("Authorization", "Bearer " + token(MemberRole.USER))
+                        .header("Authorization", "Bearer " + token(MemberRole.ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reason": "폐업 예정"}
