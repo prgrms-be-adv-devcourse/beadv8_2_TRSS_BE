@@ -20,6 +20,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 주문 API
@@ -48,7 +49,8 @@ public class ApiV1OrderController {
     @GetMapping
     public RsData<PageResponse<OrderSummaryResponse>> getOrders(
             @AuthenticationPrincipal AuthMember authMember,
-            @RequestParam(required = false) OrderStatus status,
+            @Parameter(description = "주문 상태")
+            @RequestParam(required = false) List<OrderStatus> status,
             @Parameter(description = "조회 시작일 (yyyy-MM-dd)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @Parameter(description = "조회 종료일 (yyyy-MM-dd)")

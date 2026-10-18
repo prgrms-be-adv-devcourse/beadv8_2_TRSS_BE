@@ -8,6 +8,8 @@ import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.out.ProductApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -17,12 +19,15 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.backend.boundedContext.order.out.OrderSpecifications.buyerEquals;
 import static com.backend.boundedContext.order.out.OrderSpecifications.orderedFrom;
 import static com.backend.boundedContext.order.out.OrderSpecifications.orderedTo;
-import static com.backend.boundedContext.order.out.OrderSpecifications.statusEquals;
+import static com.backend.boundedContext.order.out.OrderSpecifications.statusIn;
 
 /**
  * 내 주문 목록
@@ -34,21 +39,24 @@ public class OrderGetOrdersUseCase {
     private static final Sort LATEST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     private final OrderRepository orderRepository;
+    private final ProductApi productApi;
 
-    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, OrderStatus status, LocalDate from, LocalDate to, Pageable pageable) {
+    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, List<OrderStatus> statuses, LocalDate from, LocalDate to, Pageable pageable) {
         validatePeriod(from, to);
+        LocalDateTime now = LocalDateTime.now();
 
         Specification<Order> spec = Specification.allOf(
                 buyerEquals(buyerId),
-                statusEquals(status),
+                statusIn(statuses),
                 orderedFrom(from),
                 orderedTo(to)
         );
         Pageable latestFirst = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), LATEST);
 
         Page<Order> orders = orderRepository.findAll(spec, latestFirst);
+        Map<Long, String> thumbnails = getThumbnailUrls(orders.getContent());
 
-        return PageResponse.from(orders, this::toSummary);
+        return PageResponse.from(orders, order -> toSummary(order, now, thumbnails));
     }
 
     // 조회기간 검증
@@ -58,18 +66,44 @@ public class OrderGetOrdersUseCase {
         }
     }
 
-    private OrderSummaryResponse toSummary(Order order) {
-        List<OrderItem> items = order.getItems();   // @BatchSize: 이 페이지 주문들의 항목을 한 번에 조회
+    // 대표 상품 옵션 ID → 현재 대표 이미지 URL
+    private Map<Long, String> getThumbnailUrls(List<Order> orders) {
+        List<Long> optionIds = orders.stream()
+                .map(order -> representative(order).getOptionId())
+                .distinct()
+                .toList();
+        if (optionIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, String> thumbnails = new HashMap<>();
+        for (OptionSnapshotDto option : productApi.getOptions(optionIds)) {
+            thumbnails.put(option.optionId(), option.thumbnailUrl());
+        }
+        return thumbnails;
+    }
+
+    // 대표 항목: 첫 번째 주문 항목
+    private OrderItem representative(Order order) {
+        return order.getItems().get(0);
+    }
+
+    private OrderSummaryResponse toSummary(Order order, LocalDateTime now, Map<Long, String> thumbnails) {
+        List<OrderItem> items = order.getItems();
+        OrderItem first = representative(order);
 
         return new OrderSummaryResponse(
                 order.getId(),
                 order.getOrderNumber(),
                 order.getStatus(),
                 order.getTotalPrice(),
-                items.get(0).getProductName(),
+                first.getProductName(),
+                thumbnails.get(first.getOptionId()),
                 items.size(),
                 order.getCreatedAt(),
-                order.getExpiresAt()
+                order.getExpiresAt(),
+                order.remainingPaymentSeconds(now),
+                order.getPaidAt()
         );
     }
 }
