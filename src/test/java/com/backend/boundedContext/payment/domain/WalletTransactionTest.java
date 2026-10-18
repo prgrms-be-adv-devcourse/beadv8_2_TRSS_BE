@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.backend.global.exception.DomainException;
+
 class WalletTransactionTest {
 
     @Test
@@ -41,13 +43,15 @@ class WalletTransactionTest {
     }
 
     @Test
-    @DisplayName("차감할 잔액이 부족하면 원장을 만들지 않고 잔액도 그대로다")
+    @DisplayName("차감할 잔액이 부족하면 402 INSUFFICIENT_BALANCE로 원장을 만들지 않고 잔액도 그대로다")
     void record_insufficient() {
         Wallet wallet = Wallet.create(1L);
         wallet.deposit(10_000);
 
         assertThatThrownBy(() -> WalletTransaction.record(wallet, WalletTransactionType.CHARGE_CANCEL, 20_000, 7L, "TOPUP-7-CHARGE_CANCEL"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode")
+                .isEqualTo("402-INSUFFICIENT_BALANCE");
         assertThat(wallet.getBalance()).isEqualTo(10_000);
     }
 
