@@ -63,11 +63,19 @@ class TopupAdminSearchResolverTest {
     }
 
     @Test
-    @DisplayName("TOPUP-으로 시작하면 충전번호 조건으로 조회한다")
-    void orderId() {
-        AdminTopupSearch search = resolver.resolve(ORDER_ID, FROM, TO);
+    @DisplayName("TOPUP-으로 시작하면 충전번호 앞부분 조건으로 조회한다 (전체 번호·화면에 보이는 앞 13자)")
+    void orderIdPrefix() {
+        assertThat(resolver.resolve(ORDER_ID, FROM, TO)).isEqualTo(AdminTopupSearch.ofOrderIdPrefix(ORDER_ID, FROM, TO));
+        assertThat(resolver.resolve(" TOPUP-88e21df ", FROM, TO)).isEqualTo(AdminTopupSearch.ofOrderIdPrefix("TOPUP-88e21df", FROM, TO));
+        verifyNoInteractions(memberApi);
+    }
 
-        assertThat(search).isEqualTo(AdminTopupSearch.ofOrderId(ORDER_ID, FROM, TO));
+    @Test
+    @DisplayName("충전번호는 TOPUP- 뒤 4자리(총 10자) 이상일 때만 찾고, 그보다 짧으면 결과 없음")
+    void orderIdPrefix_minLength() {
+        assertThat(resolver.resolve("TOPUP-88e2", FROM, TO)).isEqualTo(AdminTopupSearch.ofOrderIdPrefix("TOPUP-88e2", FROM, TO));
+        assertThat(resolver.resolve("TOPUP-88e", FROM, TO)).isEqualTo(AdminTopupSearch.none(FROM, TO));
+        assertThat(resolver.resolve("TOPUP-", FROM, TO)).isEqualTo(AdminTopupSearch.none(FROM, TO));
         verifyNoInteractions(memberApi);
     }
 
