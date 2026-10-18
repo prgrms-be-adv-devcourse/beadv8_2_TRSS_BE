@@ -76,7 +76,7 @@ class ApiV1SellerProductControllerTest {
         given(productFacade.createProduct(eq(2L), eq(5L), eq("수분 크림"), eq("촉촉한 크림"), eq(25_000L), eq(30), any(), any()))
                 .willReturn(11L);
 
-        create(MemberRole.SELLER, jsonPart(VALID_REQUEST))
+        create(MemberRole.USER, jsonPart(VALID_REQUEST))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
                 .andExpect(jsonPath("$.data.productId").value(11));
@@ -85,7 +85,7 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("상품 등록: 재고가 0이면 400 VALIDATION_FAILED")
     void createProduct_zeroStock() throws Exception {
-        create(MemberRole.SELLER, jsonPart(VALID_REQUEST.replace("\"stock\":30", "\"stock\":0")))
+        create(MemberRole.USER, jsonPart(VALID_REQUEST.replace("\"stock\":30", "\"stock\":0")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("stock"));
@@ -94,9 +94,9 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("상품 등록: SELLER가 아니면 403 FORBIDDEN")
-    void createProduct_notSellerRole() throws Exception {
-        create(MemberRole.USER, jsonPart(VALID_REQUEST))
+    @DisplayName("상품 등록: 관리자면 403 FORBIDDEN (판매자 URL은 회원만 통과)")
+    void createProduct_admin() throws Exception {
+        create(MemberRole.ADMIN, jsonPart(VALID_REQUEST))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
     }
@@ -107,7 +107,7 @@ class ApiV1SellerProductControllerTest {
         MockMultipartFile plainPart = new MockMultipartFile(
                 "request", "", MediaType.TEXT_PLAIN_VALUE, VALID_REQUEST.getBytes(StandardCharsets.UTF_8));
 
-        create(MemberRole.SELLER, plainPart)
+        create(MemberRole.USER, plainPart)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-INVALID_REQUEST"));
     }
@@ -117,8 +117,8 @@ class ApiV1SellerProductControllerTest {
     void createProduct_noThumbnail() throws Exception {
         MockMultipartFile emptyThumbnail = new MockMultipartFile("thumbnail", "a.png", MediaType.IMAGE_PNG_VALUE, new byte[0]);
 
-        create(MemberRole.SELLER, new MockMultipartFile[]{jsonPart(VALID_REQUEST)}).andExpect(status().isOk());
-        create(MemberRole.SELLER, jsonPart(VALID_REQUEST), emptyThumbnail).andExpect(status().isOk());
+        create(MemberRole.USER, new MockMultipartFile[]{jsonPart(VALID_REQUEST)}).andExpect(status().isOk());
+        create(MemberRole.USER, jsonPart(VALID_REQUEST), emptyThumbnail).andExpect(status().isOk());
 
         verify(productFacade, times(2)).createProduct(any(), any(), any(), any(), anyLong(), anyInt(), isNull(), eq(List.of()));
     }
@@ -130,7 +130,7 @@ class ApiV1SellerProductControllerTest {
         MockMultipartFile empty = new MockMultipartFile("detailImages", "e.png", MediaType.IMAGE_PNG_VALUE, new byte[0]);
         MockMultipartFile second = new MockMultipartFile("detailImages", "2.png", MediaType.IMAGE_PNG_VALUE, new byte[]{2});
 
-        create(MemberRole.SELLER, jsonPart(VALID_REQUEST), THUMBNAIL, first, empty, second)
+        create(MemberRole.USER, jsonPart(VALID_REQUEST), THUMBNAIL, first, empty, second)
                 .andExpect(status().isOk());
 
         ArgumentCaptor<ProductImageFile> thumbnail = ArgumentCaptor.captor();
@@ -189,7 +189,7 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("상품 수정: 보낸 항목만 넘기고, 보내지 않은 항목은 null로 넘긴다")
     void modifyProduct() throws Exception {
-        modify(MemberRole.SELLER, jsonPart("""
+        modify(MemberRole.USER, jsonPart("""
                 {"name":"진정 크림","price":30000}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"));
@@ -201,7 +201,7 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("상품 수정: 남길 상세 이미지 ID와 새 이미지 파일을 넘긴다")
     void modifyProduct_withImages() throws Exception {
-        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
         MockMultipartFile detail = new MockMultipartFile("detailImages", "d.png", MediaType.IMAGE_PNG_VALUE, new byte[]{3});
 
         mockMvc.perform(multipart(HttpMethod.PATCH, "/api/v1/seller/products/11")
@@ -223,12 +223,12 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("상품 수정: 상품명이 공백이거나 가격이 0 이하면 400 VALIDATION_FAILED")
     void modifyProduct_invalid() throws Exception {
-        modify(MemberRole.SELLER, jsonPart("""
+        modify(MemberRole.USER, jsonPart("""
                 {"name":"  "}"""))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
 
-        modify(MemberRole.SELLER, jsonPart("""
+        modify(MemberRole.USER, jsonPart("""
                 {"price":0}"""))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("price"));
@@ -241,7 +241,7 @@ class ApiV1SellerProductControllerTest {
     void adjustStock_success() throws Exception {
         given(productFacade.adjustStock(2L, 11L, 21L, -3)).willReturn(new OptionStockDto(21L, 7));
 
-        adjust(MemberRole.SELLER, """
+        adjust(MemberRole.USER, """
                 {"changeQty":-3}""")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
@@ -252,12 +252,12 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("재고 조정: 증감량이 0이거나 없으면 400 VALIDATION_FAILED")
     void adjustStock_invalidChangeQty() throws Exception {
-        adjust(MemberRole.SELLER, """
+        adjust(MemberRole.USER, """
                 {"changeQty":0}""")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
 
-        adjust(MemberRole.SELLER, "{}")
+        adjust(MemberRole.USER, "{}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("changeQty"));
@@ -266,9 +266,9 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("재고 조정: SELLER가 아니면 403 FORBIDDEN")
-    void adjustStock_notSellerRole() throws Exception {
-        adjust(MemberRole.USER, """
+    @DisplayName("재고 조정: 관리자면 403 FORBIDDEN (판매자 URL은 회원만 통과)")
+    void adjustStock_admin() throws Exception {
+        adjust(MemberRole.ADMIN, """
                 {"changeQty":1}""")
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
@@ -277,7 +277,7 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("상품 삭제: 토큰의 회원 ID와 경로의 상품 ID로 삭제한다")
     void deleteProduct() throws Exception {
-        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
 
         mockMvc.perform(delete("/api/v1/seller/products/11").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -291,7 +291,7 @@ class ApiV1SellerProductControllerTest {
     void requestStop() throws Exception {
         given(productFacade.requestStop(2L, 11L, "단종")).willReturn(
                 new ProductStopRequestDto(5L, 11L, ProductStopRequestStatus.PENDING, "단종", null));
-        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
 
         mockMvc.perform(post("/api/v1/seller/products/11/stop-requests")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -306,7 +306,7 @@ class ApiV1SellerProductControllerTest {
     @Test
     @DisplayName("판매 중지 요청: 사유가 없거나 공백이거나 300자를 넘으면 400 VALIDATION_FAILED")
     void requestStop_invalidReason() throws Exception {
-        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
 
         for (String body : List.of("{}", "{\"reason\":\"  \"}", "{\"reason\":\"" + "가".repeat(301) + "\"}")) {
             mockMvc.perform(post("/api/v1/seller/products/11/stop-requests")
@@ -364,7 +364,7 @@ class ApiV1SellerProductControllerTest {
     }
 
     private ResultActions getAsSeller(String url) throws Exception {
-        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.SELLER);
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
         return mockMvc.perform(get(url).header("Authorization", "Bearer " + token));
     }
 }

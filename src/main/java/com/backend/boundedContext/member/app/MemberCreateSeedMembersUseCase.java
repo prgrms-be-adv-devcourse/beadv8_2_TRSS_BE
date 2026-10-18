@@ -28,7 +28,7 @@ public class MemberCreateSeedMembersUseCase {
 
         List<Member> members = List.of(
                 Member.admin("admin@palette.test", encodedPassword, "관리자"),
-                Member.seller("seller@palette.test", encodedPassword, "판매자"),
+                Member.signUp("seller@palette.test", encodedPassword, "판매자"),   // 일반 회원으로 만들고, 판매자 정보와 승인(APPROVED)은 MemberCreateSeedSellerUseCase에서 만듦
                 Member.signUp("buyer@palette.test", encodedPassword, "구매자")
         );
 

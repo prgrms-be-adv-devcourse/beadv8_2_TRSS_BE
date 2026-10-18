@@ -109,7 +109,7 @@ class ApiV1AdminSellerControllerTest {
     @Test
     @DisplayName("판매자 목록·상세: 관리자가 아니면 403 FORBIDDEN")
     void forbidden() throws Exception {
-        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER}) {
             mockMvc.perform(get("/api/v1/admin/sellers").header("Authorization", bearer(role)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
@@ -206,7 +206,7 @@ class ApiV1AdminSellerControllerTest {
     @Test
     @DisplayName("입점 승인·반려: 관리자가 아니면 403 FORBIDDEN")
     void review_forbidden() throws Exception {
-        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER}) {
             mockMvc.perform(post("/api/v1/admin/sellers/5/approve").header("Authorization", bearer(role)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
@@ -267,7 +267,7 @@ class ApiV1AdminSellerControllerTest {
     @Test
     @DisplayName("철회 승인·거절: 관리자가 아니면 403 FORBIDDEN")
     void withdrawal_forbidden() throws Exception {
-        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER}) {
             mockMvc.perform(post("/api/v1/admin/sellers/5/withdrawal/approve").header("Authorization", bearer(role)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
@@ -314,7 +314,7 @@ class ApiV1AdminSellerControllerTest {
     @Test
     @DisplayName("제재: 관리자가 아니면 403 FORBIDDEN")
     void sanction_forbidden() throws Exception {
-        for (MemberRole role : new MemberRole[]{MemberRole.USER, MemberRole.SELLER}) {
+        for (MemberRole role : new MemberRole[]{MemberRole.USER}) {
             mockMvc.perform(post("/api/v1/admin/sellers/5/sanction").header("Authorization", bearer(role))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""

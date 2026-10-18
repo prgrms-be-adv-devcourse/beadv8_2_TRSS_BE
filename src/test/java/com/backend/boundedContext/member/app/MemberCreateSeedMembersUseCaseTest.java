@@ -55,7 +55,7 @@ class MemberCreateSeedMembersUseCaseTest {
         ArgumentCaptor<Member> saved = ArgumentCaptor.forClass(Member.class);
         verify(memberRepository, times(3)).save(saved.capture());
         assertThat(saved.getAllValues()).extracting(Member::getRole)
-                .containsExactly(MemberRole.ADMIN, MemberRole.SELLER, MemberRole.USER);
+                .containsExactly(MemberRole.ADMIN, MemberRole.USER, MemberRole.USER);
         assertThat(saved.getAllValues()).extracting(Member::getPassword).containsOnly("encoded");
 
         verify(eventPublisher).publish(new MemberSignedUpEvent(1L));

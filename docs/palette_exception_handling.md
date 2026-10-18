@@ -162,8 +162,8 @@ catch (RestClientException e) {
 | 상황 | 응답 |
 | --- | --- |
 | 남의 주문·충전·정산서·상품을 ID로 조회·수정 | `404-*_NOT_FOUND`: 리소스 존재 여부를 숨긴다(ID가 자동 증가라 찔러 보기 방지) |
-| 역할 부족 (USER가 `/admin/**`, `/seller/**` 호출) | `403-FORBIDDEN` |
-| 판매자 상태가 APPROVED가 아님 | `403-FORBIDDEN`: 본인 상태 문제라 이유를 알려 준다 |
+| 역할 부족 (USER가 `/admin/**`, ADMIN이 `/seller/**`·구매자 API 호출) | `403-FORBIDDEN` |
+| 판매자 상태가 APPROVED가 아님 (판매자 신청 전·심사 중·철회·제재 상태에서 판매 기능 호출) | `403-SELLER_NOT_APPROVED`: 본인 상태 문제라 이유를 알려 준다 |
 
 소유권은 따로 조회한 뒤 비교하지 말고, **조회 조건에 소유자를 넣는다.**
 

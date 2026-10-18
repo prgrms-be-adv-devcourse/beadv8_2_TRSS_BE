@@ -81,7 +81,7 @@ class AdminSellerWithdrawalIntegrationTest {
     }
 
     @Test
-    @DisplayName("철회 승인: WITHDRAWN이 되고 신청서 스냅샷이 이력에 남으며 사업자번호는 비워진다. role은 SELLER 그대로, 판매는 막힌다")
+    @DisplayName("철회 승인: WITHDRAWN이 되고 신청서 스냅샷이 이력에 남으며 사업자번호는 비워진다. role은 USER 그대로, 판매는 막힌다")
     void approveWithdrawal() {
         AdminSellerDetailDto response = memberSellerFacade.approveWithdrawal(sellerId);
 
@@ -95,7 +95,7 @@ class AdminSellerWithdrawalIntegrationTest {
         assertThat(latest.getBusinessNumber()).isEqualTo(businessNumber);
         assertThat(latest.getAccountLast4()).isEqualTo("3456");
 
-        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.SELLER);
+        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.USER);
         assertError(() -> memberSellerFacade.getApprovedSellerByMemberId(memberId), MemberErrorCode.SELLER_NOT_APPROVED);
     }
 

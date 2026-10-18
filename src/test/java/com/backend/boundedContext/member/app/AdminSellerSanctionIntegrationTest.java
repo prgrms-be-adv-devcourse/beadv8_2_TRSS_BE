@@ -90,7 +90,7 @@ class AdminSellerSanctionIntegrationTest {
         assertThat(latest.getReason()).isEqualTo("위조 상품 판매");
 
         verify(settlementApi).holdSeller(sellerId, "위조 상품 판매");
-        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.SELLER);
+        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.USER);
         assertError(() -> memberSellerFacade.getApprovedSellerByMemberId(memberId), MemberErrorCode.SELLER_NOT_APPROVED);
     }
 

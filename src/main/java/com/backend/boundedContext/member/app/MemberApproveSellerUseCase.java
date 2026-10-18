@@ -23,7 +23,6 @@ public class MemberApproveSellerUseCase {
 
         // PENDING이 아니면 409 SELLER_STATE_INVALID
         SellerStatusHistory history = seller.approve();
-        seller.getMember().grantSeller();
 
         return sellerSupport.saveHistory(seller, history);
     }

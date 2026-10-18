@@ -68,7 +68,7 @@ class ApiV1AdminProductControllerTest {
     @Test
     @DisplayName("상품 목록: ADMIN이 아니면 403 FORBIDDEN")
     void getProducts_notAdmin() throws Exception {
-        perform(MemberRole.SELLER, get("/api/v1/admin/products"))
+        perform(MemberRole.USER, get("/api/v1/admin/products"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
     }

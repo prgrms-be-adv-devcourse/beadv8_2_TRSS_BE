@@ -72,7 +72,7 @@ class AdminSellerReviewIntegrationTest {
     }
 
     @Test
-    @DisplayName("승인: APPROVED가 되고 회원 role이 SELLER가 되며, 판매 기능 검사를 통과한다")
+    @DisplayName("승인: APPROVED가 되고 판매 기능 검사를 통과한다. 회원 role은 USER 그대로(판매자 여부는 판매자 상태로 판단)")
     void approve() {
         AdminSellerDetailDto response = memberSellerFacade.approveSeller(sellerId);
 
@@ -80,7 +80,7 @@ class AdminSellerReviewIntegrationTest {
         assertThat(response.histories()).extracting(AdminSellerDetailDto.History::toStatus)
                 .containsExactly(SellerStatus.PENDING, SellerStatus.APPROVED);
 
-        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.SELLER);
+        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.USER);
         assertThat(memberSellerFacade.getApprovedSellerByMemberId(memberId).sellerId()).isEqualTo(sellerId);
     }
 

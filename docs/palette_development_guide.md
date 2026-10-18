@@ -209,6 +209,14 @@ public class SettlementEventListener {
   ```
   - `AuthMember(memberId, role)`는 `global/security`에 있고, JWT 필터가 Access Token에서 꺼내 넣습니다.
   - 판매자 승인 상태처럼 바뀔 수 있는 값은 토큰에 없으므로, 판매 기능은 요청마다 DB에서 다시 확인합니다.
+- **인가 규칙:** 권한 검사는 세 가지로 나눕니다.
+  | 구분 | 무엇을 막나 | 어디서 |
+  | --- | --- | --- |
+  | 역할 (수직) | 구매자가 관리자 API, 관리자가 판매자·구매자 API 호출 | `SecurityConfig`의 URL 규칙. 역할은 USER·ADMIN 두 가지 |
+  | 판매자 상태 | 승인되지 않은(심사 중·철회·제재) 판매자의 판매 기능 | 판매 기능 UseCase에서 `MemberApi.getApprovedSellerByMemberId`(다른 컨텍스트) 또는 `Seller`의 상태 확인(회원 컨텍스트). 아니면 `403-SELLER_NOT_APPROVED` |
+  | 소유자 (수평) | 구매자 A가 구매자 B의 주문·충전, 판매자 A가 판매자 B의 상품·정산서 조회·수정 | 경로에 리소스 ID를 받는 UseCase에서 **조회 조건에 소유자를 넣는다**(`findByIdAndBuyerId` 등). 없으면 404 → [예외 처리 5.1](palette_exception_handling.md) |
+  - `/me` 경로처럼 `AuthMember`의 회원 ID로만 조회하는 API는 소유자 검사가 따로 필요 없습니다.
+  - 판매자 여부를 역할(`SELLER`)로 두지 않는 이유: 승인·제재·철회 때마다 역할을 바꾸고 토큰을 다시 발급해야 하고, 제재된 판매자가 남은 토큰 시간 동안 판매 기능을 쓸 수 있기 때문입니다.
   - **컨트롤러 테스트(`@WebMvcTest`)에서 Security 쓰기**
     - `@WebMvcTest`는 컨트롤러 주변만 띄우므로 Security 설정과 JWT 빈 5개를 `@Import`로 넣습니다.
     - 토큰은 `JwtTokenProvider.createAccessToken(memberId, role)`로 만들어 `Authorization: Bearer` 헤더에 넣습니다.
