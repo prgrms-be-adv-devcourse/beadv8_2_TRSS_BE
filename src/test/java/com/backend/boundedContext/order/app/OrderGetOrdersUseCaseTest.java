@@ -7,6 +7,7 @@ import com.backend.boundedContext.order.in.dto.OrderSummaryResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.order.dto.OrderStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,11 +45,16 @@ class OrderGetOrdersUseCaseTest {
 
     /** 상품명마다 항목 한 줄(단가 10,000원, 수량 1)인 주문. 주문 ID와 항목 ID(1부터)를 붙인다 */
     private Order orderWith(Long orderId, String... productNames) {
+        return orderAt(LocalDateTime.of(2026, 10, 13, 14, 0), orderId, productNames);
+    }
+
+    /** orderedAt에 만든 주문 (결제 만료 15분) */
+    private Order orderAt(LocalDateTime orderedAt, Long orderId, String... productNames) {
         List<OrderItemSpec> specs = new ArrayList<>();
         for (int i = 0; i < productNames.length; i++) {
             specs.add(new OrderItemSpec(null, 10L + i, 100L + i, 2L, productNames[i], "기본", "상점", 10_000, 1));
         }
-        Order order = Order.create(BUYER_ID, specs, LocalDateTime.of(2026, 10, 13, 14, 0), 15);
+        Order order = Order.create(BUYER_ID, specs, orderedAt, 15);
         ReflectionTestUtils.setField(order, "id", orderId);
         long itemId = 1;
         for (OrderItem item : order.getItems()) {
@@ -73,6 +79,40 @@ class OrderGetOrdersUseCaseTest {
         assertThat(summary.representativeProductName()).isEqualTo("립스틱");
         assertThat(summary.itemCount()).isEqualTo(3);
         assertThat(summary.totalPrice()).isEqualTo(30_000);
+        // 결제 만료 시각이 지난 결제 대기 주문은 남은 시간 0, 결제 전이라 결제일 없음
+        assertThat(summary.remainingSeconds()).isZero();
+        assertThat(summary.paidAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("결제 대기 주문은 결제 가능 남은 시간을 담는다")
+    @SuppressWarnings("unchecked")
+    void remainingSeconds() {
+        Order order = orderAt(LocalDateTime.now(), 501L, "립스틱");
+        given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(order), PAGE, 1));
+
+        OrderSummaryResponse summary = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items().get(0);
+
+        assertThat(summary.remainingSeconds()).isBetween(1L, 15 * 60L);
+        assertThat(summary.paidAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("결제 완료 주문은 결제일을 담고 남은 시간은 0이다")
+    @SuppressWarnings("unchecked")
+    void paidAt() {
+        LocalDateTime now = LocalDateTime.now();
+        Order order = orderAt(now, 502L, "립스틱");
+        order.pay(now);
+        given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(order), PAGE, 1));
+
+        OrderSummaryResponse summary = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items().get(0);
+
+        assertThat(summary.status()).isEqualTo(OrderStatus.PAID);
+        assertThat(summary.paidAt()).isEqualTo(now);
+        assertThat(summary.remainingSeconds()).isZero();
     }
 
     @Test
