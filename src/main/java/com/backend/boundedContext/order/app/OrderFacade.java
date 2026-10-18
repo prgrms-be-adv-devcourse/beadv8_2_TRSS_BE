@@ -78,8 +78,8 @@ public class OrderFacade {
 
     // 주문목록 조회
     @Transactional(readOnly = true)
-    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, OrderStatus status, LocalDate from, LocalDate to, Pageable pageable) {
-        return orderGetOrdersUseCase.getOrders(buyerId, status, from, to, pageable);
+    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, List<OrderStatus> statuses, LocalDate from, LocalDate to, Pageable pageable) {
+        return orderGetOrdersUseCase.getOrders(buyerId, statuses, from, to, pageable);
     }
 
     // 주문 상세조회
