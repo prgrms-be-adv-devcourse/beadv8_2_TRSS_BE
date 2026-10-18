@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
  * 주문 목록의 한 줄
  *
  * @param representativeProductName 대표 상품명
+ * @param thumbnailUrl              대표 상품의 현재 대표 이미지 URL. 상품이 삭제됐거나 이미지가 없으면 null
  * @param itemCount                 주문 항목 수
  * @param orderedAt                 주문 일시
  * @param expiresAt                 결제 만료 시각
@@ -20,6 +21,7 @@ public record OrderSummaryResponse(
         OrderStatus status,
         long totalPrice,
         String representativeProductName,
+        String thumbnailUrl,
         int itemCount,
         LocalDateTime orderedAt,
         LocalDateTime expiresAt,
