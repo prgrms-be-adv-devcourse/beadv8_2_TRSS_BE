@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.domain;
 
+import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 
 import jakarta.persistence.Column;
@@ -37,11 +38,11 @@ public class Wallet extends BaseIdAndTime {
         this.balance += amount;
     }
 
-    // 잔액 차감 (결제·충전 취소). 잔액 부족 응답(402)은 호출하는 쪽에서 먼저 판단하고, 여기서는 음수 잔액만 막음
+    // 잔액 차감 (결제·충전 취소). 잔액 부족은 사용자가 만들 수 있는 실패라 402 INSUFFICIENT_BALANCE로 막음
     public void withdraw(long amount) {
         validatePositive(amount);
         if (balance < amount) {
-            throw new IllegalStateException("잔액이 부족합니다. balance=" + balance + ", amount=" + amount);
+            throw new DomainException(PaymentErrorCode.INSUFFICIENT_BALANCE);
         }
         this.balance -= amount;
     }

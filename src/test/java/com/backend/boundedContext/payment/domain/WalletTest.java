@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import com.backend.global.exception.DomainException;
+
 class WalletTest {
 
     @Test
@@ -35,13 +37,15 @@ class WalletTest {
     }
 
     @Test
-    @DisplayName("잔액보다 많이 차감하면 거절하고 잔액은 그대로다")
+    @DisplayName("잔액보다 많이 차감하면 402 INSUFFICIENT_BALANCE로 거절하고 잔액은 그대로다")
     void withdraw_insufficient() {
         Wallet wallet = Wallet.create(1L);
         wallet.deposit(10_000);
 
         assertThatThrownBy(() -> wallet.withdraw(10_001))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode")
+                .isEqualTo("402-INSUFFICIENT_BALANCE");
         assertThat(wallet.getBalance()).isEqualTo(10_000);
     }
 
