@@ -15,7 +15,7 @@ class WalletHoldingTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 13, 10, 0);
 
     private final Wallet wallet = Wallet.create(3L);
-    private final Payment payment = Payment.paid(10L, wallet, 25_000, "PAY-10-a", NOW);
+    private final Payment payment = Payment.paid(10L, "ORD-TEST-10", wallet, 25_000, "PAY-10-a", NOW);
 
     @Test
     @DisplayName("결제 완료 건의 주문·지갑·금액으로 HELD 홀딩을 만든다")
@@ -35,7 +35,7 @@ class WalletHoldingTest {
     @Test
     @DisplayName("실패한 결제 건은 홀딩할 수 없다")
     void hold_notPaid() {
-        Payment failed = Payment.failed(10L, wallet, 25_000, "PAY-10-a",
+        Payment failed = Payment.failed(10L, "ORD-TEST-10", wallet, 25_000, "PAY-10-a",
                 PaymentStatus.FAILED_INSUFFICIENT_BALANCE, "잔액 부족");
 
         assertThatThrownBy(() -> WalletHolding.hold(failed, NOW))

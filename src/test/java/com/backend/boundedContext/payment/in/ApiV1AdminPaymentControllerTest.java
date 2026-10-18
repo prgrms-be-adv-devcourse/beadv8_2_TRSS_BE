@@ -1,6 +1,5 @@
 package com.backend.boundedContext.payment.in;
 
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -59,7 +58,7 @@ class ApiV1AdminPaymentControllerTest {
     @Test
     @DisplayName("결제 탭: 관리자는 검색어·기간·페이지로 조회한다")
     void getPayments_admin() throws Exception {
-        AdminPaymentDto item = new AdminPaymentDto(12L, 142L, null, 3L, "buyer@palette.test", 72_900L,
+        AdminPaymentDto item = new AdminPaymentDto(12L, 142L, "ORD-20261009-A1B2C3D4", 3L, "buyer@palette.test", 72_900L,
                 PaymentStatus.PAID, null, WalletHoldingStatus.HELD, PAID_AT, PAID_AT);
         given(paymentFacade.getAdminPayments(eq("buyer@palette.test"), eq(LocalDate.of(2026, 10, 1)),
                 eq(LocalDate.of(2026, 10, 17)), any(Pageable.class)))
@@ -73,7 +72,7 @@ class ApiV1AdminPaymentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
                 .andExpect(jsonPath("$.data.items[0].paymentId").value(12))
-                .andExpect(jsonPath("$.data.items[0].orderNumber").value(nullValue()))
+                .andExpect(jsonPath("$.data.items[0].orderNumber").value("ORD-20261009-A1B2C3D4"))
                 .andExpect(jsonPath("$.data.items[0].memberEmail").value("buyer@palette.test"))
                 .andExpect(jsonPath("$.data.items[0].holdingStatus").value("HELD"))
                 .andExpect(jsonPath("$.data.totalElements").value(1));

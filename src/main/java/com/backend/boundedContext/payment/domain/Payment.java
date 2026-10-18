@@ -21,11 +21,18 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "payment", indexes = @Index(name = "idx_payment_order", columnList = "order_id, created_at"))
+@Table(name = "payment", indexes = {
+        @Index(name = "idx_payment_order", columnList = "order_id, created_at"),
+        @Index(name = "idx_payment_order_number", columnList = "order_number")
+})
 public class Payment extends BaseIdAndTime {
 
     @Column(nullable = false)
     private Long orderId;
+
+    // 주문번호 (관리자 결제 조회 표시·검색용). 주문번호는 바뀌지 않아 결제 시점 값을 그대로 둔다
+    @Column(nullable = false, length = 40)
+    private String orderNumber;
 
     // 구매자 회원 ID
     @Column(nullable = false)
@@ -54,9 +61,11 @@ public class Payment extends BaseIdAndTime {
     private LocalDateTime refundedAt;
 
     // 결제 성공 건 (지갑 차감·홀딩 생성은 호출한 쪽에서 같은 트랜잭션으로 처리)
-    public static Payment paid(Long orderId, Wallet wallet, long amount, String idempotencyKey, LocalDateTime paidAt) {
+    public static Payment paid(Long orderId, String orderNumber, Wallet wallet, long amount, String idempotencyKey,
+                               LocalDateTime paidAt) {
         Payment payment = create(
                 orderId,
+                orderNumber,
                 wallet,
                 amount,
                 idempotencyKey,
@@ -67,18 +76,28 @@ public class Payment extends BaseIdAndTime {
     }
 
     // 결제 실패 건 (FAILED_*). 결제 트랜잭션과 별도 트랜잭션으로 저장
-    public static Payment failed(Long orderId, Wallet wallet, long amount, String idempotencyKey,
+    public static Payment failed(Long orderId, String orderNumber, Wallet wallet, long amount, String idempotencyKey,
                                  PaymentStatus failStatus, String failReason) {
         if (!failStatus.isFailure()) throw new IllegalArgumentException("실패 상태가 아닙니다: " + failStatus);
-        Payment payment = create(orderId, wallet, amount, idempotencyKey, failStatus);
+        Payment payment = create(
+                orderId,
+                orderNumber,
+                wallet,
+                amount,
+                idempotencyKey,
+                failStatus
+        );
         payment.failReason = failReason;
         return payment;
     }
 
-    private static Payment create(Long orderId, Wallet wallet, long amount, String idempotencyKey, PaymentStatus status) {
+    private static Payment create(Long orderId, String orderNumber, Wallet wallet, long amount, String idempotencyKey,
+                                  PaymentStatus status) {
         if (amount <= 0) throw new IllegalArgumentException("결제 금액은 0보다 커야 합니다: " + amount);
+        if (orderNumber == null || orderNumber.isBlank()) throw new IllegalArgumentException("주문번호가 없습니다: orderId=" + orderId);
         Payment payment = new Payment();
         payment.orderId = orderId;
+        payment.orderNumber = orderNumber;
         payment.memberId = wallet.getMemberId();
         payment.wallet = wallet;
         payment.amount = amount;

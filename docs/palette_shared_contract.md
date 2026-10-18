@@ -349,5 +349,5 @@ public interface SettlementApi {
 
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
-- [x] 결제 `PROCESSING`은 일단 두고, 쓰지 않으면 2주차에 제거 (지은)
+- [x] 결제 `PROCESSING`은 쓰지 않아 제거 (지은)
 - [x] 판매자의 회원 탈퇴: 판매자는 판매자 철회 완료(WITHDRAWN) 후에만 회원 탈퇴할 수 있다. 철회 승인 시점에 진행 중인 판매(`OrderApi.hasActiveSales`)와 미정산 금액(`SettlementApi.getUnsettledAmount`)이 없어야 한다. 탈퇴 후 정산금이 탈퇴 회원 지갑으로 들어가는 것을 막기 위함 (시연·지은·은정·다은)

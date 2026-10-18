@@ -81,13 +81,18 @@ public class PaymentPayUseCase {
         }
 
         if (wallet.getBalance() < command.amount()) {
-            return fail(command, wallet, PaymentStatus.FAILED_INSUFFICIENT_BALANCE,
-                    "잔액 부족: 잔액 " + wallet.getBalance() + "원, 결제 금액 " + command.amount() + "원");
+            return fail(
+                    command,
+                    wallet,
+                    PaymentStatus.FAILED_INSUFFICIENT_BALANCE,
+                    "잔액 부족: 잔액 " + wallet.getBalance() + "원, 결제 금액 " + command.amount() + "원"
+            );
         }
 
         Payment payment = paymentRepository.save(
                 Payment.paid(
                         command.orderId(),
+                        command.orderNumber(),
                         wallet,
                         command.amount(),
                         command.idempotencyKey(),

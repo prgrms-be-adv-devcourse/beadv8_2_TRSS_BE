@@ -40,8 +40,16 @@ public class PaymentCreateSeedHoldingsUseCase {
         amountByOrderId.forEach((orderId, amount) -> {
             if (walletHoldingRepository.existsByOrderId(orderId)) return;
 
-            Payment payment = paymentRepository.save(Payment.paid(orderId, buyerWallet, amount,
-                    "SEED-PAYMENT-ORDER" + orderId, now));
+            // 주문을 거치지 않는 시드라 실제 주문번호가 없어 시드용 번호를 넣음 (V8 마이그레이션도 같은 형식)
+            Payment payment = paymentRepository.save(
+                    Payment.paid(
+                            orderId,
+                            "SEED-ORDER" + orderId,
+                            buyerWallet,
+                            amount,
+                            "SEED-PAYMENT-ORDER" + orderId,
+                            now)
+            );
             walletHoldingRepository.save(WalletHolding.hold(payment, now));
             log.info("홀딩 시드 생성: orderId={}, amount={}", orderId, amount);
         });

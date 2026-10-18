@@ -104,27 +104,54 @@ class AdminPaymentQueryIntegrationTest {
     }
 
     @Test
+    @DisplayName("주문번호로 검색하면 그 주문의 결제 시도(실패 포함)만 나오고, 주문번호가 채워진다")
+    void searchByOrderNumber() {
+        Long orderId = randomOrderId();
+        String orderNumber = orderNumberOf(orderId);
+        Payment failed = saveFailed(orderId, 72_900);
+        Payment paid = savePaid(orderId, 72_900);
+        savePaid(10_000);   // 다른 주문
+
+        PageResponse<AdminPaymentDto> result = paymentFacade.getAdminPayments(orderNumber, null, null, PageRequest.of(0, 20));
+
+        assertThat(result.items())
+                .extracting(AdminPaymentDto::paymentId, AdminPaymentDto::orderNumber)
+                .containsExactly(
+                        tuple(paid.getId(), orderNumber),
+                        tuple(failed.getId(), orderNumber));
+    }
+
+    @Test
     @DisplayName("없는 이메일이나 주문번호로 검색하면 0건")
     void noMatch() {
         savePaid(10_000);
 
         PageResponse<AdminPaymentDto> byUnknownEmail = paymentFacade.getAdminPayments("nobody-" + email, null, null, PageRequest.of(0, 20));
-        PageResponse<AdminPaymentDto> byOrderNumber = paymentFacade.getAdminPayments("ORD-20261009-0142", null, null, PageRequest.of(0, 20));
+        PageResponse<AdminPaymentDto> byOrderNumber = paymentFacade.getAdminPayments("ORD-NOT-EXISTS-" + UUID.randomUUID(), null, null, PageRequest.of(0, 20));
 
         assertThat(byUnknownEmail.totalElements()).isZero();
         assertThat(byOrderNumber.totalElements()).isZero();
     }
 
     private Payment savePaid(long amount) {
-        Payment payment = paymentRepository.save(Payment.paid(randomOrderId(), wallet, amount, "TEST-" + UUID.randomUUID(), LocalDateTime.now()));
+        return savePaid(randomOrderId(), amount);
+    }
+
+    private Payment savePaid(Long orderId, long amount) {
+        Payment payment = paymentRepository.save(Payment.paid(orderId, orderNumberOf(orderId), wallet, amount,
+                "TEST-" + UUID.randomUUID(), LocalDateTime.now()));
         payments.add(payment);
         holdings.add(walletHoldingRepository.save(WalletHolding.hold(payment, LocalDateTime.now())));
         return payment;
     }
 
     private Payment saveFailed(long amount) {
-        Payment payment = paymentRepository.save(Payment.failed(randomOrderId(), wallet, amount, "TEST-" + UUID.randomUUID(),
-                PaymentStatus.FAILED_INSUFFICIENT_BALANCE, "잔액 부족"));
+        return saveFailed(randomOrderId(), amount);
+    }
+
+    private Payment saveFailed(Long orderId, long amount) {
+        Payment payment = paymentRepository.save(Payment.failed(orderId, orderNumberOf(orderId), wallet, amount,
+                "TEST-" + UUID.randomUUID(), PaymentStatus.FAILED_INSUFFICIENT_BALANCE, "잔액 부족"));
         payments.add(payment);
         return payment;
     }
@@ -132,5 +159,9 @@ class AdminPaymentQueryIntegrationTest {
     // 다른 테스트·시드 주문과 겹치지 않는 주문 ID (홀딩의 order_id 유니크)
     private Long randomOrderId() {
         return -ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
+    }
+
+    private String orderNumberOf(Long orderId) {
+        return "ORD-TEST" + orderId;
     }
 }
