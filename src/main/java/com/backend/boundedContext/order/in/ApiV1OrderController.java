@@ -61,7 +61,7 @@ public class ApiV1OrderController {
                 orderFacade.getOrders(authMember.memberId(), status, from, to, pageable));
     }
 
-    @Operation(summary = "주문 상세", description = "주문 항목 스냅샷과 결제 남은 시간을 조회한다.")
+    @Operation(summary = "주문 상세", description = "주문 항목 스냅샷, 결제 남은 시간, 결제 내역을 조회한다.")
     @GetMapping("/{orderId}")
     public RsData<OrderDetailResponse> getOrder(
             @AuthenticationPrincipal AuthMember authMember,
