@@ -9,6 +9,7 @@ import java.util.List;
  * 주문 상세
  *
  * @param remainingSeconds 결제 가능 남은 시간(초)
+ * @param payments         결제 내역 (결제 시도가 없으면 빈 목록)
  */
 public record OrderDetailResponse(
         Long orderId,
@@ -21,6 +22,7 @@ public record OrderDetailResponse(
         LocalDateTime paidAt,
         LocalDateTime canceledAt,
         LocalDateTime confirmedAt,
-        List<OrderItemResponse> items
+        List<OrderItemResponse> items,
+        List<OrderPaymentResponse> payments
 ) {
 }
