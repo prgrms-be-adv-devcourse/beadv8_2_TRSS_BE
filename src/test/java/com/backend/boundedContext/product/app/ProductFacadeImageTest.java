@@ -12,12 +12,14 @@ import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.LocalProductImageStorage;
 import com.backend.boundedContext.product.out.ProductImageRepository;
+import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.order.out.OrderApi;
+import com.backend.shared.product.dto.OptionSnapshotDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,6 +68,9 @@ class ProductFacadeImageTest {
 
     @Autowired
     private ProductImageRepository productImageRepository;
+
+    @Autowired
+    private ProductOptionRepository productOptionRepository;
 
     @Autowired
     private LocalProductImageStorage localProductImageStorage;
@@ -228,6 +233,27 @@ class ProductFacadeImageTest {
         assertThat(form.detailImages()).extracting(ProductImageDto::url).containsExactlyElementsOf(detailUrls);
     }
 
+    @Test
+    @DisplayName("옵션 조회(장바구니·주문): 상품의 대표 이미지 URL을 채우고, 삭제된 상품도 나오며, 대표 이미지가 없으면 null이다")
+    void thumbnailUrlInOptionSnapshots() {
+        Long productId = create(THUMBNAIL, List.of(png()));
+        Long deletedId = create(jpeg(), List.of());
+        productFacade.deleteProduct(MEMBER_ID, deletedId);
+        Long noThumbnailId = create(THUMBNAIL, List.of());
+        productImageRepository.deleteAll(images(noThumbnailId, ProductImageType.THUMBNAIL));
+        productImageRepository.flush();
+
+        List<OptionSnapshotDto> snapshots = productFacade.getOptions(List.of(
+                optionId(productId), optionId(deletedId), optionId(noThumbnailId)));
+
+        assertThat(snapshots)
+                .extracting(OptionSnapshotDto::productId, OptionSnapshotDto::thumbnailUrl)
+                .containsExactlyInAnyOrder(
+                        tuple(productId, url(images(productId, ProductImageType.THUMBNAIL).getFirst())),
+                        tuple(deletedId, url(images(deletedId, ProductImageType.THUMBNAIL).getFirst())),
+                        tuple(noThumbnailId, null));
+    }
+
     /** 상품명이 테스트마다 달라야 검색 결과가 섞이지 않는다 */
     private Long create(ProductImageFile thumbnail, List<ProductImageFile> details) {
         return productFacade.createProduct(MEMBER_ID, skincare.getId(), "이미지 테스트 " + System.nanoTime(), "설명",
@@ -240,6 +266,10 @@ class ProductFacadeImageTest {
 
     private List<ProductImage> images(Long productId, ProductImageType type) {
         return productImageRepository.findAllByProductIdAndImageTypeOrderBySortOrderAscIdAsc(productId, type);
+    }
+
+    private Long optionId(Long productId) {
+        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(productId)).getFirst().getId();
     }
 
     private List<Long> detailIds(Long productId) {
