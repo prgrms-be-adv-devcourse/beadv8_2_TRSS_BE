@@ -13,12 +13,12 @@ import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberType;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSpecifications;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.global.page.PageResponse;
-import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 import com.backend.shared.member.dto.SellerStatus;
 
@@ -34,12 +34,12 @@ public class MemberGetMembersUseCase {
     private final MemberRepository memberRepository;
     private final SellerRepository sellerRepository;
 
-    // 관리자 회원 목록 (이메일 부분 검색, 상태·역할 필터, 탈퇴 회원 포함, 판매자 상태 함께)
-    public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberRole role, Pageable pageable) {
+    // 관리자 회원 목록 (이메일 부분 검색, 상태·회원 유형 필터, 탈퇴 회원 포함, 판매자 상태 함께)
+    public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberType memberType, Pageable pageable) {
         Specification<Member> spec = Specification.allOf(
                 MemberSpecifications.emailContains(email),
                 MemberSpecifications.statusEquals(status),
-                MemberSpecifications.roleEquals(role)
+                MemberSpecifications.memberTypeEquals(memberType)
         );
         Pageable latestFirst = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), LATEST);
 

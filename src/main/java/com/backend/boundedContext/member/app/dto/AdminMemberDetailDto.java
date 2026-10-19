@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberType;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 import com.backend.shared.member.dto.SellerDto;
@@ -18,6 +19,7 @@ public record AdminMemberDetailDto(
         String email,
         String name,
         MemberRole role,
+        MemberType memberType,  // 일반 회원·판매자(판매 중)·관리자
         MemberStatus status,
         LocalDateTime createdAt,
         SellerStatus sellerStatus,  // 판매자 신청 이력이 없으면 null
@@ -40,7 +42,9 @@ public record AdminMemberDetailDto(
 
     public static AdminMemberDetailDto of(Member member, SellerDto seller, WalletSummaryDto wallet, List<OrderSummaryDto> orders) {
         return new AdminMemberDetailDto(
-                member.getId(), member.getEmail(), member.getName(), member.getRole(), member.getStatus(), member.getCreatedAt(),
+                member.getId(), member.getEmail(), member.getName(), member.getRole(),
+                MemberType.of(member.getRole(), seller == null ? null : seller.status()),
+                member.getStatus(), member.getCreatedAt(),
                 seller == null ? null : seller.status(),
                 new Wallet(wallet.balance(), wallet.heldAmount()),
                 orders.stream()

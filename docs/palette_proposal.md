@@ -293,8 +293,8 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 담당 모듈 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- | --- |
-| /admin/users | GET | 회원 | ADMIN | 회원 목록(이메일·상태·가입일) | 403 |
-| /admin/users/{userId} | GET | 회원 | ADMIN | 회원 상세(역할, 판매자 상태, 지갑, 최근 주문) | 404 |
+| /admin/users | GET | 회원 | ADMIN | 회원 목록(이메일 검색, 상태·회원 유형 필터: `memberType` = USER 일반 회원 / SELLER 판매 중인 판매자 / ADMIN 관리자) | 400, 403 |
+| /admin/users/{userId} | GET | 회원 | ADMIN | 회원 상세(역할, 회원 유형, 판매자 상태, 지갑, 최근 주문) | 404 |
 | /admin/sellers | GET | 회원 | ADMIN | 판매자 목록(PENDING 우선) | - |
 | /admin/sellers/{sellerId} | GET | 회원 | ADMIN | 판매자 상세 | 404 |
 | /admin/sellers/{sellerId}/approve | POST | 회원 | ADMIN | 판매자 승인 → 판매자 상태 APPROVED (판매 기능 사용 가능) | 409 SELLER_STATE_INVALID |
