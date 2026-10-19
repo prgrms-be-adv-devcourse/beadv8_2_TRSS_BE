@@ -61,7 +61,7 @@ class ApiV1AdminMemberControllerTest {
     @Test
     @DisplayName("회원 목록: 관리자는 검색 조건과 페이지로 조회하고 PageResponse 형식으로 받는다")
     void getMembers_admin() throws Exception {
-        AdminMemberDto item = new AdminMemberDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, MemberStatus.ACTIVE,
+        AdminMemberDto item = new AdminMemberDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, MemberType.SELLER, MemberStatus.ACTIVE,
                 LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED);
         given(memberFacade.getMembers(eq("buyer"), eq(MemberStatus.ACTIVE), isNull(), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(item), 1, 10, 11, 2));
@@ -72,6 +72,7 @@ class ApiV1AdminMemberControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].memberId").value(3))
                 .andExpect(jsonPath("$.data.items[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.items[0].memberType").value("SELLER"))
                 .andExpect(jsonPath("$.data.items[0].sellerStatus").value("APPROVED"))
                 .andExpect(jsonPath("$.data.page").value(1))
                 .andExpect(jsonPath("$.data.totalElements").value(11));
@@ -132,13 +133,14 @@ class ApiV1AdminMemberControllerTest {
     @DisplayName("회원 상세: 판매자 상태, 지갑 잔액, 최근 주문을 함께 돌려준다")
     void getMemberDetail_admin() throws Exception {
         given(memberFacade.getMemberDetail(2L)).willReturn(new AdminMemberDetailDto(
-                2L, "seller@palette.test", "판매자", MemberRole.USER, MemberStatus.ACTIVE,
+                2L, "seller@palette.test", "판매자", MemberRole.USER, MemberType.SELLER, MemberStatus.ACTIVE,
                 LocalDateTime.of(2026, 10, 11, 15, 0), SellerStatus.APPROVED, new AdminMemberDetailDto.Wallet(30_000L, 0L),
                 List.of(new AdminMemberDetailDto.RecentOrder(101L, OrderStatus.PAID, 25_000L, LocalDateTime.of(2026, 10, 12, 10, 0)))));
 
         mockMvc.perform(get("/api/v1/admin/users/2").header("Authorization", bearer(MemberRole.ADMIN)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.memberId").value(2))
+                .andExpect(jsonPath("$.data.memberType").value("SELLER"))
                 .andExpect(jsonPath("$.data.sellerStatus").value("APPROVED"))
                 .andExpect(jsonPath("$.data.wallet.balance").value(30000))
                 .andExpect(jsonPath("$.data.wallet.heldAmount").value(0))

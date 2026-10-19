@@ -113,12 +113,13 @@ class MemberGetMembersIntegrationTest {
         sellerRepository.save(sanctionedSeller);
 
         assertThat(memberFacade.getMembers(keyword, null, MemberType.SELLER, PageRequest.of(0, 20)).items())
-                .extracting(AdminMemberDto::name).containsExactly("회원D");
+                .extracting(AdminMemberDto::name, AdminMemberDto::memberType).containsExactly(tuple("회원D", MemberType.SELLER));
         PageResponse<AdminMemberDto> users = memberFacade.getMembers(keyword, null, MemberType.USER, PageRequest.of(0, 20));
         assertThat(users.items()).extracting(AdminMemberDto::name).containsExactly("회원F", "회원E", "회원C", "회원A");
+        assertThat(users.items()).extracting(AdminMemberDto::memberType).containsOnly(MemberType.USER);
         assertThat(users.totalElements()).isEqualTo(4);
         assertThat(memberFacade.getMembers(keyword, null, MemberType.ADMIN, PageRequest.of(0, 20)).items())
-                .extracting(AdminMemberDto::name).containsExactly("회원B");
+                .extracting(AdminMemberDto::name, AdminMemberDto::memberType).containsExactly(tuple("회원B", MemberType.ADMIN));
     }
 
     private Seller applySeller(Member member) {
