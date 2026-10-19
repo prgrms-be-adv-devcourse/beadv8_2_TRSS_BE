@@ -13,9 +13,9 @@ import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberType;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
-import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 
 import lombok.RequiredArgsConstructor;
@@ -103,8 +103,8 @@ public class MemberFacade {
 
     // 관리자 회원 목록
     @Transactional(readOnly = true)
-    public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberRole role, Pageable pageable) {
-        return memberGetMembersUseCase.getMembers(email, status, role, pageable);
+    public PageResponse<AdminMemberDto> getMembers(String email, MemberStatus status, MemberType memberType, Pageable pageable) {
+        return memberGetMembersUseCase.getMembers(email, status, memberType, pageable);
     }
 
     // 관리자 회원 상세

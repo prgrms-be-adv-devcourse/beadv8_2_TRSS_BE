@@ -19,11 +19,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberType;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.global.page.PageResponse;
-import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 import com.backend.shared.member.dto.SellerStatus;
 
@@ -88,12 +88,43 @@ class MemberGetMembersIntegrationTest {
     }
 
     @Test
-    @DisplayName("상태·역할 필터를 함께 걸 수 있다")
-    void filterByStatusAndRole() {
+    @DisplayName("상태·회원 유형 필터를 함께 걸 수 있다")
+    void filterByStatusAndMemberType() {
         assertThat(memberFacade.getMembers(keyword, MemberStatus.DELETED, null, PageRequest.of(0, 20)).items())
                 .extracting(AdminMemberDto::name).containsExactly("회원C");
-        assertThat(memberFacade.getMembers(keyword, MemberStatus.ACTIVE, MemberRole.ADMIN, PageRequest.of(0, 20)).items())
+        assertThat(memberFacade.getMembers(keyword, MemberStatus.ACTIVE, MemberType.ADMIN, PageRequest.of(0, 20)).items())
                 .extracting(AdminMemberDto::name).containsExactly("회원B");
+    }
+
+    @Test
+    @DisplayName("회원 유형: 판매 중(APPROVED)인 회원만 판매자이고, 심사 중·제재 상태는 일반 회원에 포함된다")
+    void filterByMemberType() {
+        Member approved = memberRepository.save(Member.signUp(keyword + "-d@palette.test", "encoded", "회원D"));
+        Member pending = memberRepository.save(Member.signUp(keyword + "-e@palette.test", "encoded", "회원E"));
+        Member sanctioned = memberRepository.save(Member.signUp(keyword + "-f@palette.test", "encoded", "회원F"));
+        saved.addAll(List.of(approved, pending, sanctioned));
+        Seller approvedSeller = applySeller(approved);
+        approvedSeller.approve();
+        sellerRepository.save(approvedSeller);
+        sellerRepository.save(applySeller(pending));
+        Seller sanctionedSeller = applySeller(sanctioned);
+        sanctionedSeller.approve();
+        sanctionedSeller.sanction("위조 상품 판매");
+        sellerRepository.save(sanctionedSeller);
+
+        assertThat(memberFacade.getMembers(keyword, null, MemberType.SELLER, PageRequest.of(0, 20)).items())
+                .extracting(AdminMemberDto::name).containsExactly("회원D");
+        PageResponse<AdminMemberDto> users = memberFacade.getMembers(keyword, null, MemberType.USER, PageRequest.of(0, 20));
+        assertThat(users.items()).extracting(AdminMemberDto::name).containsExactly("회원F", "회원E", "회원C", "회원A");
+        assertThat(users.totalElements()).isEqualTo(4);
+        assertThat(memberFacade.getMembers(keyword, null, MemberType.ADMIN, PageRequest.of(0, 20)).items())
+                .extracting(AdminMemberDto::name).containsExactly("회원B");
+    }
+
+    private Seller applySeller(Member member) {
+        String businessNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
+        return Seller.apply(member, member.getName() + " 상회", businessNumber, "홍길동",
+                "01012345678", "국민은행", "123456-01-123456", "홍길동");
     }
 
     @Test

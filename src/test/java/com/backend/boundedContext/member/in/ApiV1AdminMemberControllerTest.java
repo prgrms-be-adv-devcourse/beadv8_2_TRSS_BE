@@ -27,6 +27,7 @@ import com.backend.boundedContext.member.app.MemberFacade;
 import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
+import com.backend.boundedContext.member.domain.MemberType;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.order.dto.OrderStatus;
@@ -97,6 +98,26 @@ class ApiV1AdminMemberControllerTest {
         mockMvc.perform(get("/api/v1/admin/users"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+    }
+
+    @Test
+    @DisplayName("회원 목록: 회원 유형(memberType)으로 필터링해 조회한다")
+    void getMembers_memberType() throws Exception {
+        given(memberFacade.getMembers(isNull(), isNull(), eq(MemberType.SELLER), any(Pageable.class)))
+                .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
+
+        mockMvc.perform(get("/api/v1/admin/users").param("memberType", "SELLER").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isOk());
+
+        verify(memberFacade).getMembers(isNull(), isNull(), eq(MemberType.SELLER), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("회원 목록: 없는 회원 유형 값이면 400 INVALID_REQUEST")
+    void getMembers_invalidMemberType() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users").param("memberType", "BUYER").header("Authorization", bearer(MemberRole.ADMIN)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-INVALID_REQUEST"));
     }
 
     @Test

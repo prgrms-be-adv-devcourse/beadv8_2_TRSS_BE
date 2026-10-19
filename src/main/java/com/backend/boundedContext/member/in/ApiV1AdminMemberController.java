@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.backend.boundedContext.member.app.MemberFacade;
 import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminMemberDto;
+import com.backend.boundedContext.member.domain.MemberType;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
-import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,10 +34,10 @@ public class ApiV1AdminMemberController {
     public RsData<PageResponse<AdminMemberDto>> getMembers(
             @Parameter(description = "이메일 부분 검색") @RequestParam(required = false) String email,
             @RequestParam(required = false) MemberStatus status,
-            @RequestParam(required = false) MemberRole role,
+            @Parameter(description = "회원 유형: USER 일반 회원, SELLER 판매자(판매 중), ADMIN 관리자") @RequestParam(required = false) MemberType memberType,
             @ParameterObject Pageable pageable
     ) {
-        return RsData.of("200-1", "회원 목록을 조회했습니다.", memberFacade.getMembers(email, status, role, pageable));
+        return RsData.of("200-1", "회원 목록을 조회했습니다.", memberFacade.getMembers(email, status, memberType, pageable));
     }
 
     @Operation(summary = "회원 상세 조회", description = "역할, 판매자 상태(신청 이력이 없으면 null), 지갑 잔액을 함께 반환합니다.")
