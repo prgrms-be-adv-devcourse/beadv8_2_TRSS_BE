@@ -49,18 +49,22 @@ public class ProductSupport {
 
     /**
      * 옵션 여러 개의 현재 정보. 삭제된 상품·옵션도 포함하고, 없는 ID만 빠진다.
-     * 대표 이미지는 이미지 기능 전까지 null이다.
+     * 대표 이미지는 상품 ID를 모아 한 번에 조회하고, 대표 이미지가 없는 상품이면 null이다.
      */
     public List<OptionSnapshotDto> getOptionSnapshots(Collection<Long> optionIds) {
         if (optionIds.isEmpty()) return List.of();
 
-        return productOptionRepository.findAllWithProductByIdIn(optionIds).stream()
+        List<ProductOption> options = productOptionRepository.findAllWithProductByIdIn(optionIds);
+        Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(
+                options.stream().map(option -> option.getProduct().getId()).collect(Collectors.toSet()));
+
+        return options.stream()
                 .map(option -> {
                     Product product = option.getProduct();
                     ProductUnsaleableReason reason = option.getUnsaleableReason();
                     return new OptionSnapshotDto(
                             option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getName(),
-                            product.getPrice(), option.getStock(), reason == null, reason, null);
+                            product.getPrice(), option.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
                 .toList();
     }
