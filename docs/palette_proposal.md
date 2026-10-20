@@ -233,7 +233,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 - Base URL: `/api/v1`, 요청·응답은 JSON(파일 업로드만 multipart)
 - 인증: `Authorization: Bearer <Access Token>`. 판매자 API는 `/seller/**`, 관리자 API는 `/admin/**`(ADMIN) 경로로 묶어 권한을 검사한다. `/seller/**`는 URL에서 관리자만 막고(USER 통과), 판매 기능에서 판매자 상태(APPROVED)를 확인한다. 아래 표의 권한 SELLER는 역할이 아니라 "판매자 상태가 APPROVED인 회원"을 뜻한다
 - 응답 형식: 성공·실패 모두 `RsData { resultCode, msg, data }`로 감싼다. HTTP 상태는 `resultCode` 앞자리와 같다. 성공은 모두 200이고, 실패 상태는 `GlobalExceptionHandler`가 맞춘다
-  - 성공 `resultCode`는 `200-{순번}`이다(조회·생성·처리 모두 `200-1`). 생성도 201이 아니라 200으로 응답한다. `data`에는 응답 DTO를 담는다
+  - 성공 `resultCode`는 `200-{순번}`이다(조회·생성·처리 모두 `200-1`). 생성도 201이 아니라 200으로 응답한다(예외: 판매자 신청 `POST /sellers`는 201·`201-1`). `data`에는 응답 DTO를 담는다
   - 실패 `resultCode`는 `{HTTP 상태}-{오류 이름}`이다(예: `402-INSUFFICIENT_BALANCE`). `data`에는 추가 정보가 필요한 오류만 담고(입력 검증 필드 오류, 잔액 부족의 부족액 등) 없으면 `null`이다
   - 인증 실패 401, 권한 부족 403, 상태 충돌 409, 잔액 부족 402. 아래 표의 "주요 오류" `409 EMAIL_DUPLICATED`는 `resultCode` `409-EMAIL_DUPLICATED`를 뜻한다
   - 예외 처리 방식은 `palette_exception_handling.md`를 따른다
@@ -258,7 +258,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
-| /sellers | POST | USER | 판매자 신청·재신청(상호명, 사업자번호, 대표자명, 휴대폰, 정산 계좌: 은행·계좌번호·예금주) → PENDING | 400 VALIDATION_FAILED, 403 SELLER_SANCTIONED, 409 SELLER_ALREADY_APPLIED, 409 BUSINESS_NUMBER_DUPLICATED |
+| /sellers | POST | USER | 판매자 신청·재신청(상호명, 사업자번호, 대표자명, 휴대폰, 정산 계좌: 은행·계좌번호·예금주) → PENDING. 응답 201·`201-1` | 400 VALIDATION_FAILED, 403 SELLER_SANCTIONED, 409 SELLER_ALREADY_APPLIED, 409 BUSINESS_NUMBER_DUPLICATED |
 | /sellers/me | GET | USER | 내 판매자 정보·신청 상태(계좌는 끝 4자리, 최근 상태 변경 사유, 미정산 금액) | 404 SELLER_NOT_FOUND |
 | /seller/me | PATCH | SELLER | 상호명·연락처·정산 계좌 수정(보낸 항목만, 계좌는 은행·계좌번호·예금주를 함께) | 400 SELLER_ACCOUNT_INCOMPLETE, 403 SELLER_NOT_APPROVED, 404 SELLER_NOT_FOUND |
 | /seller/me/withdrawal | POST | SELLER | 판매자 철회 요청(사유 필수) → WITHDRAW_REQUESTED | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 UNSETTLED_AMOUNT_EXISTS |

@@ -197,7 +197,7 @@ public class SettlementEventListener {
 
 - 경로: `/api/v1/...`, 판매자 `/api/v1/seller/**`, 관리자 `/api/v1/admin/**`
 - 응답: 성공·실패 모두 `RsData { resultCode, msg, data }`. 컨트롤러는 `RsData`를 그대로 반환하고 `ResponseEntity`로 감싸지 않습니다 → [예외 처리](palette_exception_handling.md)
-  - 성공: 조회·생성·처리 모두 HTTP 200, `resultCode`는 `200-1` 하나만 씁니다(`201`·`202` 구분 없음). 완료·처리 중처럼 구분이 필요하면 `data.status`로 나눕니다
+  - 성공: 조회·생성·처리 모두 HTTP 200, `resultCode`는 `200-1` 하나만 씁니다(`201`·`202` 구분 없음, 예외: 판매자 신청 `POST /sellers`는 201·`201-1`). 완료·처리 중처럼 구분이 필요하면 `data.status`로 나눕니다
   - 실패: `{HTTP 상태}-{ERROR_NAME}`(예: `409-ORDER_EXPIRED`), HTTP 상태는 `GlobalExceptionHandler`가 맞춥니다
 - 요청 DTO는 record + Bean Validation(`@NotBlank`, `@Positive` 등), 컨트롤러 파라미터에 `@Valid`
 - Swagger: 컨트롤러에 `@Tag`, 메서드에 `@Operation(summary = "...")`

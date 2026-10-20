@@ -44,7 +44,7 @@ HTTP {상태} + RsData { "resultCode": "{상태}-{오류 이름}", "msg": "...",
 | `msg` | 처리 결과 문장 | 사용자에게 그대로 보여 줄 한국어 문장 |
 | `data` | 응답 DTO(엔티티 금지) | 추가 정보가 필요한 오류만(부족액, 필드 오류). 없으면 `null` |
 
-- **성공은 HTTP 200으로 통일한다.** 생성(201)·접수(202)도 구분하지 않는다. 컨트롤러는 `RsData`를 그대로 반환하고 `ResponseEntity`로 감싸지 않는다.
+- **성공은 HTTP 200으로 통일한다.** 생성(201)·접수(202)도 구분하지 않는다. (예외: 판매자 신청 `POST /sellers`는 판매자 데이터를 새로 만드므로 HTTP 201·`201-1`로 응답한다) 컨트롤러는 `RsData`를 그대로 반환하고 `ResponseEntity`로 감싸지 않는다.
 - **실패의 HTTP 상태는 `resultCode` 앞자리에서 정해진다.** `GlobalExceptionHandler`가 `RsData.statusCode()`로 맞춘다.
 - 프론트는 실패 분기를 `resultCode`로 한다(`402-INSUFFICIENT_BALANCE`이면 충전 화면으로 이동).
 - `docs/palette_proposal.md` API 표의 "주요 오류" `409 EMAIL_DUPLICATED`는 `resultCode` `409-EMAIL_DUPLICATED`를 뜻한다.
