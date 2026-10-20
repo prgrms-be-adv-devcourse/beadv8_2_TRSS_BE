@@ -43,7 +43,7 @@ com.backend
 | 계약 인터페이스 | `shared/<ctx>/out/<Ctx>Api` | `ProductApi` |
 | 계약 구현체 | `boundedContext/<ctx>/in/<Ctx>ApiAdapter` | `ProductApiAdapter` |
 | 이벤트 | `<대상><과거형>Event`, record | `OrderConfirmedEvent` |
-| DTO | 공개용 `<Name>Dto`, 요청 `<Name>Request`, 응답 `<Name>Response`, 동기 호출 입력 `<Name>Command`, 모두 record | `ProductSnapshotDto`, `PayCommand` |
+| DTO | 공개용 `<Name>Dto`, 요청 `<Name>Request`, 응답 `<Name>Response`, 동기 호출 입력 `<Name>Command`, 모두 record | `OptionSnapshotDto`, `PayCommand` |
 | 오류 코드 | `<Ctx>ErrorCode` enum (`domain`에 둠) | `OrderErrorCode.ORDER_EXPIRED` |
 | 정책 값 | `<Ctx>Policy` (`custom.*`에서 주입) | `OrderPolicy.EXPIRE_MINUTES` |
 
@@ -142,12 +142,12 @@ public class ProductApiAdapter implements ProductApi {
 ```mermaid
 flowchart LR
     member -->|getWallet| payment
-    member -->|stopAllBySeller| product
+    member -->|stopAllBySeller, resumeAllBySeller| product
     member -->|hasActiveOrders| order
     member -->|getUnsettledAmount, holdSeller| settlement
-    product -->|findSellerByMemberId| member
+    product -->|getApprovedSellerByMemberId, findSellerByMemberId, getSellers| member
     product -->|cancelPendingOrders| order
-    order -->|getProducts, deductStock, restoreStock| product
+    order -->|getOptions, deductStock, restoreStock, lockProductsForOrderChange| product
     order -->|pay| payment
     order -->|getSellers, findSellerByMemberId| member
     settlement -->|transfer| payment
