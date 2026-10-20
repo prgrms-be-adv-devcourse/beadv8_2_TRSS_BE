@@ -21,19 +21,20 @@
 | 시나리오 | 시작 | 호출 순서 | 방식 |
 | --- | --- | --- | --- |
 | 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로) |
-| 장바구니 조회 | order | `ProductApi.getProducts(ids)` → 현재 가격·상태로 예상 금액 계산 | 동기 조회 |
+| 장바구니 조회 | order | `ProductApi.getOptions(optionIds)` → 현재 가격·판매 가능 여부·대표 이미지로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
-| 주문 생성 | order | `ProductApi.getProducts` → `MemberApi.getSellers`(판매자명 스냅샷) → `ProductApi.deductStock` | 동기, 같은 Tx |
+| 주문 생성 | order | `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
 | 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
-| 주문 취소·15분 만료 | order | 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
+| 주문 취소·15분 만료 | order | `ProductApi.lockProductsForOrderChange(productIds)` → 주문 잠금·상태 다시 확인 → 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
 | 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
 | 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) | 이벤트 |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신 → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
-| 판매 중지 승인·상품 삭제 | product | 상품 STOPPED/DELETED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
+| 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 | 동기 조회 |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN → `ProductApi.stopAllBySeller(sellerId, ...)` | 동기, 같은 Tx |
+| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) | 동기, 같은 Tx |
 | 관리자 제재 | member | 판매자 WITHDRAWN → `ProductApi.stopAllBySeller` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
 | 회원 탈퇴 | member | 판매자 신청 이력이 있으면 WITHDRAWN(철회 완료)인지 확인 → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · 판매자였으면 `SettlementApi.getUnsettledAmount` | 동기 조회 |
 
@@ -95,39 +96,52 @@ public record MemberSignedUpEvent(Long memberId) { }
 ```java
 package com.backend.shared.product.out;
 
+/** 재고는 옵션 단위다. 차감·복원·잠금은 호출한 쪽 트랜잭션에 참여하고, 예외는 잡지 않고 그대로 위로 던진다. */
 public interface ProductApi {
 
     /**
-     * 상품 여러 개의 현재 정보. 장바구니 담기·조회와 주문 생성에 쓴다.
-     * 삭제된 상품도 결과에 포함하고(status = DELETED, saleable = false), 없는 ID만 빠진다.
-     * 판매 가능 여부는 saleable로 판단한다. 결과 순서는 보장하지 않는다.
+     * 옵션 여러 개의 현재 정보. 장바구니 담기·조회와 주문 생성에 쓴다.
+     * 삭제된 상품·옵션도 결과에 포함하고(saleable = false), 없는 ID만 빠진다. 결과 순서는 보장하지 않는다.
      */
-    List<ProductSnapshotDto> getProducts(Collection<Long> productIds);
+    List<OptionSnapshotDto> getOptions(Collection<Long> optionIds);
 
     /**
-     * 주문 생성 시 재고 차감(ORDER_DEDUCT). 호출한 쪽 트랜잭션에 참여한다.
-     * 주문 항목을 저장해 orderItemId가 생긴 뒤 호출한다.
-     * 데드락을 막기 위해 상품 ID 오름차순으로 잠근다.
-     * 실패: 400 OUT_OF_STOCK, 409 PRODUCT_NOT_ON_SALE(SOLD_OUT·STOPPED·DELETED·카테고리 사용 중지) (하나라도 실패하면 전체 롤백)
-     * 재고가 0이 되면 SOLD_OUT으로 바꾼다.
+     * 주문 생성 시 재고 차감(ORDER_DEDUCT). 주문 항목을 저장해 orderItemId가 생긴 뒤 같은 트랜잭션에서 호출한다.
+     * 상품(읽기 잠금) → 옵션(쓰기 잠금) 순서로, 각각 ID 오름차순으로 잠근다.
+     * 실패: 409 PRODUCT_NOT_ON_SALE(판매 불가), 400 OUT_OF_STOCK(재고 부족), 404 PRODUCT_NOT_FOUND (하나라도 실패하면 전체 롤백)
+     * 재고만 바꾸고 상품 상태는 바꾸지 않는다(품절은 재고로 계산).
      * 이미 차감한 주문 항목으로 다시 호출하면 아무것도 하지 않고 정상 종료한다.
      */
     void deductStock(List<StockChangeDto> items);
 
     /**
-     * 재고 복원. 주문 취소·만료·판매 중지 취소는 ORDER_RESTORE, 반품 승인은 RETURN_RESTORE.
-     * SOLD_OUT은 ON_SALE로 바꾸고, STOPPED는 재고만 늘린다.
-     * DELETED는 ORDER_RESTORE만 재고를 늘리고, RETURN_RESTORE면 409 PRODUCT_DELETED
-     * (주문 컨텍스트가 반품 승인에서 삭제된 상품을 미리 거른다).
-     * 같은 주문 항목·사유로 다시 호출하면 아무것도 하지 않고 정상 종료한다.
+     * 재고 복원. 주문 취소·만료·판매 중지로 인한 취소는 ORDER_RESTORE, 반품 승인은 RETURN_RESTORE.
+     * 재고만 바꾸고 상품 상태는 바꾸지 않는다(STOPPED 상품도 재고만 늘어난다).
+     * 삭제된 상품·옵션은 ORDER_RESTORE만 재고를 늘리고, RETURN_RESTORE면 409 PRODUCT_DELETED / OPTION_DELETED
+     * (주문 컨텍스트가 반품 승인에서 삭제된 대상을 미리 거른다).
+     * 같은 주문 항목·사유로 다시 호출하면 아무것도 하지 않고 정상 종료한다. 차감한 적 없는 항목이면 IllegalStateException.
      */
     void restoreStock(List<StockChangeDto> items, StockRestoreReason reason);
 
     /**
-     * 판매자의 판매 중인 상품을 모두 STOPPED로 바꾼다(판매자 철회 승인·관리자 제재).
-     * 내부에서 OrderApi.cancelPendingOrders도 호출한다. 중지한 상품 ID를 반환한다.
+     * 재고를 복원할 주문을 잠그기 전에 그 주문의 상품을 ID 순으로 읽기 잠금한다(구매자 취소·결제 만료·반품 승인).
+     * 순서: 주문 항목의 productId 모으기 → 이 메서드 → 주문 잠금 → 주문 상태 다시 확인 → 취소·restoreStock.
+     * 트랜잭션 밖에서 부르면 IllegalTransactionStateException. 없는 상품 ID는 건너뛴다.
      */
-    List<Long> stopAllBySeller(Long sellerId, String reason);
+    void lockProductsForOrderChange(Collection<Long> productIds);
+
+    /**
+     * 판매자의 판매 중(ON_SALE) 상품을 모두 STOPPED(stoppedBy = SELLER_WITHDRAWN)로 바꾼다(판매자 철회·관리자 제재).
+     * 이미 중지·삭제된 상품은 건드리지 않는다. 심사 중인 중지 요청을 닫고 OrderApi.cancelPendingOrders도 호출한다.
+     * 판매 중 상품이 없으면 아무것도 하지 않는다. 다시 호출해도 결과가 같다.
+     */
+    void stopAllBySeller(Long sellerId, String reason);
+
+    /**
+     * 판매자 철회로 중지된(stoppedBy = SELLER_WITHDRAWN) 상품만 다시 ON_SALE로 되돌린다(철회 거절).
+     * 관리자·판매 중지 요청으로 중지된 상품과 삭제된 상품은 그대로다. 취소된 주문은 되살리지 않는다.
+     */
+    void resumeAllBySeller(Long sellerId);
 }
 ```
 
@@ -137,24 +151,26 @@ public interface ProductApi {
 package com.backend.shared.product.dto;
 
 /**
- * saleable = ON_SALE이고 카테고리가 사용 중. 상품 자체 조건만 본다.
- * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 orderable로 최종 판단한다.
- * unsaleableReason은 saleable이면 null.
+ * 옵션 하나의 현재 정보. saleable = 상품 ON_SALE + 옵션 삭제 안 됨 + 카테고리 사용 중 (재고와는 무관).
+ * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 따로 판단한다.
+ * unsaleableReason은 saleable이면 null, 여러 개에 해당하면 enum 선언 순서가 우선순위다.
+ * optionName은 옵션이 하나뿐인 상품이면 "기본". thumbnailUrl은 대표 이미지가 없으면 null.
  */
-public record ProductSnapshotDto(Long productId, Long sellerId, String name, long price,
-                                 int stock, ProductStatus status, boolean saleable,
-                                 ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { }
+public record OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
+                                long price, int stock, boolean saleable,
+                                ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { }
 
 /** 주문 항목 한 줄. orderId·orderItemId는 재고 이력에 남고 중복 처리를 막는 기준이 된다. quantity는 1 이상 */
-public record StockChangeDto(Long orderId, Long orderItemId, Long productId, int quantity) { }
+public record StockChangeDto(Long orderId, Long orderItemId, Long optionId, int quantity) { }
 
-public enum ProductStatus { ON_SALE, SOLD_OUT, STOPPED, DELETED }
-public enum ProductUnsaleableReason { SOLD_OUT, STOPPED, DELETED, CATEGORY_INACTIVE }
+/** 품절은 판매 불가 이유가 아니다 (재고는 stock으로 판단) */
+public enum ProductUnsaleableReason { PRODUCT_DELETED, OPTION_DELETED, PRODUCT_STOPPED, CATEGORY_INACTIVE }
 public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 ```
 
 - 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
-- 구현 상태: `getProducts`·`deductStock`·`restoreStock`은 `ProductApiAdapter`에 임시 구현이 있습니다(임의 ID에 판매 중인 임시 상품 반환, 재고 변경 없음).
+- 잠금 순서는 항상 **상품 → 주문(→ 옵션)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
+- 구현 상태: 모든 메서드가 `ProductApiAdapter`에 구현되어 있습니다.
 
 ## 4. order
 
@@ -167,7 +183,7 @@ public interface OrderApi {
 
     /**
      * 상품이 들어 있는 결제 대기(CREATED·PAYMENT_FAILED) 주문을 모두 취소하고 재고를 복원한다.
-     * 판매 중지 승인·상품 삭제·판매자 철회·제재 때 상품 컨텍스트가 호출한다. 호출한 쪽 트랜잭션에 참여한다.
+     * 상품 삭제·판매 중지(관리자 즉시 중지·중지 요청 승인)·판매자 철회·제재 때 상품 컨텍스트가 상품을 잠근 뒤 호출한다. 호출한 쪽 트랜잭션에 참여한다.
      * 취소한 주문 수를 반환한다.
      */
     int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType);

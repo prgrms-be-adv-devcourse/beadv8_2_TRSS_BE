@@ -249,16 +249,27 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-BUSINESS_NUMBER_DUPLICATED | 다른 회원이 이 사업자등록번호로 진행 중인 판매자 신청이 있음 |
 | | 409-SELLER_STATE_INVALID | 승인·반려·철회를 할 수 없는 상태 |
 | | 409-UNSETTLED_AMOUNT_EXISTS | 미정산 금액이 있어 철회 요청 불가 |
-| product (유진) | 404-PRODUCT_NOT_FOUND | |
-| | 409-PRODUCT_NOT_ON_SALE | STOPPED·DELETED·SOLD_OUT 상품 담기·주문 |
-| | 409-PRODUCT_NOT_EDITABLE | 삭제·중지된 상품 수정 |
+| product (유진) | 404-PRODUCT_NOT_FOUND | 없거나 다른 판매자의 상품, 구매자에게 보이지 않는 상품(판매 중지·삭제·카테고리 사용 중지) |
+| | 409-PRODUCT_NOT_ON_SALE | 판매 중이 아닌 상품 차감(주문), 관리자 즉시 중지 시 이미 중지·삭제된 상품 |
+| | 409-PRODUCT_NOT_EDITABLE | 판매 중지·삭제된 상품의 수정·삭제·재고 조정·중지 요청 |
 | | 400-STOCK_NEGATIVE | 재고 조정 결과가 음수 |
 | | 400-OUT_OF_STOCK | 주문 수량 > 재고 |
-| | 400-STOCK_EXCEEDED | 장바구니 수량 > 재고 |
-| | 409-STOP_REQUEST_PENDING | 심사 대기 중지 요청이 이미 있음 |
-| | 409-CATEGORY_DUPLICATED | 같은 부모 아래 이름 중복 |
+| | 400-THUMBNAIL_REQUIRED | 상품 등록 시 대표 이미지 없음 |
+| | 400-IMAGE_TYPE_NOT_ALLOWED | jpg·png·webp가 아닌 이미지 (파일 내용으로 확인) |
+| | 400-DETAIL_IMAGE_LIMIT_EXCEEDED | 상세 이미지 10개 초과 (수정은 남길 이미지 + 새 이미지 합계) |
+| | 400-DETAIL_IMAGE_NOT_FOUND | 수정 시 남길 상세 이미지 ID가 이 상품의 것이 아니거나 중복 |
+| | 409-STOP_REQUEST_PENDING | 심사 중인 판매 중지 요청이 이미 있음 |
+| | 409-STOP_REQUEST_NOT_PENDING | 이미 승인·반려·자동으로 닫힌 요청을 다시 처리 |
+| | 404-STOP_REQUEST_NOT_FOUND | 없는 판매 중지 요청 |
 | | 409-PRODUCT_DELETED | 반품 승인 시 삭제된 상품의 재고 복원 선택 |
+| | 409-OPTION_DELETED | 삭제된 옵션의 재고 조정, 반품 승인 시 삭제된 옵션의 재고 복원 선택 |
+| | 404-CATEGORY_NOT_FOUND | 없는 카테고리 |
+| | 409-CATEGORY_DUPLICATED | 같은 대분류 아래 이름 중복 |
+| | 400-CATEGORY_DEPTH_EXCEEDED | 소분류 아래에 카테고리 추가 |
+| | 400-CATEGORY_NOT_EDITABLE | 대분류 수정 |
+| | 400-CATEGORY_NOT_SELECTABLE | 상품 등록·수정 시 사용 중인 소분류가 아닌 카테고리 선택 |
 | order (은정) | 400-SELF_PURCHASE_NOT_ALLOWED | 본인 상품 담기·주문 |
+| | 400-STOCK_EXCEEDED | 장바구니 수량 > 재고 |
 | | 409-PRICE_CHANGED | 예상 금액 ≠ 현재 금액 (`data.currentAmount`) |
 | | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기 주문에 포함된 장바구니 항목 |
 | | 404-ORDER_NOT_FOUND | |
