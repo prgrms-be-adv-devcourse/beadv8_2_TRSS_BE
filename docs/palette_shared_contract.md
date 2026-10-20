@@ -35,7 +35,7 @@
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 | 동기 조회 |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN → `ProductApi.stopAllBySeller(sellerId, ...)` | 동기, 같은 Tx |
 | 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) | 동기, 같은 Tx |
-| 관리자 제재 | member | 판매자 WITHDRAWN → `ProductApi.stopAllBySeller` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
+| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
 | 회원 탈퇴 | member | 판매자 신청 이력이 있으면 WITHDRAWN(철회 완료)인지 확인 → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · 판매자였으면 `SettlementApi.getUnsettledAmount` | 동기 조회 |
 
 ## 2. member
