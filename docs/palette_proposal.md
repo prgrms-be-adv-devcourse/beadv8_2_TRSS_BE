@@ -59,8 +59,8 @@
 - 판매자 정산금은 해당 회원의 기존 예치금 지갑에 지급하며, 판매자는 정산받은 예치금으로 상품을 구매할 수 있다
 - **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN → 판매 상품 전체 판매 중지
     - 미정산 금액이 있으면 철회를 요청할 수 없고, 없으면 일반 사용자로 전환한다(판매 불가, 구매 가능)
-- **관리자 제재:** 관리자가 판매자를 바로 WITHDRAWN으로 전환한다
-    - 판매자 상태만 WITHDRAWN으로 바꾼다
+- **관리자 제재:** 관리자가 판매자를 바로 SANCTIONED로 전환한다
+    - 판매자 상태만 SANCTIONED로 바꾼다
     - 결제 완료(PAID)된 주문은 그대로 진행하고, 결제 대기(CREATED·PAYMENT_FAILED) 주문은 취소하고 재고를 복원한다
     - 판매자의 상품은 모두 판매 중지(STOPPED)하고, 정산은 HOLD로 두어 지급하지 않는다
 
@@ -174,7 +174,7 @@
   - 정산서 수동 재처리: MANUAL_REQUIRED 정산서를 다시 지급한다(성공하면 PAID, 실패하면 실패 사유를 갱신)
   - 관리자 정산 페이지에는 정산서 목록, 상태, 실패 사유, 시도 횟수, 처리 이력을 보여 준다
   - 파이널 프로젝트에서는 실패 원인을 고친 뒤 자동 실행으로 재처리하는 구조로 바꾼다(향후 계획)
-- HOLD 상태의 정산서는 지급하지 않는다(관리자 제재로 철회된 판매자 등)
+- HOLD 상태의 정산서는 지급하지 않는다(관리자 제재(SANCTIONED)된 판매자, 관리자가 직접 보류한 정산서 등)
   - 제재 시 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾸고 보류 사유를 남긴다. 정산 후보 상태는 바꾸지 않는다
   - 보류를 해제하면 정산서는 READY가 되고, 재시도 스케줄러가 지급한다
 - 미정산 금액은 READY 정산 후보의 지급액과, PAID가 아닌 정산서에 묶인 INCLUDED 정산 후보의 지급액을 더한 값이다(HOLD 포함, 구매 확정 전 주문 제외). 판매자 철회와 회원 탈퇴 검사에 사용한다
@@ -204,7 +204,7 @@
 | 충전 | READY / PROCESSING / DONE / CANCELED / FAILED_USER_CANCEL / FAILED_PG_DECLINED / FAILED_AMOUNT_MISMATCH / FAILED_EXPIRED / FAILED_SYSTEM_ERROR |
 | 예치금 거래 유형 | CHARGE / CHARGE_CANCEL / PAYMENT / REFUND / SETTLEMENT / FEE |
 | 정산 후보 | READY / INCLUDED / EXCLUDED |
-| 정산서 | READY / PROCESSING / PAID / FAILED / MANUAL_REQUIRED / HOLD |
+| 정산서 | READY / PAID / FAILED / MANUAL_REQUIRED / HOLD |
 
 ## 2. 아키텍처 다이어그램
 
@@ -329,7 +329,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /admin/sellers/{sellerId}/reject | POST | 회원 | ADMIN | 판매자 반려(사유 필수) | 409 SELLER_STATE_INVALID |
 | /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN, 상품 전체 판매 중지 | 409 |
 | /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절 | 409 |
-| /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유) → WITHDRAWN, 결제 대기 주문 취소, 상품 STOPPED, 정산 HOLD | 409 |
+| /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유) → SANCTIONED, 결제 대기 주문 취소, 상품 STOPPED, 정산 HOLD | 409 |
 | /admin/products | GET | 상품 | ADMIN | 전체 상품(삭제 포함, 최신순). 필터: `sellerId`, `status`=ON_SALE(재고 있음)·SOLD_OUT·STOPPED·DELETED, `categoryId`(대분류면 아래 소분류 포함), `keyword` | 404 CATEGORY_NOT_FOUND |
 | /admin/products/{productId}/stop | POST | 상품 | ADMIN | 즉시 판매 중지(사유 필수, 해제 없음) → STOPPED(ADMIN), 결제 대기 주문 취소, 심사 중인 요청 닫힘 | 404, 409 PRODUCT_NOT_ON_SALE |
 | /admin/product-stop-requests | GET | 상품 | ADMIN | 판매 중지 요청 목록(`status` 기본 PENDING, 오래된 순) | - |
