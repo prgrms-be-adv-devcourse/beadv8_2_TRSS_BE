@@ -66,15 +66,15 @@
 
 **상품·카테고리·재고·검색**
 
-- 상품 상태는 ON_SALE·SOLD_OUT·STOPPED·DELETED이며, 재고는 ON_SALE ↔ SOLD_OUT만 바꾼다
-- 상품 등록 시 필수 항목은 상품명, 가격, 카테고리, 상품 설명이며 상품 이미지는 선택 항목이다
+- 상품 상태는 ON_SALE·STOPPED·DELETED를 저장하고, 품절(SOLD_OUT)은 저장하지 않고 옵션 재고로 계산해 보여 준다
+- 상품 등록 시 필수 항목은 상품명, 가격, 카테고리, 상품 설명, 초기 재고, 대표 이미지이며 상세 이미지는 선택(최대 10개)이다
 - 판매 중지는 판매자와 관리자만 할 수 있으며 중지 사유를 반드시 적는다
-    - 판매자는 판매 중지를 요청하고, 관리자가 사유를 검토해 승인하거나 반려한다
+    - 판매자는 판매 중지를 요청하고, 관리자가 사유를 검토해 승인하거나 반려한다 (상품마다 심사 중인 요청은 하나, 심사 중 상품이 삭제·중지되면 요청은 자동으로 닫힌다)
     - 관리자는 사유를 적고 바로 판매 중지한다
     - 판매 중지 해제 기능은 제공하지 않는다
 - 상품이 STOPPED·DELETED가 되면 그 뒤로는 장바구니 담기와 주문 생성이 불가능하다
     - 이미 결제된(PAID 이후) 주문은 그대로 진행하고, 결제 대기 주문은 취소하고 재고를 복원한다
-- 재고는 증감량 + 사유로만 조정하고 모든 변화를 재고 이력에 남긴다(INIT, ADJUST, ORDER_DEDUCT, ORDER_RESTORE, RETURN_RESTORE)
+- 재고는 옵션 단위로 증감량만 입력해 조정하고(사유 없음) 모든 변화를 재고 이력에 남긴다(INIT, ADJUST, ORDER_DEDUCT, ORDER_RESTORE, RETURN_RESTORE)
 - 카테고리는 대분류(뷰티/의류)-소분류 2단계이며 관리자만 관리한다
 - 검색은 상품명 부분 일치, 카테고리 필터, 최신순·가격순 정렬, 품절 제외(기본 켜짐)를 지원한다
 
@@ -112,7 +112,7 @@
 - 관리자가 승인하면 RETURNED가 되고 홀딩 금액을 구매자 예치금으로 환불한다
     - 승인 시 관리자가 주문 항목마다 재고 복원 여부(restoreStock)를 고른다
     - 복원을 선택하면 수량 전체를 RETURN_RESTORE로 되돌리고, 선택하지 않으면(파손·사용 등) 재고 이력을 남기지 않는다
-    - 복원 시 SOLD_OUT 상품은 ON_SALE로 바뀌고, STOPPED 상품은 재고만 늘고 상태는 유지된다. DELETED 상품은 복원할 수 없다
+    - 복원 시 상품 상태는 바뀌지 않고 재고만 늘어난다(품절이던 상품은 재고가 생겨 다시 판매 중으로 보인다). 삭제된 상품·옵션은 복원할 수 없다
 - 관리자가 거절하면 PAID로 돌아간다. 이때 결제 완료 후 7일이 이미 지났으면 즉시 구매 확정(CONFIRMED)한다
 
 *구매 확정*
@@ -167,8 +167,8 @@
 | --- | --- |
 | 회원 | ACTIVE / DELETED (INACTIVE는 미구현) |
 | 판매자 | PENDING / APPROVED / REJECTED / WITHDRAW_REQUESTED / WITHDRAWN |
-| 상품 | ON_SALE / SOLD_OUT / STOPPED / DELETED |
-| 판매 중지 요청 | PENDING / APPROVED / REJECTED |
+| 상품 | ON_SALE / STOPPED / DELETED (품절 SOLD_OUT은 재고로 계산) |
+| 판매 중지 요청 | PENDING / APPROVED / REJECTED / CANCELED |
 | 재고 이력 사유 | INIT / ADJUST / ORDER_DEDUCT / ORDER_RESTORE / RETURN_RESTORE |
 | 주문 | CREATED(주문 생성, 결제 대기) / PAYMENT_FAILED / PAID / CONFIRMED / CANCELED / RETURN_REQUESTED / RETURNED |
 | 결제 | PAID / REFUNDED / FAILED_INSUFFICIENT_BALANCE / FAILED_ORDER_EXPIRED / FAILED_SYSTEM_ERROR |
@@ -238,15 +238,16 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | --- | --- | --- | --- | --- |
 | /products | GET | 모두 | 상품 검색·목록(`keyword`, `categoryId`, `sort`=LATEST·PRICE_ASC·PRICE_DESC, `excludeSoldOut`=true) | 400 |
 | /products/{productId} | GET | 모두 | 상품 상세(가격, 설명, 상호명, 품절 여부, 재고 5개 이하면 남은 수량) | 404 |
-| /categories | GET | 모두 | 카테고리 트리(대분류-소분류) | - |
-| /seller/products | POST | SELLER | 상품 등록(필수: 상품명·가격·소분류·설명·초기 재고, 선택: 이미지) | 400, 403 |
-| /seller/products | GET | SELLER | 본인 상품 목록(상태 필터) | - |
-| /seller/products/{productId} | PATCH | SELLER | 상품 수정(재고 제외) | 403, 404, 409 PRODUCT_NOT_EDITABLE |
-| /seller/products/{productId} | DELETE | SELLER | 상품 삭제(소프트 삭제) | 403, 404 |
-| /seller/products/{productId}/images | POST | SELLER | 상품 이미지 업로드 | 400 |
-| /seller/products/{productId}/stock-adjustments | POST | SELLER | 재고 조정(증감량 + 사유) | 400 STOCK_NEGATIVE |
-| /seller/products/{productId}/stock-history | GET | SELLER | 재고 이력 조회 | 403 |
-| /seller/products/{productId}/stop-requests | POST | SELLER | 판매 중지 요청(사유 필수) → 관리자 검토 | 409 STOP_REQUEST_PENDING |
+| /categories | GET | 모두 | 카테고리 트리(대분류-소분류, 사용 중인 것만). 노드마다 `productCount`(판매 중 상품 수, 품절 포함, 대분류는 소분류 합) | - |
+| /seller/products | POST | SELLER | 상품 등록(multipart: `request` JSON + `thumbnail` 필수 + `detailImages` 최대 10개, jpg·png·webp 장당 5MB) | 400 THUMBNAIL_REQUIRED·IMAGE_TYPE_NOT_ALLOWED·DETAIL_IMAGE_LIMIT_EXCEEDED, 403 |
+| /seller/products | GET | SELLER | 본인 상품 목록(`status`=ON_SALE·SOLD_OUT·STOPPED, `keyword`, 최신순, 삭제 상품 제외) | - |
+| /seller/products/counts | GET | SELLER | 탭별 개수(전체·판매중·품절·판매 중지, 목록과 같은 `keyword`) | - |
+| /seller/products/{productId} | GET | SELLER | 수정 폼 조회(상품 정보, 대표·상세 이미지 ID·URL) | 404 |
+| /seller/products/{productId} | PATCH | SELLER | 상품 수정(multipart, 재고 제외, 보낸 항목만. `thumbnail` 교체, `detailImageIds`로 남길 상세 이미지·순서, `detailImages`는 뒤에 추가) | 400 DETAIL_IMAGE_NOT_FOUND·DETAIL_IMAGE_LIMIT_EXCEEDED, 404, 409 PRODUCT_NOT_EDITABLE |
+| /seller/products/{productId} | DELETE | SELLER | 상품 삭제(소프트 삭제, 판매 중·품절만. 결제 대기 주문 취소) | 404, 409 PRODUCT_NOT_EDITABLE |
+| /seller/products/{productId}/options/{optionId}/stock-adjustments | POST | SELLER | 옵션 재고 조정(증감량 `changeQty`, 사유 없음) | 400 STOCK_NEGATIVE, 404, 409 PRODUCT_NOT_EDITABLE·OPTION_DELETED |
+| /seller/products/{productId}/options/{optionId}/stock-history | GET | SELLER | 옵션 재고 이력(최신순, 판매 중지 상품도 조회 가능) | 404 |
+| /seller/products/{productId}/stop-requests | POST | SELLER | 판매 중지 요청(사유 필수, 최대 300자) → 관리자 검토, 승인 전까지 판매 계속 | 404, 409 PRODUCT_NOT_EDITABLE·STOP_REQUEST_PENDING |
 
 ### 3.3 장바구니·주문
 
@@ -302,13 +303,14 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN, 상품 전체 판매 중지 | 409 |
 | /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절 | 409 |
 | /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유) → WITHDRAWN, 결제 대기 주문 취소, 상품 STOPPED, 정산 HOLD | 409 |
-| /admin/products | GET | 상품 | ADMIN | 전체 상품(판매자·상태·카테고리) | - |
-| /admin/products/{productId}/stop | POST | 상품 | ADMIN | 즉시 판매 중지(사유 필수, 해제 없음) | 409 |
-| /admin/product-stop-requests | GET | 상품 | ADMIN | 판매 중지 요청 목록 | - |
-| /admin/product-stop-requests/{requestId}/approve | POST | 상품 | ADMIN | 중지 요청 승인 → STOPPED | 409 |
-| /admin/product-stop-requests/{requestId}/reject | POST | 상품 | ADMIN | 중지 요청 반려(사유) | 409 |
-| /admin/categories | POST | 상품 | ADMIN | 카테고리 추가 | 409(같은 부모 아래 이름 중복) |
-| /admin/categories/{categoryId} | PATCH | 상품 | ADMIN | 이름·정렬 순서·사용 여부 변경 | 409 |
+| /admin/products | GET | 상품 | ADMIN | 전체 상품(삭제 포함, 최신순). 필터: `sellerId`, `status`=ON_SALE(재고 있음)·SOLD_OUT·STOPPED·DELETED, `categoryId`(대분류면 아래 소분류 포함), `keyword` | 404 CATEGORY_NOT_FOUND |
+| /admin/products/{productId}/stop | POST | 상품 | ADMIN | 즉시 판매 중지(사유 필수, 해제 없음) → STOPPED(ADMIN), 결제 대기 주문 취소, 심사 중인 요청 닫힘 | 404, 409 PRODUCT_NOT_ON_SALE |
+| /admin/product-stop-requests | GET | 상품 | ADMIN | 판매 중지 요청 목록(`status` 기본 PENDING, 오래된 순) | - |
+| /admin/product-stop-requests/{requestId}/approve | POST | 상품 | ADMIN | 중지 요청 승인 → 상품 STOPPED(SELLER_REQUEST), 결제 대기 주문 취소 | 404 STOP_REQUEST_NOT_FOUND, 409 STOP_REQUEST_NOT_PENDING |
+| /admin/product-stop-requests/{requestId}/reject | POST | 상품 | ADMIN | 중지 요청 반려(사유 필수), 상품은 판매 계속 | 404 STOP_REQUEST_NOT_FOUND, 409 STOP_REQUEST_NOT_PENDING |
+| /admin/categories | GET | 상품 | ADMIN | 카테고리 트리(사용 중지 포함) | - |
+| /admin/categories | POST | 상품 | ADMIN | 소분류 추가(맨 뒤 순서) | 400 CATEGORY_DEPTH_EXCEEDED, 404, 409 CATEGORY_DUPLICATED |
+| /admin/categories/{categoryId} | PATCH | 상품 | ADMIN | 소분류 이름·사용 여부 변경(순서 변경 없음, 대분류 수정 불가) | 400 CATEGORY_NOT_EDITABLE, 404, 409 CATEGORY_DUPLICATED |
 | /admin/returns | GET | 주문 | ADMIN | 반품 요청 목록 | - |
 | /admin/returns/{orderId}/approve | POST | 주문 | ADMIN | 반품 승인(주문 항목별 `restoreStock`) → RETURNED + 환불 | 409 ORDER_STATE_INVALID, 409 PRODUCT_DELETED |
 | /admin/returns/{orderId}/reject | POST | 주문 | ADMIN | 반품 거절 → PAID 복귀(결제 후 7일 지났으면 즉시 CONFIRMED) | 409 ORDER_STATE_INVALID |
@@ -329,10 +331,13 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 호출 | 제공 모듈 | 설명 |
 | --- | --- | --- |
-| `deductStock(items, orderItemIds)` | 상품 | ORDER_DEDUCT, 상품 ID 순으로 잠금 |
+| `getOptions(optionIds)` | 상품 | 옵션 현재 정보(가격·재고·판매 가능 여부·대표 이미지) |
+| `deductStock(items)` | 상품 | ORDER_DEDUCT, 상품 → 옵션 순으로 ID 순 잠금 |
 | `restoreStock(items, reason)` | 상품 | ORDER_RESTORE / RETURN_RESTORE |
+| `lockProductsForOrderChange(productIds)` | 상품 | 주문 취소·만료·반품 승인 전 상품 먼저 잠금 (잠금 순서 상품 → 주문) |
+| `stopAllBySeller(sellerId, reason)` / `resumeAllBySeller(sellerId)` | 상품 | 판매자 철회·제재 시 전체 중지 / 철회 거절 시 되돌림 |
 | `pay(orderId, buyerId, amount, idempotencyKey)` | 결제 | 지갑 → 홀딩, 결과 PAID / FAILED_* |
-| `cancelPendingOrders(productIds 또는 sellerId)` | 주문 | 판매 중지·삭제·제재 시 결제 대기 주문 취소 |
+| `cancelPendingOrders(productIds, cancelType)` | 주문 | 상품 판매 중지·삭제·판매자 철회·제재 시 결제 대기 주문 취소 |
 | `transfer(SETTLEMENT-{id}, sellerId, payout, fee)` | 결제(예치금) | 홀딩 → 판매자·관리자 지갑, 멱등 |
 | `GET /internal/cash/transfers/SETTLEMENT-{id}` | 결제(예치금) | 송금 여부·금액 조회(없으면 404) |
 
