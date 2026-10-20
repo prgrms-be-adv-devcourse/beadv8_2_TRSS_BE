@@ -89,9 +89,10 @@ com.backend
 - `@Transactional`은 **Facade 메서드에만** 붙입니다. 조회는 `@Transactional(readOnly = true)`입니다.
   - 컨트롤러에는 붙이지 않습니다.
 - Facade는 **엔티티가 아니라 DTO를 반환**합니다. `open-in-view: false`라서 컨트롤러에서 지연 로딩을 하면 오류가 납니다.
-- 예외적으로 별도 트랜잭션이 필요한 경우(결제 실패 기록 등)는 별도 빈에 `@Transactional(propagation = REQUIRES_NEW)`를 둡니다. 같은 클래스 안에서 호출하면 적용되지 않습니다. → [예외 처리 8.1](palette_exception_handling.md)
+- 예외적으로 별도 트랜잭션이 필요한 경우(결제 실패 기록 등)는 별도 빈에 `@Transactional(propagation = REQUIRES_NEW)`를 둡니다. 같은 클래스 안에서 호출하면 적용되지 않습니다. → [예외 처리 6.2](palette_exception_handling.md)
+- 외부 호출을 트랜잭션 밖에 두려고 짧은 트랜잭션 구간을 별도 빈에 두는 경우도 예외입니다(예: 토스 충전 승인의 `PaymentTopupConfirmProcessor`, 이때 Facade 메서드에는 `@Transactional`을 붙이지 않음).
 - 외부 호출(토스, 메일)은 DB 트랜잭션 밖에서 합니다.
-- 경쟁이 생기는 상태 변경(결제 vs 만료)은 조건부 UPDATE(`where status in (...)`)나 `@Version`으로 막습니다.
+- 경쟁이 생기는 상태 변경(결제 vs 만료)은 조건부 UPDATE(`where status in (...)`), 비관적 잠금(`findBy…ForUpdate`) 후 상태 확인, `@Version`으로 막습니다.
 - 예치금 잔액을 바꿀 때는 `findByMemberIdForUpdate`로 지갑을 잠근 뒤 `WalletTransaction.record(...)`로 잔액 변경과 원장 생성을 함께 하고, 같은 트랜잭션에서 원장을 저장합니다. `Wallet.deposit()`·`withdraw()`를 직접 호출하지 않습니다.
 
 ## 6. 컨텍스트 간 통신
@@ -142,8 +143,8 @@ public class ProductApiAdapter implements ProductApi {
 ```mermaid
 flowchart LR
     member -->|getWallet| payment
-    member -->|stopAllBySeller, resumeAllBySeller| product
-    member -->|hasActiveOrders| order
+    member -.->|stopAllBySeller, resumeAllBySeller 미구현| product
+    member -->|hasActiveOrders, hasActiveSales, getRecentOrders| order
     member -->|getUnsettledAmount, holdSeller| settlement
     product -->|getApprovedSellerByMemberId, findSellerByMemberId, getSellers| member
     product -->|cancelPendingOrders| order
@@ -152,12 +153,13 @@ flowchart LR
     order -->|getSellers, findSellerByMemberId| member
     settlement -->|transfer| payment
     settlement -->|getSeller| member
+    payment -->|findMemberByEmail, getMembers| member
     order -. OrderReturnedEvent .-> payment
     order -. OrderConfirmedEvent .-> settlement
     member -. MemberSignedUpEvent .-> payment
 ```
 
-실선은 동기 Api, 점선은 이벤트입니다(이번 범위는 Outbox 없이 모두 일반 이벤트, `MemberSignedUpEvent`는 같은 트랜잭션에서 처리). 결제(payment)는 다른 컨텍스트를 호출하지 않습니다.
+실선은 동기 Api, 점선은 이벤트입니다(이번 범위는 Outbox 없이 모두 일반 이벤트, `MemberSignedUpEvent`는 같은 트랜잭션에서 처리). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
 
 ### 6.4 이벤트 규칙
 
@@ -183,7 +185,7 @@ public class SettlementEventListener {
 - 이벤트는 불변 record로 만들고, 받는 쪽이 다시 조회하지 않아도 되도록 필요한 값을 모두 담습니다.
 - 리스너는 `AFTER_COMMIT` + `REQUIRES_NEW`를 쓰고 Facade 한 줄만 호출합니다.
   - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
-- **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, `payment_refund.payment_id`)으로 중복을 막습니다.
+- **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, 환불 구현 시 `payment_refund.payment_id`)으로 중복을 막습니다.
 - 발행은 UseCase에서 `EventPublisher.publish(...)`로 합니다. 엔티티에서 스프링 빈을 꺼내 쓰지 않습니다.
 
 ### 6.5 Outbox (이번 범위 제외)
@@ -238,7 +240,7 @@ public class SettlementEventListener {
 
         @Test
         void getOrders() throws Exception {
-            String token = jwtTokenProvider.createAccessToken(1L, MemberRole.USER);   // 판매자·관리자는 SELLER·ADMIN
+            String token = jwtTokenProvider.createAccessToken(1L, MemberRole.USER);   // 관리자는 MemberRole.ADMIN (판매자는 역할이 아니라 판매자 상태로 판단)
 
             mockMvc.perform(get("/api/v1/orders").header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk());
@@ -297,7 +299,7 @@ custom:
 
 ## 10. 목록 조회
 
-- 요청 파라미터: `page`(0부터), `size`(기본 20)
+- 요청 파라미터: `page`(0부터), `size`(기본 20, 최대 100. 상품 검색 `GET /products`만 최대 50)
 - 응답 `data` 형식:
 
 ```json
@@ -324,7 +326,7 @@ custom:
 | --- | --- | --- |
 | 1 | `MemberDataInit` | **1번 관리자, 2번 판매자(APPROVED), 3번 구매자** + 각자 지갑 (ID 고정, `adminMemberId: 1`과 연결) |
 | 2 | `ProductDataInit` | 카테고리(뷰티/의류 + 소분류), 2번 판매자의 상품 몇 개 |
-| 3 | `PaymentDataInit` | 3번 구매자 지갑에 테스트 예치금 |
+| 3 | `PaymentDataInit` | 3번 구매자의 결제 완료 건·HELD 홀딩(정산 시드 주문 -1·-2용, 잔액·원장 변화 없음, `MEMBER_SEED_PASSWORD`가 있을 때만) |
 | 4 | `OrderDataInit` | (필요하면) 테스트 주문 |
 | 5 | `SettlementDataInit` | (필요하면) 정산 후보 |
 

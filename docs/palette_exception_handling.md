@@ -138,9 +138,9 @@ catch (RestClientException e) {
 
 | resultCode | 직접 던지는 경우 |
 | --- | --- |
-| 401-UNAUTHORIZED / 401-AUTH_TOKEN_EXPIRED | Spring Security 추가 후 인증 필터에서 사용 (7장) |
-| 403-FORBIDDEN | 역할 부족, 판매자 상태가 APPROVED가 아님 |
-| 409-IDEMPOTENCY_KEY_REUSED | 같은 `Idempotency-Key`로 다른 요청 본문이 들어옴 |
+| 401-UNAUTHORIZED / 401-AUTH_TOKEN_EXPIRED | 인증 필터·`AuthenticationEntryPoint`에서 사용 (7장) |
+| 403-FORBIDDEN | 역할 부족(URL 규칙). 판매자 상태가 APPROVED가 아니면 member의 `403-SELLER_NOT_APPROVED`를 쓴다 |
+| 409-IDEMPOTENCY_KEY_REUSED | 결제 멱등 키(`PayCommand.idempotencyKey`)가 다른 주문·구매자·금액에 다시 쓰임 (`Idempotency-Key` 헤더는 미구현) |
 | 429-TOO_MANY_REQUESTS | 인증코드 재발송 제한 등 |
 | 502-EXTERNAL_SERVICE_ERROR | 토스·메일 서버가 오류로 응답 (`cause`와 함께) |
 | 500-INTERNAL_ERROR | 잡은 예외를 감싸 다시 던질 때 (`cause`와 함께) |
@@ -182,16 +182,16 @@ Order order = orderRepository.findByIdAndBuyerId(orderId, memberId)
 
 ### 6.2 롤백되면 안 되는 실패 기록
 
-예외가 나면 트랜잭션이 롤백되므로, 같은 트랜잭션 안에서 저장한 실패 기록도 사라진다. 실패 상태를 남겨야 하면(예: 결제 `FAILED_INSUFFICIENT_BALANCE`) **별도 빈의 `@Transactional(propagation = REQUIRES_NEW)` 메서드**로 기록한 뒤 예외를 다시 던진다.
+예외가 나면 트랜잭션이 롤백되므로, 같은 트랜잭션 안에서 저장한 실패 기록도 사라진다. 실패 상태를 남겨야 하면(예: 결제 `FAILED_INSUFFICIENT_BALANCE`) **별도 빈의 `@Transactional(propagation = REQUIRES_NEW)` 메서드**로 기록한다.
+
+결제는 잔액 부족을 예외가 아니라 결과로 돌려준다. 결제 모듈이 실패를 별도 트랜잭션으로 기록하고 FAILED 결과를 반환하면, 주문 모듈이 `402-INSUFFICIENT_BALANCE`를 던져 자기 트랜잭션(주문 PAID 변경)을 롤백한다. 실패 기록은 이미 커밋돼 남는다.
 
 ```java
-public PayResult pay(PayCommand cmd) {                // 트랜잭션 없음
-    try {
-        return paymentProcessor.payInTx(cmd);         // 다른 빈의 @Transactional
-    } catch (InsufficientBalanceException e) {
-        failureRecorder.record(cmd, FAILED_INSUFFICIENT_BALANCE);   // REQUIRES_NEW
-        throw e;
-    }
+// PaymentPayUseCase (결제 모듈)
+if (wallet.getBalance() < command.amount()) {
+    Payment failed = paymentFailureRecorder.record(command, wallet.getId(),
+            FAILED_INSUFFICIENT_BALANCE, reason);      // 다른 빈, REQUIRES_NEW
+    return toResult(failed, wallet);                   // 예외 없이 결과 반환
 }
 ```
 
@@ -199,7 +199,7 @@ public PayResult pay(PayCommand cmd) {                // 트랜잭션 없음
 
 ### 6.3 동시성 경합
 
-상태 변경은 조건부 UPDATE로 하고, 바뀐 행이 0이면 예외로 바꾼다.
+상태 변경은 조건부 UPDATE로 하고 바뀐 행이 0이면 예외로 바꾸거나, 행을 비관적 잠금(`findBy…ForUpdate`)으로 조회한 뒤 엔티티에서 상태를 확인한다. 충전 READY 만료는 조건부 UPDATE를 쓴다.
 
 ```java
 int updated = orderRepository.markPaid(orderId, now);  // WHERE status IN (...) AND expires_at > :now
@@ -210,15 +210,20 @@ if (updated == 0) throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
 
 - 외부 호출은 DB 트랜잭션 밖에서 하고, HTTP 클라이언트 예외가 `out` 어댑터 밖으로 새지 않게 `DomainException`으로 감싼다.
 - 외부가 오류로 응답하면 `502-EXTERNAL_SERVICE_ERROR`(또는 컨텍스트 코드)로 던진다.
+- 토스 충전 승인의 오류 처리:
+  - 401·`INVALID_API_KEY`·`UNAUTHORIZED_KEY`(키 오류) → 충전 FAILED_SYSTEM_ERROR, `502-EXTERNAL_SERVICE_ERROR`
+  - 그 밖의 4xx(카드 거절 등) → 충전 FAILED_PG_DECLINED, `400-TOPUP_PAYMENT_DECLINED`(`data.code`·`message`)
+  - 5xx·`ALREADY_PROCESSED_PAYMENT`·승인 후 DB 반영 실패 → 충전 PROCESSING, `200-1` + `data.status: "PROCESSING"`
+  - 연결 5초·응답 30초 제한 (`custom.toss`)
 - **응답 시간 초과는 실패로 단정하지 않는다.** 카드 승인은 이미 됐을 수 있다. 충전을 `PROCESSING`으로 두고 성공 응답 `200-1` + `data.status: "PROCESSING"`(결과 확인 중)으로 돌려준다. 프론트는 `data.status`로 완료와 확인 중을 구분한다. 대사 스케줄러가 토스 조회로 결과를 확정한다.
-- 같은 `Idempotency-Key` + 같은 요청은 오류가 아니라 처음 응답을 그대로 돌려준다. 다른 본문이면 `409-IDEMPOTENCY_KEY_REUSED`다.
+- 같은 `Idempotency-Key` + 같은 요청은 오류가 아니라 처음 응답을 그대로 돌려준다. 다른 본문이면 `409-IDEMPOTENCY_KEY_REUSED`다. (헤더는 미구현. 지금은 충전 승인 재요청이 `409-TOPUP_ALREADY_PROCESSED`이고 상태는 `GET /topups/{id}`로 확인한다. 내부 `PaymentApi.pay()`만 같은 키에 처음 결과를 돌려준다)
 
 ### 6.5 스케줄러·Spring Batch·이벤트 리스너
 
 HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 
 - **건별로 잡는다.** 한 건의 실패가 전체 작업을 멈추지 않게 건마다 try-catch하고, 실패 건은 로그를 남긴 뒤 다음 실행에서 다시 처리한다.
-- **실패 사유를 저장한다.** 정산서 `last_fail_reason`, 환불 `fail_reason` 등에 남겨 관리자 화면에서 보이게 한다.
+- **실패 사유를 저장한다.** 정산서 `last_fail_reason`, 충전·결제 `fail_reason`(환불 `fail_reason`은 환불 구현 때) 등에 남겨 관리자 화면에서 보이게 한다.
 - **재시도할 실패와 아닌 실패를 나눈다.** 일시 장애(타임아웃, 락 경합)는 재시도하고, 데이터 문제(금액 불일치 등)는 바로 `FAILED`·`MANUAL_REQUIRED`로 둔다.
 
 ## 7. Spring Security를 추가할 때
@@ -245,10 +250,15 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 429-LOGIN_LOCKED | 15분 안에 로그인 5회 실패 → 15분 잠금(5번째 실패부터, 가입하지 않은 이메일도 같음) |
 | | 400-PASSWORD_MISMATCH | 탈퇴 시 비밀번호 재확인 불일치 (로그인 상태라 401 대신 400. 5회 틀리면 429-LOGIN_LOCKED) |
 | | 409-WITHDRAWAL_NOT_ALLOWED | 진행 중 주문·미정산·잔액이 남았거나 판매자 철회 전 (`data.reasons`: `ACTIVE_ORDERS`, `UNSETTLED_AMOUNT`, `BALANCE_REMAINING`, `SELLER_ACTIVE`) |
+| | 404-SELLER_NOT_FOUND | 판매자 신청 내역 없음 (내 판매자 조회·수정·철회 요청, 관리자 판매자 조회·처리) |
+| | 403-SELLER_SANCTIONED | 제재된 판매자의 재신청 |
+| | 403-SELLER_NOT_APPROVED | APPROVED가 아닌 판매자의 판매 기능·정보 수정 (`MemberApi.getApprovedSellerByMemberId`) |
+| | 400-SELLER_ACCOUNT_INCOMPLETE | 정산 계좌 수정 시 은행·계좌번호·예금주 중 일부만 보냄 |
 | | 409-SELLER_ALREADY_APPLIED | 이 회원에게 진행 중인 판매자 신청(PENDING·APPROVED·WITHDRAW_REQUESTED)이 이미 있음 |
-| | 409-BUSINESS_NUMBER_DUPLICATED | 다른 회원이 이 사업자등록번호로 진행 중인 판매자 신청이 있음 |
-| | 409-SELLER_STATE_INVALID | 승인·반려·철회를 할 수 없는 상태 |
-| | 409-UNSETTLED_AMOUNT_EXISTS | 미정산 금액이 있어 철회 요청 불가 |
+| | 409-BUSINESS_NUMBER_DUPLICATED | 다른 판매자가 이 사업자등록번호로 심사 중·판매 중·철회 심사 중이거나 제재됨 |
+| | 409-SELLER_STATE_INVALID | 입점 승인·반려, 철회 요청·승인·거절, 제재를 할 수 없는 상태 |
+| | 409-UNSETTLED_AMOUNT_EXISTS | 미정산 금액이 있어 철회 요청·철회 승인 불가 |
+| | 409-ACTIVE_SALES_EXIST | 철회 승인 시 판매자 상품이 들어간 진행 중 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있음 |
 | product (유진) | 404-PRODUCT_NOT_FOUND | 없거나 다른 판매자의 상품, 구매자에게 보이지 않는 상품(판매 중지·삭제·카테고리 사용 중지) |
 | | 409-PRODUCT_NOT_ON_SALE | 판매 중이 아닌 상품 차감(주문), 관리자 즉시 중지 시 이미 중지·삭제된 상품 |
 | | 409-PRODUCT_NOT_EDITABLE | 판매 중지·삭제된 상품의 수정·삭제·재고 조정·중지 요청 |
@@ -276,12 +286,15 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
 | | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
-| payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족 (`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`) |
+| payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족. API 응답은 주문 결제가 order의 `OrderErrorCode.INSUFFICIENT_BALANCE`로 던진다(`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`). payment 코드는 `Wallet` 출금 안전장치 |
+| | 400-PAYMENT_PERIOD_INVALID | 조회 시작일 > 종료일 (거래 내역, 관리자 결제·충전 조회) |
 | | 400-TOPUP_AMOUNT_INVALID | 1만 원 단위·1만~100만 원 위반 |
 | | 400-AMOUNT_MISMATCH | 저장 금액 ≠ 승인 요청 금액 |
 | | 400-TOPUP_PAYMENT_DECLINED | 토스가 결제를 승인하지 않음(카드 거절·한도 초과 등) (`data.code`·`message`: 토스 오류 코드·메시지) |
-| | 409-TOPUP_ALREADY_PROCESSED | 이미 승인된 충전·같은 결제키 |
-| | 409-TOPUP_ALREADY_USED | 남은 금액 ≠ 충전 금액이라 취소 불가 |
+| | 409-TOPUP_ALREADY_PROCESSED | READY가 아닌 충전 건(승인 중·완료·실패·만료)에 승인·실패 기록 요청, 이미 쓰인 결제키 |
+| | 409-TOPUP_ALREADY_USED | 남은 금액 ≠ 충전 금액이라 취소 불가 (충전 취소 API 미구현, 현재 미사용) |
+| | 409-PAYMENT_ALREADY_PAID | 다른 멱등 키로 이미 PAID인 주문을 결제 (내부 `PaymentApi.pay`) |
+| | 404-HOLDING_NOT_FOUND / 409-HOLDING_INSUFFICIENT / 409-TRANSFER_AMOUNT_MISMATCH | 정산 지급(`PaymentApi.transfer`)에서 홀딩 없음 / 홀딩 남은 금액 부족 / 주문별 금액 합 ≠ 지급액 + 수수료 |
 | | 404-TOPUP_NOT_FOUND / 404-WALLET_NOT_FOUND | |
 | settlement (다은) | 404-SETTLEMENT_NOT_FOUND | |
 | | 409-SETTLEMENT_RUNNING | 같은 월 정산 실행 중 |
@@ -339,6 +352,7 @@ public RsData<PayResponse> pay(...) { ... }
 | `RsData`, `ErrorCode`, `GlobalErrorCode`, `DomainException`, `GlobalExceptionHandler` | 완료 |
 | 실패 응답을 `RsData`로 통일, 405·415 처리 | 완료 |
 | 성공 응답 HTTP 200 통일 | 완료 (별도 코드 없음) |
-| Security `AuthenticationEntryPoint`·`AccessDeniedHandler` | Security 도입 시 (7장) |
+| Security `AuthenticationEntryPoint`·`AccessDeniedHandler` | 완료 (`JwtAuthenticationEntryPoint`·`JwtAccessDeniedHandler`) |
+| 토스 연동 예외(`TossPaymentException`·`TossTimeoutException`)·충전 대사 스케줄러 | 완료 |
 | 요청별 `traceId`(MDC, `X-Trace-Id` 헤더) | 미구현 |
 | 운영 프로필에서 `show-sql` 끄기 | 미구현 |
