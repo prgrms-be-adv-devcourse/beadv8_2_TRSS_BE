@@ -1,6 +1,10 @@
 spring:
   application:
-    name: demo
+    name: palette
+
+  # 프로젝트 루트의 .env를 읽음 (없으면 무시). 형식은 .env.example 참고
+  config:
+    import: optional:file:.env[.properties]
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}
@@ -13,14 +17,111 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
+
+  # 상품 이미지 업로드 크기. 대표 1장 + 상세 10장을 한 요청으로 받는다 (nginx client_max_body_size도 같이 맞춘다)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 60MB
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  # 인증 메일 발송(Gmail SMTP). 계정 정보는 환경변수로 주입하고, 없으면 발송할 때만 실패한다.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
-      hibernate:
-        format_sql: true
-        jdbc:
-          time_zone: UTC
-    show-sql: true
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
 
   batch:
     jdbc:
       initialize-schema: always
+    job:
+      enabled: false           # 앱 시작 시 Job 자동 실행 금지. 정산 Job은 스케줄러·관리자 요청으로만 실행한다
+
+  task:
+    scheduling:
+      pool:
+        size: 6          # 스케줄 작업 6개(정산 2, 충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 다른 스케줄러가 멈추지 않는다
+
+
+# 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
+custom:
+  jwt:
+    # 서명 키: 무작위 32바이트를 Base64로 인코딩한 값. 기본값 없이 환경변수(.env)로만 주입한다.
+    secret: ${JWT_SECRET}
+    accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
+  member:
+    refreshTokenExpireDays: 14            # Refresh Token 유효 기간(일)
+    seedPassword: ${MEMBER_SEED_PASSWORD:}   # 개발용 시드 회원 비밀번호. 비어 있으면 시드를 넣지 않는다(운영 환경)
+    refreshCookieSecure: ${AUTH_COOKIE_SECURE:false}       # HTTPS 배포 시 true
+    refreshCookieSameSite: ${AUTH_COOKIE_SAME_SITE:Lax}    # 프론트·백엔드 도메인이 다르면 None (Secure 필수)
+    emailCodeExpireMinutes: 5             # 이메일 인증코드 유효 시간(분)
+    emailCodeResendSeconds: 60            # 인증코드 재발송 제한 간격(초)
+    emailVerifiedTokenExpireMinutes: 30   # 인증 완료 토큰 유효 시간(분)
+    emailCodeMaxAttempts: 5               # 인증코드 확인 최대 실패 횟수
+    loginMaxAttempts: 5                   # 로그인 최대 실패 횟수 (도달하면 잠금)
+    loginLockMinutes: 15                  # 로그인 실패를 세는 기간이자 잠금 시간(분)
+    # 정산 계좌번호 암호화 키. 기본값 없이 환경변수(.env)로만 주입한다.
+    accountEncryption:
+      password: ${ACCOUNT_ENCRYPTION_PASSWORD}
+      salt: ${ACCOUNT_ENCRYPTION_SALT}
+  product:
+    image:
+      maxDetailImages: 10      # 상품 하나의 상세 이미지 최대 개수 (대표 이미지는 별도 1개)
+      storage: ${PRODUCT_IMAGE_STORAGE:local}   # 이미지 저장소: local(로컬 파일 시스템, 로컬 개발·테스트) | s3(S3 버킷, 배포 환경)
+      localDir: ${PRODUCT_IMAGE_DIR:./uploads}                          # local 저장 폴더 (Git에 올리지 않는다)
+      baseUrl: ${PRODUCT_IMAGE_BASE_URL:http://localhost:8080/images}   # local 이미지 URL 앞부분. 앱이 /images/**로 파일을 내려 준다
+      # s3 저장소 설정 (storage가 s3일 때만 쓴다). 인증은 액세스 키 없이 EC2 IAM 역할로 한다
+      s3:
+        bucket: ${PRODUCT_IMAGE_S3_BUCKET:}                  # 버킷 이름
+        region: ${PRODUCT_IMAGE_S3_REGION:ap-northeast-2}    # 버킷 리전 (서울)
+        baseUrl: ${PRODUCT_IMAGE_S3_BASE_URL:}               # 이미지 URL 앞부분 (예: https://{버킷}.s3.ap-northeast-2.amazonaws.com)
+  order:
+    cartMaxQuantity: 99        # 장바구니 최대 수량
+    expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
+    autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
+    autoConfirmIntervalSeconds: 3600   # 자동 구매 확정 스케줄러 실행 간격(초). 7일 경과 후 최대 이 시간만큼 늦게 확정된다
+    schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
+    expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
+    expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
+  payment:
+    topupUnit: 10000           # 충전 단위·최소 금액(원)
+    topupMax: 1000000          # 1회 최대 충전 금액(원)
+    topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
+    topupExpireIntervalSeconds: 60      # READY 만료 스케줄러 실행 간격(초)
+    topupReconcileIntervalSeconds: 300  # PROCESSING 결과 확인 스케줄러 실행 간격(초)
+    topupReconcileDelayMinutes: 5       # PROCESSING이 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
+    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
+    adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
+  # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
+  toss:
+    baseUrl: https://api.tosspayments.com
+    secretKey: ${TOSS_SECRET_KEY:}
+    connectTimeoutSeconds: 5   # 토스 서버 접속 제한 시간(초)
+    readTimeoutSeconds: 30     # 요청 후 토스 응답 대기 제한 시간(초). 넘으면 충전 건을 PROCESSING으로 두고, 스케줄러가 토스 조회로 최종 결과를 반영
+  settlement:
+    feeRate: 10                # 수수료율(%)
+    payDayOfMonth: 10          # 매월 정산일
+    maxAttempts: 3             # 최초 1회 + 재시도 2회
+    retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
+    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
+    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+  scheduling:
+    enabled: true        # false면 모든 스케줄러가 멈춘다(통합 테스트용)
