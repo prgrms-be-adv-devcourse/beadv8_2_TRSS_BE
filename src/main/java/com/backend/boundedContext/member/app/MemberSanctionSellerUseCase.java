@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
+import com.backend.shared.product.out.ProductApi;
 import com.backend.shared.settlement.out.SettlementApi;
 
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 public class MemberSanctionSellerUseCase {
 
     private final SellerSupport sellerSupport;
+    private final ProductApi productApi;
     private final SettlementApi settlementApi;
 
     public AdminSellerDetailDto sanction(Long sellerId, String reason) {
@@ -29,8 +31,9 @@ public class MemberSanctionSellerUseCase {
         // APPROVED·WITHDRAW_REQUESTED가 아니면 409 SELLER_STATE_INVALID
         SellerStatusHistory history = seller.sanction(strippedReason);
 
-        // TODO: 판매자 상품 전체 판매 중지 + 결제 대기 주문 취소·재고 복원.
-        //  ProductApi.stopAllBySeller(sellerId, reason)가 추가되면 정산 보류보다 먼저 호출한다 (상품 담당, 내부에서 OrderApi.cancelPendingOrders 호출)
+        // 판매 중 상품을 모두 중지하고 그 상품이 든 결제 대기 주문을 취소·재고 복원한다 (상품 담당, 내부에서 OrderApi.cancelPendingOrders 호출).
+        // 철회 요청 때 이미 중지된 상품은 건드리지 않는다
+        productApi.stopAllBySeller(sellerId, strippedReason);
 
         // 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾸고, 이후 정산서도 HOLD로 만든다 (정산 담당)
         settlementApi.holdSeller(sellerId, strippedReason);
