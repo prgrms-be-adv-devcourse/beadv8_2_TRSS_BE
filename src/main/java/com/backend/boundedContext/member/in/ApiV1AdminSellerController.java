@@ -47,7 +47,7 @@ public class ApiV1AdminSellerController {
         return RsData.of("200-1", "판매자 상세를 조회했습니다.", memberSellerFacade.getSellerDetail(sellerId));
     }
 
-    @Operation(summary = "입점 승인", description = "심사 대기(PENDING)만 승인할 수 있고, 회원에게 판매자 권한을 줍니다. 바뀐 판매자 상세를 반환합니다.")
+    @Operation(summary = "입점 승인", description = "심사 대기(PENDING)만 승인할 수 있고, 판매자 상태가 APPROVED가 되어 판매 기능을 쓸 수 있습니다(회원 역할은 USER 그대로). 바뀐 판매자 상세를 반환합니다.")
     @PostMapping("/{sellerId}/approve")
     public RsData<AdminSellerDetailDto> approve(
             @PathVariable Long sellerId

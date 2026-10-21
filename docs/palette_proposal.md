@@ -35,7 +35,7 @@
 | 검색 | 모두 | 상품명·카테고리 검색, 최신/가격순 정렬, 품절 상품 제외 | 포함 |
 | 장바구니 | 회원 | 여러 판매자 상품 담기, 수량·선택 변경, 조회 시 가격·재고 재확인, 예상 결제 금액 | 포함 |
 | 주문·취소·반품·구매확정 | 회원, 관리자 | 주문 생성 시 재고 차감(생성 후 15분 미결제 시 만료), 결제 전 취소, 반품 심사(1회), 결제 후 7일 자동 확정 | 포함 |
-| 예치금·결제 | 회원 | 토스 예치금 충전, 지갑 → 홀딩 결제, 미사용 충전 건 취소, 반품 환불 | 포함 |
+| 예치금·결제 | 회원 | 토스 예치금 충전, 지갑 → 홀딩 결제, 미사용 충전 건 취소, 반품 환불 (충전 취소·반품 환불은 미구현) | 포함 |
 | 월 정산 | 판매자, 관리자 | 구매 확정 시 정산 후보 생성, 매월 10일 정산(Spring Batch), 수수료 10% 차감 지급, 재시도·수동 정산 | 포함 |
 
 **회원/인증**
@@ -51,18 +51,22 @@
 
 **판매자**
 
-- 사업자번호·상호명·연락처·정산 계좌를 받아 신청하고, 관리자가 승인하면 판매자 상태가 APPROVED가 되어 판매 기능을 쓸 수 있다
-- 상태는 PENDING → APPROVED/REJECTED, 철회는 WITHDRAW_REQUESTED → WITHDRAWN이다
-- 회원·사업자번호당 활성 신청은 1건만 허용하고, 판매자 기능은 요청마다 DB의 승인 상태를 다시 확인한다
+- 사업자번호·상호명·대표자명·연락처·정산 계좌(은행·계좌번호·예금주)를 받아 신청하고, 관리자가 승인하면 판매자 상태가 APPROVED가 되어 판매 기능을 쓸 수 있다
+- 상태는 PENDING → APPROVED/REJECTED, 철회는 APPROVED → WITHDRAW_REQUESTED → WITHDRAWN(거절 시 APPROVED), 제재는 APPROVED·WITHDRAW_REQUESTED → SANCTIONED이다
+    - REJECTED·WITHDRAWN은 같은 신청 API로 재신청하면 PENDING으로 돌아가고, SANCTIONED는 재신청할 수 없다
+- 판매자 정보는 회원당 1개이며, 사업자번호는 심사 중·판매 중·철회 심사 중·제재된 판매자와 겹칠 수 없다(반려·본인 철회 시 비워져 재사용 가능)
 - 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인)
 - 판매자도 일반 회원처럼 구매할 수 있다. 단, 본인 상품은 장바구니에 담거나 주문할 수 없다
 - 판매자 정산금은 해당 회원의 기존 예치금 지갑에 지급하며, 판매자는 정산받은 예치금으로 상품을 구매할 수 있다
 - **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN → 판매 상품 전체 판매 중지
     - 미정산 금액이 있으면 철회를 요청할 수 없고, 없으면 일반 사용자로 전환한다(판매 불가, 구매 가능)
+    - 관리자 승인 시 진행 중인 판매 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이나 미정산 금액이 있으면 승인하지 않는다
+    - 상품 전체 판매 중지는 미구현(상품 모듈 `stopAllBySeller` 연동 예정)
 - **관리자 제재:** 관리자가 판매자를 바로 SANCTIONED로 전환한다
-    - 판매자 상태만 SANCTIONED로 바꾼다
+    - 판매자 상태를 SANCTIONED로 바꾼다(회원 역할은 USER 그대로, 사업자번호는 유지해 재신청을 막는다)
     - 결제 완료(PAID)된 주문은 그대로 진행하고, 결제 대기(CREATED·PAYMENT_FAILED) 주문은 취소하고 재고를 복원한다
     - 판매자의 상품은 모두 판매 중지(STOPPED)하고, 정산은 HOLD로 두어 지급하지 않는다
+    - 현재는 정산 HOLD만 구현했고, 결제 대기 주문 취소·상품 판매 중지는 미구현(상품·주문 모듈 연동 예정)
 
 **상품·카테고리·재고·검색**
 
@@ -124,17 +128,17 @@
 **예치금·결제**
 
 - 모듈별 원장 기록 책임
-    - 충전 모듈: 토스페이먼츠 승인·취소 통신, 충전 상태 관리 — CHARGE(충전 완료), CHARGE_CANCEL(미사용 충전 취소)
-    - 결제 모듈: 주문 결제 상태 관리, 지갑 ↔ 홀딩 이동 — PAYMENT(결제, 지갑 → 홀딩), REFUND(반품 승인, 홀딩 → 구매자 지갑)
+    - 충전 모듈: 토스페이먼츠 승인·주문번호 조회 통신(취소는 미구현), 충전 상태 관리 — CHARGE(충전 완료), CHARGE_CANCEL(미사용 충전 취소, 미구현)
+    - 결제 모듈: 주문 결제 상태 관리, 지갑 ↔ 홀딩 이동 — PAYMENT(결제, 지갑 → 홀딩), REFUND(반품 승인, 홀딩 → 구매자 지갑, 미구현)
     - 정산 모듈: SETTLEMENT(홀딩 → 판매자 지갑), FEE(홀딩 → 관리자 수수료)
-- 충전은 서버가 금액·주문번호를 저장해 두고 토스 승인 전후에 금액·주문번호를 검증한다. 같은 결제키는 한 번만 반영한다
+- 충전은 서버가 금액·주문번호를 저장해 두고, 토스 승인 요청 전에 저장 금액과 요청 금액을 비교한다(다르면 FAILED_AMOUNT_MISMATCH로 종료). 승인 후 토스 승인 금액이 다르면 로그만 남긴다. 같은 결제키는 한 번만 반영한다
 - 예치금 충전은 10,000원 단위로만 가능하며, 1회 최소 10,000원, 최대 1,000,000원이다
-- 결제 시 잔액이 부족하면 402 INSUFFICIENT_BALANCE를 반환하고, 부족 금액을 10,000원 단위로 올린 금액(예: 18,000원 부족 시 20,000원)으로 충전을 안내한다. 충전을 마치면 주문 만료 전까지 같은 주문으로 다시 결제한다
+- 결제 시 잔액이 부족하면 결제 모듈은 결제 건을 FAILED_INSUFFICIENT_BALANCE로 남겨 결과로 돌려주고, 주문 결제 API가 402 INSUFFICIENT_BALANCE로 응답하며, 부족 금액을 10,000원 단위로 올린 금액(예: 18,000원 부족 시 20,000원)으로 충전을 안내한다. 충전을 마치면 주문 만료 전까지 같은 주문으로 다시 결제한다
 - 결제는 지갑 행을 잠근 뒤 지갑 → 홀딩 이동을 한 트랜잭션으로 처리하고, 모든 잔액 변화는 원장(예치금 거래 내역)에 멱등 키와 함께 기록한다
 - 홀딩은 주문서 1개당 1개를 만든다
 - 결제 금액은 오래된 충전 건부터 차감하고, 충전 건마다 남은 금액과 충전 건별 차감 내역을 기록한다
-- 미사용 충전 취소: 남은 금액이 처음 충전 금액과 같은 충전 건만 토스 취소로 전액 환불할 수 있다. 주문 환불이나 정산으로 들어온 예치금은 토스 취소 대상이 아니다
-- 환불은 홀딩 금액을 구매자 예치금으로 돌려주는 것(REFUND)이며, 반품 승인 시에만 발생한다. 충전 취소와는 구분한다
+- 미사용 충전 취소: 남은 금액이 처음 충전 금액과 같은 충전 건만 토스 취소로 전액 환불할 수 있다. 주문 환불이나 정산으로 들어온 예치금은 토스 취소 대상이 아니다 (미구현)
+- 환불은 홀딩 금액을 구매자 예치금으로 돌려주는 것(REFUND)이며, 반품 승인 시에만 발생한다. 충전 취소와는 구분한다 (미구현)
     - 흐름: 주문 → 결제 → 반품 요청 → 관리자 반품 승인 → 환불(REFUND)
     - 반품으로 돌아온 예치금은 충전 건의 남은 금액을 복원하지 않는다
 - 부분 취소는 불가능하다
@@ -193,15 +197,15 @@
 | 대상 | 상태 |
 | --- | --- |
 | 회원 | ACTIVE / DELETED (INACTIVE는 미구현) |
-| 판매자 | PENDING / APPROVED / REJECTED / WITHDRAW_REQUESTED / WITHDRAWN |
+| 판매자 | PENDING / APPROVED / REJECTED / WITHDRAW_REQUESTED / WITHDRAWN / SANCTIONED |
 | 상품 | ON_SALE / STOPPED / DELETED (품절 SOLD_OUT은 재고로 계산) |
 | 판매 중지 요청 | PENDING / APPROVED / REJECTED / CANCELED |
 | 재고 이력 사유 | INIT / ADJUST / ORDER_DEDUCT / ORDER_RESTORE / RETURN_RESTORE |
 | 주문 | CREATED(주문 생성, 결제 대기) / PAYMENT_FAILED / PAID / CONFIRMED / CANCELED / RETURN_REQUESTED / RETURNED |
-| 결제 | PAID / REFUNDED / FAILED_INSUFFICIENT_BALANCE / FAILED_ORDER_EXPIRED / FAILED_SYSTEM_ERROR |
-| 홀딩 | HELD / RELEASED / SETTLED |
-| 환불 | 상태 REQUESTED / COMPLETED / FAILED, 유형 RETURN (CANCEL은 향후 대비, 현재 미사용) |
-| 충전 | READY / PROCESSING / DONE / CANCELED / FAILED_USER_CANCEL / FAILED_PG_DECLINED / FAILED_AMOUNT_MISMATCH / FAILED_EXPIRED / FAILED_SYSTEM_ERROR |
+| 결제 | PAID / REFUNDED / FAILED_INSUFFICIENT_BALANCE / FAILED_ORDER_EXPIRED / FAILED_SYSTEM_ERROR (REFUNDED·FAILED_SYSTEM_ERROR는 현재 기록하는 경로 없음) |
+| 홀딩 | HELD / RELEASED / SETTLED (RELEASED는 환불 미구현으로 미사용) |
+| 환불 | 상태 REQUESTED / COMPLETED / FAILED, 유형 RETURN (CANCEL은 향후 대비, 현재 미사용) — 미구현 |
+| 충전 | READY / PROCESSING / DONE / CANCELED(미구현) / FAILED_USER_CANCEL / FAILED_PG_DECLINED / FAILED_AMOUNT_MISMATCH / FAILED_EXPIRED / FAILED_SYSTEM_ERROR |
 | 예치금 거래 유형 | CHARGE / CHARGE_CANCEL / PAYMENT / REFUND / SETTLEMENT / FEE |
 | 정산 후보 | READY / INCLUDED / EXCLUDED |
 | 정산서 | READY / PAID / FAILED / MANUAL_REQUIRED / HOLD |
@@ -214,10 +218,10 @@ v1은 Spring Boot 단일 애플리케이션이지만 모듈 경계를 서비스 
 
 - 클라이언트 요청은 모두 보안 필터(JWT·역할 검사)를 거쳐 각 모듈 컨트롤러로 들어간다
 - 주문이 중심이다. 주문 생성 때 상품 모듈에 재고 차감을 요청하고(같은 트랜잭션), 결제 때 결제 모듈을 호출해 지갑 → 홀딩 이동과 주문 PAID 변경을 한 트랜잭션으로 처리한다
-- 잔액이 모자라면 결제 모듈이 402 INSUFFICIENT_BALANCE로 응답하고 결제 건을 FAILED_INSUFFICIENT_BALANCE로 남긴다. 주문은 CREATED로 유지되고 구매자는 충전 후 같은 주문을 다시 결제한다. 충전 승인·취소는 토스페이먼츠를 쓴다
+- 잔액이 모자라면 결제 모듈은 결제 건을 FAILED_INSUFFICIENT_BALANCE로 남겨 결과로 돌려주고, 주문 모듈이 402 INSUFFICIENT_BALANCE로 응답한다. 주문은 CREATED로 유지되고 구매자는 충전 후 같은 주문을 다시 결제한다. 충전 승인·취소는 토스페이먼츠를 쓴다
 - 반품 승인은 OrderReturned 이벤트로 발행되고, 결제 모듈이 이를 받아 홀딩 금액을 구매자 지갑으로 환불한다
 - 구매 확정은 OrderConfirmed 이벤트로 발행되고, 정산 모듈이 이를 받아 주문 항목별 정산 후보를 만든 뒤 매월 10일 판매자 정산 대금과 관리자 수수료를 각 지갑에 입금한다
-- 상품 판매 중지·삭제와 판매자 제재는 주문 모듈에 결제 대기 주문 취소를 요청한다
+- 상품 판매 중지·삭제와 판매자 제재는 주문 모듈에 결제 대기 주문 취소를 요청한다(판매자 제재 연동은 미구현)
 - 외부 호출(토스, 메일)은 DB 트랜잭션 밖에서 하고, 실패는 스케줄러의 복구·대사 작업이 마무리한다
 
 ## 3. API 명세서
@@ -229,12 +233,12 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 - Base URL: `/api/v1`, 요청·응답은 JSON(파일 업로드만 multipart)
 - 인증: `Authorization: Bearer <Access Token>`. 판매자 API는 `/seller/**`, 관리자 API는 `/admin/**`(ADMIN) 경로로 묶어 권한을 검사한다. `/seller/**`는 URL에서 관리자만 막고(USER 통과), 판매 기능에서 판매자 상태(APPROVED)를 확인한다. 아래 표의 권한 SELLER는 역할이 아니라 "판매자 상태가 APPROVED인 회원"을 뜻한다
 - 응답 형식: 성공·실패 모두 `RsData { resultCode, msg, data }`로 감싼다. HTTP 상태는 `resultCode` 앞자리와 같다. 성공은 모두 200이고, 실패 상태는 `GlobalExceptionHandler`가 맞춘다
-  - 성공 `resultCode`는 `200-{순번}`이다(조회·생성·처리 모두 `200-1`). 생성도 201이 아니라 200으로 응답한다. `data`에는 응답 DTO를 담는다
+  - 성공 `resultCode`는 `200-{순번}`이다(조회·생성·처리 모두 `200-1`). 생성도 201이 아니라 200으로 응답한다(예외: 판매자 신청 `POST /sellers`는 201·`201-1`). `data`에는 응답 DTO를 담는다
   - 실패 `resultCode`는 `{HTTP 상태}-{오류 이름}`이다(예: `402-INSUFFICIENT_BALANCE`). `data`에는 추가 정보가 필요한 오류만 담고(입력 검증 필드 오류, 잔액 부족의 부족액 등) 없으면 `null`이다
   - 인증 실패 401, 권한 부족 403, 상태 충돌 409, 잔액 부족 402. 아래 표의 "주요 오류" `409 EMAIL_DUPLICATED`는 `resultCode` `409-EMAIL_DUPLICATED`를 뜻한다
   - 예외 처리 방식은 `palette_exception_handling.md`를 따른다
-- 목록: `page`(0부터), `size`(기본 20, 최대 50), 기본 최신순
-- 돈이 움직이는 쓰기 API(충전·결제·충전 취소)는 `Idempotency-Key` 헤더를 받아 24시간 같은 응답을 돌려준다
+- 목록: `page`(0부터), `size`(기본 20, 최대 100. 상품 검색 `GET /products`만 최대 50), 기본 최신순(관리자 회원·판매자 목록처럼 정렬이 고정된 목록은 표에 적는다)
+- 돈이 움직이는 쓰기 API(충전·결제·충전 취소)는 `Idempotency-Key` 헤더를 받아 24시간 같은 응답을 돌려준다 (헤더는 미구현. 현재 충전 승인은 결제키 UNIQUE로 한 번만 반영하고 재요청은 409 TOPUP_ALREADY_PROCESSED, 주문 결제는 주문 모듈이 시도마다 만든 내부 멱등 키로 처리한다)
 - 금액은 원 단위 정수, 시각은 KST ISO-8601
 
 ### 3.1 회원, 판매자
@@ -246,18 +250,18 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /auth/email/verify | POST | 비회원 | 인증코드 확인 | 400 CODE_INVALID, 400 CODE_EXPIRED |
 | /auth/signup | POST | 비회원 | 회원가입 + 지갑 생성 | 400 EMAIL_NOT_VERIFIED, 409 EMAIL_DUPLICATED |
 | /auth/login | POST | 비회원 | 로그인 → Access·Refresh | 401 LOGIN_FAILED, 429 LOGIN_LOCKED |
-| /auth/refresh | POST | 회원 | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
-| /auth/logout | POST | USER | 로그아웃 | 401 |
-| /users/me | GET | USER | 내 정보 조회 | 401 |
-| /users/me/withdrawal | GET | USER | 탈퇴 조건 조회(진행 중 주문 여부·미정산 금액·잔액) | 401 |
-| /users/me | DELETE | USER | 회원 탈퇴(비밀번호 재확인, 주문·미정산·잔액 0일 때만) | 400 PASSWORD_MISMATCH, 409 WITHDRAWAL_NOT_ALLOWED, 429 LOGIN_LOCKED |
+| /auth/refresh | POST | 비회원(Refresh 쿠키) | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
+| /auth/logout | POST | 회원 | 로그아웃 | 401 |
+| /users/me | GET | 회원 | 내 정보 조회 | 401 |
+| /users/me/withdrawal | GET | 회원 | 탈퇴 조건 조회(진행 중 주문 여부·미정산 금액·잔액) | 401 |
+| /users/me | DELETE | 회원 | 회원 탈퇴(비밀번호 재확인, 주문·미정산·잔액 0일 때만) | 400 PASSWORD_MISMATCH, 409 WITHDRAWAL_NOT_ALLOWED, 429 LOGIN_LOCKED |
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
-| /sellers | POST | USER | 판매자 신청(사업자번호, 상호명, 휴대폰, 정산 계좌) | 400 VALIDATION_FAILED, 409 SELLER_ALREADY_APPLIED, 409 BUSINESS_NUMBER_DUPLICATED |
-| /sellers/me | GET | USER | 내 판매자 정보·신청 상태(계좌는 끝 4자리) | 404 |
-| /seller/me | PATCH | SELLER | 상호명·연락처·정산 계좌 수정 | 403 |
-| /seller/me/withdrawal | POST | SELLER | 판매자 철회 요청 | 409 UNSETTLED_AMOUNT_EXISTS |
+| /sellers | POST | USER | 판매자 신청·재신청(상호명, 사업자번호, 대표자명, 휴대폰, 정산 계좌: 은행·계좌번호·예금주) → PENDING. 응답 201·`201-1` | 400 VALIDATION_FAILED, 403 SELLER_SANCTIONED, 409 SELLER_ALREADY_APPLIED, 409 BUSINESS_NUMBER_DUPLICATED |
+| /sellers/me | GET | USER | 내 판매자 정보·신청 상태(계좌는 끝 4자리, 최근 상태 변경 사유, 미정산 금액) | 404 SELLER_NOT_FOUND |
+| /seller/me | PATCH | SELLER | 상호명·연락처·정산 계좌 수정(보낸 항목만, 계좌는 은행·계좌번호·예금주를 함께) | 400 SELLER_ACCOUNT_INCOMPLETE, 403 SELLER_NOT_APPROVED, 404 SELLER_NOT_FOUND |
+| /seller/me/withdrawal | POST | SELLER | 판매자 철회 요청(사유 필수) → WITHDRAW_REQUESTED | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 UNSETTLED_AMOUNT_EXISTS |
 
 ### 3.2 상품
 
@@ -301,14 +305,14 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
-| /wallet | GET | USER | 잔액과 홀딩 중 금액 조회 | - |
-| /wallet/transactions | GET | USER | 거래 내역(원장, 유형·기간 필터) | - |
-| /topups | POST | USER | 충전 준비(금액 10,000원 단위, 1만~100만 원) → `orderId`(TOPUP-…), `amount` | 400 TOPUP_AMOUNT_INVALID |
-| /topups/confirm | POST | USER | 토스 성공 리다이렉트 후 승인(`paymentKey`, `orderId`, `amount`) → 지갑 반영. 토스 응답 시간 초과 시 `200-1` + `data.status: PROCESSING`(결과 확인 중)으로 응답하고 대사 스케줄러가 확정 | 400 AMOUNT_MISMATCH, 409 TOPUP_ALREADY_PROCESSED, 502 EXTERNAL_SERVICE_ERROR |
-| /topups/{topupId}/fail | POST | USER | 토스 실패 리다이렉트 기록(사유 코드) | 409 |
-| /topups | GET | USER | 충전 목록(남은 금액, 취소 가능 여부) | - |
-| /topups/{topupId} | GET | USER | 충전 건 상세 (승인 결과 재확인·새로고침용) | 404 |
-| /topups/{topupId}/cancel | POST | USER | 미사용 충전 건 전액 취소(토스 취소) | 409 TOPUP_ALREADY_USED |
+| /wallet | GET | USER | 잔액과 홀딩 중 금액 조회 | 404 WALLET_NOT_FOUND |
+| /wallet/transactions | GET | USER | 거래 내역(원장, `type`·`from`~`to` 필터, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID, 404 WALLET_NOT_FOUND |
+| /topups | POST | USER | 충전 준비(금액 10,000원 단위, 1만~100만 원) → `topupId`, `orderId`(TOPUP-…), `amount` | 400 TOPUP_AMOUNT_INVALID, 404 WALLET_NOT_FOUND |
+| /topups/confirm | POST | USER | 토스 성공 리다이렉트 후 승인(`paymentKey`, `orderId`, `amount`) → 지갑 반영. 토스 응답 시간 초과·토스 5xx·ALREADY_PROCESSED_PAYMENT·승인 후 반영 실패 시 `200-1` + `data.status: PROCESSING`(결과 확인 중)으로 응답하고 대사 스케줄러가 확정 | 400 AMOUNT_MISMATCH, 400 TOPUP_PAYMENT_DECLINED, 404 TOPUP_NOT_FOUND, 409 TOPUP_ALREADY_PROCESSED, 502 EXTERNAL_SERVICE_ERROR |
+| /topups/{topupId}/fail | POST | USER | 토스 실패 리다이렉트·결제창 닫기(USER_CANCEL) 기록(`code`, `message`) → FAILED_USER_CANCEL / FAILED_PG_DECLINED | 404 TOPUP_NOT_FOUND, 409 TOPUP_ALREADY_PROCESSED |
+| /topups | GET | USER | 충전 목록(남은 금액·상태·실패 사유, 최신순 고정. 취소 가능 여부는 취소 API와 함께 추가 예정) | - |
+| /topups/{topupId} | GET | USER | 충전 건 상세 (승인 결과 재확인·새로고침용) | 404 TOPUP_NOT_FOUND |
+| /topups/{topupId}/cancel | POST | USER | 미사용 충전 건 전액 취소(토스 취소) — 미구현 | 409 TOPUP_ALREADY_USED |
 
 ### 3.5 정산
 
@@ -321,15 +325,15 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 담당 모듈 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- | --- |
-| /admin/users | GET | 회원 | ADMIN | 회원 목록(이메일 검색, 상태·회원 유형 필터: `memberType` = USER 일반 회원 / SELLER 판매 중인 판매자 / ADMIN 관리자) | 400, 403 |
-| /admin/users/{userId} | GET | 회원 | ADMIN | 회원 상세(역할, 회원 유형, 판매자 상태, 지갑, 최근 주문) | 404 |
-| /admin/sellers | GET | 회원 | ADMIN | 판매자 목록(PENDING 우선) | - |
-| /admin/sellers/{sellerId} | GET | 회원 | ADMIN | 판매자 상세 | 404 |
-| /admin/sellers/{sellerId}/approve | POST | 회원 | ADMIN | 판매자 승인 → 판매자 상태 APPROVED (판매 기능 사용 가능) | 409 SELLER_STATE_INVALID |
-| /admin/sellers/{sellerId}/reject | POST | 회원 | ADMIN | 판매자 반려(사유 필수) | 409 SELLER_STATE_INVALID |
-| /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN, 상품 전체 판매 중지 | 409 |
-| /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절 | 409 |
-| /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유) → SANCTIONED, 결제 대기 주문 취소, 상품 STOPPED, 정산 HOLD | 409 |
+| /admin/users | GET | 회원 | ADMIN | 회원 목록(이메일 검색, 상태·회원 유형 필터: `memberType` = USER 일반 회원 / SELLER 판매 중인 판매자 / ADMIN 관리자, 가입일 최신순 고정, 탈퇴 회원 포함) | 400, 403 |
+| /admin/users/{userId} | GET | 회원 | ADMIN | 회원 상세(역할, 회원 유형, 판매자 상태, 지갑 잔액·홀딩 금액, 최근 주문 5건) | 404 MEMBER_NOT_FOUND |
+| /admin/sellers | GET | 회원 | ADMIN | 판매자 목록(`status` 필터, PENDING 우선 후 최근 신청순 고정, 탭별 건수 `counts`는 필터와 무관) | - |
+| /admin/sellers/{sellerId} | GET | 회원 | ADMIN | 판매자 상세(상태 변경 이력 전체, 계좌는 끝 4자리) | 404 SELLER_NOT_FOUND |
+| /admin/sellers/{sellerId}/approve | POST | 회원 | ADMIN | 판매자 승인 → 판매자 상태 APPROVED (판매 기능 사용 가능) | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
+| /admin/sellers/{sellerId}/reject | POST | 회원 | ADMIN | 판매자 반려(사유 필수) → REJECTED, 사업자번호 비움 | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
+| /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN (상품 전체 판매 중지는 미구현) | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 ACTIVE_SALES_EXIST, 409 UNSETTLED_AMOUNT_EXISTS |
+| /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절(사유 필수) → APPROVED | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
+| /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유 필수, APPROVED·WITHDRAW_REQUESTED만) → SANCTIONED, 정산 HOLD (결제 대기 주문 취소·상품 STOPPED는 미구현) | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
 | /admin/products | GET | 상품 | ADMIN | 전체 상품(삭제 포함, 최신순). 필터: `sellerId`, `status`=ON_SALE(재고 있음)·SOLD_OUT·STOPPED·DELETED, `categoryId`(대분류면 아래 소분류 포함), `keyword` | 404 CATEGORY_NOT_FOUND |
 | /admin/products/{productId}/stop | POST | 상품 | ADMIN | 즉시 판매 중지(사유 필수, 해제 없음) → STOPPED(ADMIN), 결제 대기 주문 취소, 심사 중인 요청 닫힘 | 404, 409 PRODUCT_NOT_ON_SALE |
 | /admin/product-stop-requests | GET | 상품 | ADMIN | 판매 중지 요청 목록(`status` 기본 PENDING, 오래된 순) | - |
@@ -341,9 +345,9 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /admin/returns | GET | 주문 | ADMIN | 반품 요청 목록 | - |
 | /admin/returns/{orderId}/approve | POST | 주문 | ADMIN | 반품 승인(주문 항목별 `restoreStock`) → RETURNED + 환불 | 409 ORDER_STATE_INVALID, 409 PRODUCT_DELETED |
 | /admin/returns/{orderId}/reject | POST | 주문 | ADMIN | 반품 거절 → PAID 복귀(결제 후 7일 지났으면 즉시 CONFIRMED) | 409 ORDER_STATE_INVALID |
-| /admin/payments | GET | 결제 | ADMIN | 결제 처리 상태 조회 — 결제 탭 (회원 이메일·기간) | 400 PAYMENT_PERIOD_INVALID |
-| /admin/topups | GET | 결제 | ADMIN | 충전 처리 상태 조회 — 충전 탭 (회원 이메일·충전번호·기간) | 400 PAYMENT_PERIOD_INVALID |
-| /admin/failed-transactions | GET | 결제 | ADMIN | 실패 거래 조회(충전 정체, 결제 실패, 환불 FAILED, 정산 FAILED·MANUAL_REQUIRED) | - |
+| /admin/payments | GET | 결제 | ADMIN | 결제 처리 상태 조회 — 결제 탭 (`keyword`: `@`가 있으면 회원 이메일, 없으면 주문번호 정확히 일치, 기간 `from`~`to`, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID |
+| /admin/topups | GET | 결제 | ADMIN | 충전 처리 상태 조회 — 충전 탭 (`keyword`: 회원 이메일 또는 충전번호 앞부분 일치(10자 이상), 기간 `from`~`to`, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID |
+| /admin/failed-transactions | GET | 결제 | ADMIN | 실패 거래 조회(충전 정체, 결제 실패, 환불 FAILED, 정산 FAILED·MANUAL_REQUIRED) — 미구현 | - |
 | /admin/settlements/preview | GET | 정산 | ADMIN | 정산월별 판매자 정산 대상·예상 금액 | 400 |
 | /admin/settlements/runs | POST | 정산 | ADMIN | 월 정산 수동 실행(`settleMonth`, 종료된 달만) | 409 SETTLEMENT_RUNNING |
 | /admin/settlements/runs | GET | 정산 | ADMIN | 정산 Job 실행 결과(성공·실패 건수, 지급·수수료 총액) | - |
@@ -362,11 +366,13 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | `deductStock(items)` | 상품 | ORDER_DEDUCT, 상품 → 옵션 순으로 ID 순 잠금 |
 | `restoreStock(items, reason)` | 상품 | ORDER_RESTORE / RETURN_RESTORE |
 | `lockProductsForOrderChange(productIds)` | 상품 | 주문 취소·만료·반품 승인 전 상품 먼저 잠금 (잠금 순서 상품 → 주문) |
-| `stopAllBySeller(sellerId, reason)` / `resumeAllBySeller(sellerId)` | 상품 | 판매자 철회·제재 시 전체 중지 / 철회 거절 시 되돌림 |
-| `pay(orderId, buyerId, amount, idempotencyKey)` | 결제 | 지갑 → 홀딩, 결과 PAID / FAILED_* |
+| `stopAllBySeller(sellerId, reason)` / `resumeAllBySeller(sellerId)` | 상품 | 판매자 철회·제재 시 전체 중지 / 철회 거절 시 되돌림 (회원 모듈 호출은 미구현) |
+| `getWallet(memberId)` | 결제 | 지갑 잔액·홀딩 금액(회원 탈퇴 조건, 관리자 회원 상세) |
+| `pay(PayCommand: orderId, orderNumber, buyerId, amount, orderExpiresAt, idempotencyKey)` | 결제 | 지갑 → 홀딩, 결과 PAID / FAILED_INSUFFICIENT_BALANCE / FAILED_ORDER_EXPIRED |
+| `getPaymentAttempts(orderId)` | 결제 | 주문의 결제 시도 목록(실패 포함, 오래된 순) — 주문 상세 |
 | `cancelPendingOrders(productIds, cancelType)` | 주문 | 상품 판매 중지·삭제·판매자 철회·제재 시 결제 대기 주문 취소 |
-| `transfer(SETTLEMENT-{id}, sellerId, payout, fee)` | 결제(예치금) | 홀딩 → 판매자·관리자 지갑, 멱등 |
-| `GET /internal/cash/transfers/SETTLEMENT-{id}` | 결제(예치금) | 송금 여부·금액 조회(없으면 404) |
+| `transfer(SettlementTransferCommand: idempotencyKey, settlementId, sellerMemberId, payoutAmount, feeAmount, orders)` | 결제(예치금) | 홀딩 → 판매자·관리자 지갑, 멱등 |
+| `findTransfer(SETTLEMENT-{id})` | 결제(예치금) | 송금 여부·금액 조회(없으면 empty) |
 
 ## 4. 데이터 모델
 
@@ -374,10 +380,10 @@ PostgreSQL 기준 테이블 23개로 설계했다. 상세 ERD와 정책을 테�
 
 | 모듈 | 테이블 |
 | --- | --- |
-| member | member, seller |
+| member | member, seller, seller_status_history |
 | product | category, product, product_image, product_stop_request, stock_history |
 | order | cart, cart_item, market_order, market_order_item, order_status_history |
-| payment | wallet, wallet_transaction, topup, topup_usage, payment, wallet_holding, payment_refund |
+| payment | wallet, wallet_transaction, topup, topup_usage, payment, wallet_holding, payment_refund(미구현) |
 | settlement | settlement_candidate, settlement |
 | 공통 | audit_log (outbox_event는 이번 범위 제외) |
 

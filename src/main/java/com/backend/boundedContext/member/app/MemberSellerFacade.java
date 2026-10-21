@@ -101,7 +101,7 @@ public class MemberSellerFacade {
         return memberGetSellerDetailUseCase.getSellerDetail(sellerId);
     }
 
-    // 관리자 입점 승인 (PENDING → APPROVED, 회원 role을 SELLER로)
+    // 관리자 입점 승인 (PENDING → APPROVED, 회원 role은 USER 그대로)
     @Transactional
     public AdminSellerDetailDto approveSeller(Long sellerId) {
         return memberApproveSellerUseCase.approve(sellerId);

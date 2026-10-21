@@ -27,16 +27,18 @@
 | 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
 | 주문 취소·15분 만료 | order | `ProductApi.lockProductsForOrderChange(productIds)` → 주문 잠금·상태 다시 확인 → 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
 | 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
-| 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) | 이벤트 |
+| 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) (미구현) | 이벤트 |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신 → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 | 동기 조회 |
-| 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN → `ProductApi.stopAllBySeller(sellerId, ...)` | 동기, 같은 Tx |
-| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) | 동기, 같은 Tx |
-| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
-| 회원 탈퇴 | member | 판매자 신청 이력이 있으면 WITHDRAWN(철회 완료)인지 확인 → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · 판매자였으면 `SettlementApi.getUnsettledAmount` | 동기 조회 |
+| 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN → `ProductApi.stopAllBySeller(sellerId, ...)` (상품 중지 호출은 미구현) | 동기, 같은 Tx |
+| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로, 호출은 미구현) | 동기, 같은 Tx |
+| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller`(미구현) → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
+| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · 판매자 정보가 있으면 `SettlementApi.getUnsettledAmount` | 동기 조회 |
+| 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 |
+| 관리자 결제·충전 조회 | payment | `MemberApi.findMemberByEmail`(이메일 검색) · `MemberApi.getMembers`(이메일 표시) | 동기 조회 |
 
 ## 2. member
 
@@ -50,8 +52,17 @@ public interface MemberApi {
     /** 회원 조회. 없으면 404 MEMBER_NOT_FOUND */
     MemberDto getMember(Long memberId);
 
-    /** 회원의 판매자 정보. 판매자 신청 이력이 없으면 empty (상태와 관계없이 최신 1건) */
+    /** 여러 회원 조회 (관리자 결제·충전 조회의 이메일 표시). 없는 ID는 결과에서 빠짐 */
+    List<MemberDto> getMembers(Collection<Long> memberIds);
+
+    /** 이메일로 회원 조회 (정확히 일치, 관리자 결제·충전 검색). 없으면 empty */
+    Optional<MemberDto> findMemberByEmail(String email);
+
+    /** 회원의 판매자 정보 (회원당 1개, 상태 무관). 판매자 신청 이력이 없으면 empty */
     Optional<SellerDto> findSellerByMemberId(Long memberId);
+
+    /** 판매 기능을 쓸 수 있는(APPROVED) 판매자 조회. 아니면 403 SELLER_NOT_APPROVED */
+    SellerDto getApprovedSellerByMemberId(Long memberId);
 
     /** 판매자 조회. 없으면 404 SELLER_NOT_FOUND */
     SellerDto getSeller(Long sellerId);
@@ -73,9 +84,9 @@ public record SellerDto(Long sellerId, Long memberId, String businessName, Selle
     public boolean canSell() { return status == SellerStatus.APPROVED; }
 }
 
-public enum MemberRole { USER, SELLER, ADMIN }
-public enum MemberStatus { ACTIVE, INACTIVE, DELETED }
-public enum SellerStatus { PENDING, APPROVED, REJECTED, WITHDRAW_REQUESTED, WITHDRAWN }
+public enum MemberRole { USER, ADMIN }   // 판매자는 역할이 아니라 SellerStatus로 판단
+public enum MemberStatus { ACTIVE, DELETED }
+public enum SellerStatus { PENDING, APPROVED, REJECTED, WITHDRAW_REQUESTED, WITHDRAWN, SANCTIONED }
 ```
 
 ### 이벤트
@@ -245,9 +256,17 @@ public interface PaymentApi {
     PayResultDto pay(PayCommand command);
 
     /**
+     * 주문의 결제 시도 목록 (주문 상세의 결제 내역). 오래된 순, 실패 시도 포함.
+     * 내 주문인지는 주문 쪽에서 확인하고 호출한다. 결제 시도가 없으면 빈 목록을 반환한다.
+     */
+    List<PaymentAttemptDto> getPaymentAttempts(Long orderId);
+
+    /**
      * 정산 지급: 홀딩 → 판매자 지갑(SETTLEMENT), 홀딩 → 관리자 지갑(FEE).
      * 주문별 홀딩의 settled_amount를 늘리고, 다 차면 SETTLED로 바꾼다.
      * idempotencyKey(SETTLEMENT-{settlementId})가 이미 처리됐으면 기존 결과를 반환한다.
+     * 호출한 쪽 트랜잭션에 참여(REQUIRED)한다.
+     * 오류: 404 WALLET_NOT_FOUND, 404 HOLDING_NOT_FOUND, 409 HOLDING_INSUFFICIENT, 409 TRANSFER_AMOUNT_MISMATCH
      */
     TransferResultDto transfer(SettlementTransferCommand command);
 
@@ -263,7 +282,7 @@ package com.backend.shared.payment.dto;
 
 public record WalletSummaryDto(Long memberId, long balance, long heldAmount) { }
 
-public record PayCommand(Long orderId, Long buyerId, long amount,
+public record PayCommand(Long orderId, String orderNumber, Long buyerId, long amount,
                          LocalDateTime orderExpiresAt, String idempotencyKey) { }
 
 /** shortage: 잔액 부족일 때 모자란 금액, chargeAmount: 1만 원 단위로 올린 충전 권장 금액 */
@@ -272,6 +291,12 @@ public record PayResultDto(Long paymentId, PayResultStatus status, long shortage
 }
 
 public enum PayResultStatus { PAID, FAILED_INSUFFICIENT_BALANCE, FAILED_ORDER_EXPIRED }
+
+/** 결제 시도 1건. paidAt은 PAID·REFUNDED만, refundedAt은 REFUNDED만 */
+public record PaymentAttemptDto(Long paymentId, PaymentAttemptStatus status, long amount,
+                                LocalDateTime attemptedAt, LocalDateTime paidAt, LocalDateTime refundedAt) { }
+
+public enum PaymentAttemptStatus { PAID, REFUNDED, FAILED_INSUFFICIENT_BALANCE, FAILED_ORDER_EXPIRED, FAILED_SYSTEM_ERROR }
 
 /** 정산서 1건 = 판매자 1명 × 1개월 */
 public record SettlementTransferCommand(String idempotencyKey, Long settlementId, Long sellerMemberId,
@@ -289,10 +314,10 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderReturnedEvent` | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
+| `OrderReturnedEvent` (미구현) | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
 | `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (`@EventListener`, 가입 트랜잭션 안에서 처리) | `wallet.member_id` 유니크, 이미 있으면 무시 |
 
-- 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다.
+- 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다. (미구현: 지금은 예외가 그대로 올라가 전체가 롤백되고, FAILED_SYSTEM_ERROR·PAYMENT_FAILED는 기록되지 않는다)
 
 ## 6. settlement
 

@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// 판매자(SELLER) 전용 내 판매자 관리. /api/v1/seller/** 는 SecurityConfig에서 SELLER만 들어온다
-@Tag(name = "판매자 관리", description = "내 판매자 정보 수정·철회 요청 (SELLER)")
+// 판매자 전용 내 판매자 관리. /api/v1/seller/** 는 SecurityConfig에서 USER만 들어오고(관리자 차단), 판매자 상태는 기능마다 DB에서 확인한다
+@Tag(name = "판매자 관리", description = "내 판매자 정보 수정·철회 요청 (판매 중인 판매자)")
 @RestController
 @RequestMapping("/api/v1/seller")
 @RequiredArgsConstructor
