@@ -9,8 +9,8 @@ import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 관리자 입점 승인 (PENDING → APPROVED). 회원에게 SELLER 권한을 준다.
- * 새 권한은 다음 토큰 재발급 때 access token에 들어가고, 판매 가능 여부는 요청마다 DB의 판매자 상태로 판단한다.
+ * 관리자 입점 승인 (PENDING → APPROVED). 회원 role은 USER 그대로 둔다.
+ * 판매 가능 여부는 토큰이 아니라 요청마다 DB의 판매자 상태로 판단하므로, 토큰 재발급 없이 바로 판매 기능을 쓸 수 있다.
  */
 @Component
 @RequiredArgsConstructor

@@ -12,7 +12,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 관리자 제재 (APPROVED·WITHDRAW_REQUESTED → SANCTIONED). 조건 없이 바로 끝나고, 다시 신청할 수 없다.
- * 회원 role은 SELLER 그대로 두고, 사업자번호도 남겨서 같은 번호로 다시 신청하는 것을 막는다.
+ * 회원 role은 USER 그대로 두고, 사업자번호도 남겨서 같은 번호로 다시 신청하는 것을 막는다.
  * 후속 처리는 같은 트랜잭션에서 동기로 호출한다 (shared 계약): 상품 판매 중지 → 정산 보류.
  * 이미 결제된(PAID) 주문은 그대로 진행된다.
  */

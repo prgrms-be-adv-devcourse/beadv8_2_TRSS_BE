@@ -14,7 +14,7 @@ import com.backend.shared.settlement.out.SettlementApi;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 관리자 철회 승인 (WITHDRAW_REQUESTED → WITHDRAWN). 회원 role은 SELLER 그대로 두고, 재신청할 수 있다.
+ * 관리자 철회 승인 (WITHDRAW_REQUESTED → WITHDRAWN). 회원 role은 USER 그대로 두고, 재신청할 수 있다.
  * 상품은 철회를 요청할 때 이미 중지했으므로 여기서 다시 중지하지 않는다.
  * 요청 전에 결제된 주문의 배송·반품이 남아 있을 수 있어, 승인할 때 진행 중인 판매와 미정산 금액을 다시 확인한다.
  * 신청서는 이력 스냅샷에 남기고 사업자번호는 비운다.
