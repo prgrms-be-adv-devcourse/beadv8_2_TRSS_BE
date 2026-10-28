@@ -159,6 +159,25 @@ class ApiV1MemberControllerTest {
                 .andExpect(cookie().doesNotExist("refreshToken"));
     }
 
+    @Test
+    @DisplayName("관리자는 탈퇴할 수 없다: 탈퇴·탈퇴 조건 조회는 403 FORBIDDEN, 내 정보 조회는 그대로 된다")
+    void admin_cannotWithdraw() throws Exception {
+        String adminBearer = "Bearer " + jwtTokenProvider.createAccessToken(1L, MemberRole.ADMIN);
+
+        mockMvc.perform(delete("/api/v1/users/me").header("Authorization", adminBearer)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"password": "palette123!"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+        mockMvc.perform(get("/api/v1/users/me/withdrawal").header("Authorization", adminBearer))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/users/me").header("Authorization", adminBearer))
+                .andExpect(status().isOk());
+
+        verify(memberFacade, never()).withdraw(anyLong(), anyString());
+    }
+
     private String bearer() {
         return "Bearer " + jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
     }
