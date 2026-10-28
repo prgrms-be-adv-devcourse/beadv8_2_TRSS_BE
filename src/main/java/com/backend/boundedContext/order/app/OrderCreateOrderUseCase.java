@@ -13,6 +13,7 @@ import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.out.MemberApi;
+import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.out.ProductApi;
 import lombok.RequiredArgsConstructor;
@@ -49,9 +50,13 @@ public class OrderCreateOrderUseCase {
         Cart cart = orderSupport.getCartForUpdate(buyerId);
 
         // 같은 키로 다시 온 요청이면 처음 만든 주문을 그대로 돌려준다
+        // 그 주문이 취소(만료 포함)됐으면 키를 다시 쓸 수 없으므로 409로 알려 새 키로 주문하게 한다
         if (idempotencyKey != null) {
             Optional<Order> existing = orderRepository.findByBuyerIdAndIdempotencyKey(buyerId, idempotencyKey);
             if (existing.isPresent()) {
+                if (existing.get().getStatus() == OrderStatus.CANCELED) {
+                    throw new DomainException(OrderErrorCode.IDEMPOTENCY_KEY_EXPIRED);
+                }
                 return OrderCreateResponse.from(existing.get());
             }
         }

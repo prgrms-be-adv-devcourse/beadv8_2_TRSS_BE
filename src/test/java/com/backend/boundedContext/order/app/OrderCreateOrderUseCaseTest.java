@@ -14,6 +14,7 @@ import com.backend.global.exception.GlobalErrorCode;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
+import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.out.ProductApi;
@@ -202,6 +203,22 @@ class OrderCreateOrderUseCaseTest {
         OrderCreateResponse response = useCase.create(BUYER_ID, "key-1", List.of(1L), 15000);
 
         assertThat(response).isEqualTo(OrderCreateResponse.from(existing));
+        verify(orderRepository, never()).save(any());
+        verify(productApi, never()).deductStock(any());
+    }
+
+    @Test
+    @DisplayName("같은 멱등 키의 주문이 취소됐으면 IDEMPOTENCY_KEY_EXPIRED, 새로 저장하거나 재고를 차감하지 않는다")
+    void sameIdempotencyKeyCanceled() {
+        Order canceled = Order.create(BUYER_ID, "key-1", List.of(new OrderItemSpec(
+                1L, 10L, 100L, SELLER_ID, "상품100", "기본", "테스트상점", 15000, 1)), LocalDateTime.now(), 15);
+        canceled.cancel(OrderCancelType.EXPIRED, "결제 시간 만료", LocalDateTime.now());
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
+        given(orderRepository.findByBuyerIdAndIdempotencyKey(BUYER_ID, "key-1")).willReturn(Optional.of(canceled));
+
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, "key-1", List.of(1L), 15000))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-IDEMPOTENCY_KEY_EXPIRED");
         verify(orderRepository, never()).save(any());
         verify(productApi, never()).deductStock(any());
     }
