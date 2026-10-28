@@ -33,6 +33,11 @@ public class PaymentApiAdapter implements PaymentApi {
     }
 
     @Override
+    public boolean hasPendingTopups(Long memberId) {
+        return paymentFacade.hasPendingTopups(memberId);
+    }
+
+    @Override
     public PayResultDto pay(PayCommand command) {
         return paymentFacade.pay(command);
     }

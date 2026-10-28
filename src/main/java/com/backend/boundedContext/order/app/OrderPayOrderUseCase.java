@@ -7,6 +7,7 @@ import com.backend.boundedContext.order.in.dto.InsufficientBalanceResponse;
 import com.backend.boundedContext.order.in.dto.OrderPayResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.out.PaymentApi;
@@ -29,8 +30,12 @@ public class OrderPayOrderUseCase {
     private final OrderRepository orderRepository;
     private final OrderSupport orderSupport;
     private final PaymentApi paymentApi;
+    private final MemberApi memberApi;
 
     public OrderPayResponse pay(Long buyerId, Long orderId) {
+        // 탈퇴한 회원은 남은 Access Token으로 결제할 수 없게 401
+        memberApi.checkActiveMember(buyerId);
+
         LocalDateTime now = LocalDateTime.now();
 
         Order order = orderRepository.findByIdAndBuyerIdForUpdate(orderId, buyerId)

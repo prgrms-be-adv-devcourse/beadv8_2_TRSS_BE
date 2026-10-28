@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
@@ -41,13 +43,17 @@ class TopupExpireIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // 다른 테스트·시드 회원과 겹치지 않는 회원 ID
-    private final Long memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
+    @Autowired
+    private MemberRepository memberRepository;
+
+    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
+    private Long memberId;
     private final List<Long> topupIds = new ArrayList<>();
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
+        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
         wallet = walletRepository.save(Wallet.create(memberId));
     }
 
@@ -55,6 +61,7 @@ class TopupExpireIntegrationTest {
     void cleanUp() {
         topupRepository.deleteAllById(topupIds);
         walletRepository.delete(wallet);
+        memberRepository.deleteById(memberId);
     }
 
     @Test

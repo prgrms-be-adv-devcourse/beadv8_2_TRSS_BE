@@ -35,6 +35,7 @@ public class PaymentFacade {
 
     private final PaymentCreateWalletUseCase paymentCreateWalletUseCase;
     private final PaymentGetWalletUseCase paymentGetWalletUseCase;
+    private final PaymentCheckPendingTopupsUseCase paymentCheckPendingTopupsUseCase;
     private final PaymentGetWalletTransactionsUseCase paymentGetWalletTransactionsUseCase;
     private final PaymentGetAdminPaymentsUseCase paymentGetAdminPaymentsUseCase;
     private final PaymentGetAdminTopupsUseCase paymentGetAdminTopupsUseCase;
@@ -61,6 +62,12 @@ public class PaymentFacade {
     @Transactional(readOnly = true)
     public WalletSummaryDto getWallet(Long memberId) {
         return paymentGetWalletUseCase.getWallet(memberId);
+    }
+
+    // 결과가 정해지지 않은 충전 건(READY·PROCESSING)이 있는지
+    @Transactional(readOnly = true)
+    public boolean hasPendingTopups(Long memberId) {
+        return paymentCheckPendingTopupsUseCase.hasPendingTopups(memberId);
     }
 
     // 내 예치금 거래 내역

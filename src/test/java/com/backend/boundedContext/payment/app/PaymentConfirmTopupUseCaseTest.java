@@ -6,9 +6,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.Map;
 
@@ -22,6 +24,8 @@ import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
 import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
 import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.GlobalErrorCode;
+import com.backend.shared.member.out.MemberApi;
 
 class PaymentConfirmTopupUseCaseTest {
 
@@ -33,7 +37,8 @@ class PaymentConfirmTopupUseCaseTest {
 
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
     private final TossPaymentsClient tossPaymentsClient = mock(TossPaymentsClient.class);
-    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, tossPaymentsClient);
+    private final MemberApi memberApi = mock(MemberApi.class);
+    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, tossPaymentsClient, memberApi);
 
     private final TossPaymentResponse tossDone =
             new TossPaymentResponse(PAYMENT_KEY, ORDER_ID, "DONE", AMOUNT, "카드", null);
@@ -49,6 +54,18 @@ class PaymentConfirmTopupUseCaseTest {
         TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
 
         assertThat(result).isEqualTo(done);
+    }
+
+    @Test
+    @DisplayName("탈퇴한 회원: 충전 건을 선점하지 않고 토스도 호출하지 않으며 401 UNAUTHORIZED (탈퇴 후 남은 Access Token)")
+    void confirm_withdrawnMember() {
+        willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberApi).checkActiveMember(MEMBER_ID);
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("401-UNAUTHORIZED");
+
+        verifyNoInteractions(processor, tossPaymentsClient);
     }
 
     @Test

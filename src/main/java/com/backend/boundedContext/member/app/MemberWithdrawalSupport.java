@@ -32,15 +32,19 @@ public class MemberWithdrawalSupport {
     private final SettlementApi settlementApi;
     private final PaymentApi paymentApi;
 
-    // 진행 중인 주문, 정산받지 않은 판매 금액(판매자만), 남은 예치금, 판매자 상태를 확인
+    // 진행 중인 주문, 판매자로서 진행 중인 판매·정산받지 않은 판매 금액(판매자만), 남은 예치금, 결과 대기 중인 충전 건, 판매자 상태를 확인
     public WithdrawalCheckDto check(Long memberId) {
         Optional<Seller> seller = sellerRepository.findByMemberId(memberId);
 
         boolean hasActiveOrders = orderApi.hasActiveOrders(memberId);
+        boolean hasActiveSales = seller.map(s -> orderApi.hasActiveSales(s.getId())).orElse(false);  // 판매자 정보가 있으면 상태와 무관하게 확인 (제재된 판매자도 구매확정 전 판매가 남아 있으면, 탈퇴 뒤 정산 후보가 생김)
         long unsettledAmount = seller.map(s -> settlementApi.getUnsettledAmount(s.getId())).orElse(0L);
         long balance = paymentApi.getWallet(memberId).balance();
+
+        // 결과 확인 중인 충전 건은 아직 잔액에 없지만, 탈퇴 뒤 대사 스케줄러가 예치금을 반영하면 돌려받을 수 없음
+        boolean hasPendingTopups = paymentApi.hasPendingTopups(memberId);
         boolean sellerActive = seller.map(s -> SELLER_ACTIVE_STATUSES.contains(s.getStatus())).orElse(false);
 
-        return WithdrawalCheckDto.of(hasActiveOrders, unsettledAmount, balance, sellerActive);
+        return WithdrawalCheckDto.of(hasActiveOrders, hasActiveSales, unsettledAmount, balance, hasPendingTopups, sellerActive);
     }
 }

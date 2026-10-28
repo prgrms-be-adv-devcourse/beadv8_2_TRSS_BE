@@ -31,6 +31,11 @@ public class MemberApiAdapter implements MemberApi {
     }
 
     @Override
+    public void checkActiveMember(Long memberId) {
+        memberFacade.checkActiveMember(memberId);
+    }
+
+    @Override
     public List<MemberDto> getMembers(Collection<Long> memberIds) {
         return memberFacade.getMembersByIds(memberIds);
     }

@@ -19,6 +19,9 @@ public interface PaymentApi {
     // 잔액과 홀딩 중 금액 조회
     WalletSummaryDto getWallet(Long memberId);
 
+    // 결과가 아직 정해지지 않은 충전 건(READY·PROCESSING)이 있는지. 회원 탈퇴 검사용 (반영 전이라 잔액에 잡히지 않음)
+    boolean hasPendingTopups(Long memberId);
+
     /**
      * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.
      * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.

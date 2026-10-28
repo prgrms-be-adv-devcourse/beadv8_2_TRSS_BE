@@ -1,6 +1,7 @@
 package com.backend.boundedContext.payment.out;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +34,9 @@ public interface TopupRepository extends JpaRepository<Topup, Long>, JpaSpecific
     Optional<Topup> findByTossOrderIdAndMemberIdForUpdate(@Param("tossOrderId") String tossOrderId, @Param("memberId") Long memberId);
 
     boolean existsByPaymentKey(String paymentKey);
+
+    // 회원에게 이 상태들 중 하나인 충전 건이 있는지 (idx_topup_member 사용)
+    boolean existsByMemberIdAndStatusIn(Long memberId, Collection<TopupStatus> statuses);
 
     // 실패 기록 전 충전 건 행을 잠금. 같은 충전 건의 승인 요청(PROCESSING 선점)과 동시에 처리되지 않게 함
     @Lock(LockModeType.PESSIMISTIC_WRITE)
