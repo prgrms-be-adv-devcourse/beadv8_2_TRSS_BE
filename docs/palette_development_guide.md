@@ -143,7 +143,7 @@ public class ProductApiAdapter implements ProductApi {
 ```mermaid
 flowchart LR
     member -->|getWallet| payment
-    member -.->|stopAllBySeller, resumeAllBySeller 미구현| product
+    member -->|stopAllBySeller, resumeAllBySeller| product
     member -->|hasActiveOrders, hasActiveSales, getRecentOrders| order
     member -->|getUnsettledAmount, holdSeller| settlement
     product -->|getApprovedSellerByMemberId, findSellerByMemberId, getSellers| member

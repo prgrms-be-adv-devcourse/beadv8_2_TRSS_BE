@@ -32,10 +32,10 @@
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신 → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
-| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 | 동기 조회 |
-| 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN → `ProductApi.stopAllBySeller(sellerId, ...)` (상품 중지 호출은 미구현) | 동기, 같은 Tx |
-| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로, 호출은 미구현) | 동기, 같은 Tx |
-| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller`(미구현) → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
+| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `ProductApi.stopAllBySeller(sellerId, reason)` (판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원) | 동기, 같은 Tx |
+| 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기, 같은 Tx |
+| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) | 동기, 같은 Tx |
+| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller(sellerId, reason)` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
 | 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · 판매자 정보가 있으면 `SettlementApi.getUnsettledAmount` | 동기 조회 |
 | 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 |
 | 관리자 결제·충전 조회 | payment | `MemberApi.findMemberByEmail`(이메일 검색) · `MemberApi.getMembers`(이메일 표시) | 동기 조회 |

@@ -58,15 +58,14 @@
 - 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인)
 - 판매자도 일반 회원처럼 구매할 수 있다. 단, 본인 상품은 장바구니에 담거나 주문할 수 없다
 - 판매자 정산금은 해당 회원의 기존 예치금 지갑에 지급하며, 판매자는 정산받은 예치금으로 상품을 구매할 수 있다
-- **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN → 판매 상품 전체 판매 중지
+- **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN
     - 미정산 금액이 있으면 철회를 요청할 수 없고, 없으면 일반 사용자로 전환한다(판매 불가, 구매 가능)
     - 관리자 승인 시 진행 중인 판매 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이나 미정산 금액이 있으면 승인하지 않는다
-    - 상품 전체 판매 중지는 미구현(상품 모듈 `stopAllBySeller` 연동 예정)
+    - 철회를 요청하면 판매 중인 상품을 모두 판매 중지하고 결제 대기 주문을 취소·재고 복원한다. 거절하면 철회로 중지된 상품만 다시 판매한다
 - **관리자 제재:** 관리자가 판매자를 바로 SANCTIONED로 전환한다
     - 판매자 상태를 SANCTIONED로 바꾼다(회원 역할은 USER 그대로, 사업자번호는 유지해 재신청을 막는다)
     - 결제 완료(PAID)된 주문은 그대로 진행하고, 결제 대기(CREATED·PAYMENT_FAILED) 주문은 취소하고 재고를 복원한다
     - 판매자의 상품은 모두 판매 중지(STOPPED)하고, 정산은 HOLD로 두어 지급하지 않는다
-    - 현재는 정산 HOLD만 구현했고, 결제 대기 주문 취소·상품 판매 중지는 미구현(상품·주문 모듈 연동 예정)
 
 **상품·카테고리·재고·검색**
 
@@ -221,7 +220,7 @@ v1은 Spring Boot 단일 애플리케이션이지만 모듈 경계를 서비스 
 - 잔액이 모자라면 결제 모듈은 결제 건을 FAILED_INSUFFICIENT_BALANCE로 남겨 결과로 돌려주고, 주문 모듈이 402 INSUFFICIENT_BALANCE로 응답한다. 주문은 CREATED로 유지되고 구매자는 충전 후 같은 주문을 다시 결제한다. 충전 승인·취소는 토스페이먼츠를 쓴다
 - 반품 승인은 OrderReturned 이벤트로 발행되고, 결제 모듈이 이를 받아 홀딩 금액을 구매자 지갑으로 환불한다
 - 구매 확정은 OrderConfirmed 이벤트로 발행되고, 정산 모듈이 이를 받아 주문 항목별 정산 후보를 만든 뒤 매월 10일 판매자 정산 대금과 관리자 수수료를 각 지갑에 입금한다
-- 상품 판매 중지·삭제와 판매자 제재는 주문 모듈에 결제 대기 주문 취소를 요청한다(판매자 제재 연동은 미구현)
+- 상품 판매 중지·삭제와 판매자 제재는 주문 모듈에 결제 대기 주문 취소를 요청한다
 - 외부 호출(토스, 메일)은 DB 트랜잭션 밖에서 하고, 실패는 스케줄러의 복구·대사 작업이 마무리한다
 
 ## 3. API 명세서
@@ -261,7 +260,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /sellers | POST | USER | 판매자 신청·재신청(상호명, 사업자번호, 대표자명, 휴대폰, 정산 계좌: 은행·계좌번호·예금주) → PENDING. 응답 201·`201-1` | 400 VALIDATION_FAILED, 403 SELLER_SANCTIONED, 409 SELLER_ALREADY_APPLIED, 409 BUSINESS_NUMBER_DUPLICATED |
 | /sellers/me | GET | USER | 내 판매자 정보·신청 상태(계좌는 끝 4자리, 최근 상태 변경 사유, 미정산 금액) | 404 SELLER_NOT_FOUND |
 | /seller/me | PATCH | SELLER | 상호명·연락처·정산 계좌 수정(보낸 항목만, 계좌는 은행·계좌번호·예금주를 함께) | 400 SELLER_ACCOUNT_INCOMPLETE, 403 SELLER_NOT_APPROVED, 404 SELLER_NOT_FOUND |
-| /seller/me/withdrawal | POST | SELLER | 판매자 철회 요청(사유 필수) → WITHDRAW_REQUESTED | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 UNSETTLED_AMOUNT_EXISTS |
+| /seller/me/withdrawal | POST | SELLER | 판매자 철회 요청(사유 필수) → WITHDRAW_REQUESTED, 상품 전체 판매 중지 | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 UNSETTLED_AMOUNT_EXISTS |
 
 ### 3.2 상품
 
@@ -331,9 +330,9 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /admin/sellers/{sellerId} | GET | 회원 | ADMIN | 판매자 상세(상태 변경 이력 전체, 계좌는 끝 4자리) | 404 SELLER_NOT_FOUND |
 | /admin/sellers/{sellerId}/approve | POST | 회원 | ADMIN | 판매자 승인 → 판매자 상태 APPROVED (판매 기능 사용 가능) | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
 | /admin/sellers/{sellerId}/reject | POST | 회원 | ADMIN | 판매자 반려(사유 필수) → REJECTED, 사업자번호 비움 | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
-| /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN (상품 전체 판매 중지는 미구현) | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 ACTIVE_SALES_EXIST, 409 UNSETTLED_AMOUNT_EXISTS |
-| /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절(사유 필수) → APPROVED | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
-| /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유 필수, APPROVED·WITHDRAW_REQUESTED만) → SANCTIONED, 정산 HOLD (결제 대기 주문 취소·상품 STOPPED는 미구현) | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
+| /admin/sellers/{sellerId}/withdrawal/approve | POST | 회원 | ADMIN | 철회 승인 → WITHDRAWN | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID, 409 ACTIVE_SALES_EXIST, 409 UNSETTLED_AMOUNT_EXISTS |
+| /admin/sellers/{sellerId}/withdrawal/reject | POST | 회원 | ADMIN | 철회 거절(사유 필수) → APPROVED, 철회로 중지된 상품 판매 재개 | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
+| /admin/sellers/{sellerId}/sanction | POST | 회원 | ADMIN | 관리자 제재(사유 필수, APPROVED·WITHDRAW_REQUESTED만) → SANCTIONED, 상품 전체 판매 중지·결제 대기 주문 취소, 정산 HOLD | 404 SELLER_NOT_FOUND, 409 SELLER_STATE_INVALID |
 | /admin/products | GET | 상품 | ADMIN | 전체 상품(삭제 포함, 최신순). 필터: `sellerId`, `status`=ON_SALE(재고 있음)·SOLD_OUT·STOPPED·DELETED, `categoryId`(대분류면 아래 소분류 포함), `keyword` | 404 CATEGORY_NOT_FOUND |
 | /admin/products/{productId}/stop | POST | 상품 | ADMIN | 즉시 판매 중지(사유 필수, 해제 없음) → STOPPED(ADMIN), 결제 대기 주문 취소, 심사 중인 요청 닫힘 | 404, 409 PRODUCT_NOT_ON_SALE |
 | /admin/product-stop-requests | GET | 상품 | ADMIN | 판매 중지 요청 목록(`status` 기본 PENDING, 오래된 순) | - |
@@ -366,7 +365,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | `deductStock(items)` | 상품 | ORDER_DEDUCT, 상품 → 옵션 순으로 ID 순 잠금 |
 | `restoreStock(items, reason)` | 상품 | ORDER_RESTORE / RETURN_RESTORE |
 | `lockProductsForOrderChange(productIds)` | 상품 | 주문 취소·만료·반품 승인 전 상품 먼저 잠금 (잠금 순서 상품 → 주문) |
-| `stopAllBySeller(sellerId, reason)` / `resumeAllBySeller(sellerId)` | 상품 | 판매자 철회·제재 시 전체 중지 / 철회 거절 시 되돌림 (회원 모듈 호출은 미구현) |
+| `stopAllBySeller(sellerId, reason)` / `resumeAllBySeller(sellerId)` | 상품 | 판매자 철회 요청·제재 시 전체 중지 / 철회 거절 시 되돌림 |
 | `getWallet(memberId)` | 결제 | 지갑 잔액·홀딩 금액(회원 탈퇴 조건, 관리자 회원 상세) |
 | `pay(PayCommand: orderId, orderNumber, buyerId, amount, orderExpiresAt, idempotencyKey)` | 결제 | 지갑 → 홀딩, 결과 PAID / FAILED_INSUFFICIENT_BALANCE / FAILED_ORDER_EXPIRED |
 | `getPaymentAttempts(orderId)` | 결제 | 주문의 결제 시도 목록(실패 포함, 오래된 순) — 주문 상세 |
