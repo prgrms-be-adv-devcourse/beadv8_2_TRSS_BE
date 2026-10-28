@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,17 +24,20 @@ import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.GlobalErrorCode;
+import com.backend.shared.member.out.MemberApi;
 
 class PaymentPrepareTopupUseCaseTest {
 
     private final WalletRepository walletRepository = mock(WalletRepository.class);
     private final TopupRepository topupRepository = mock(TopupRepository.class);
+    private final MemberApi memberApi = mock(MemberApi.class);
     private PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
 
     @BeforeEach
     void setUp() {
         PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
-        paymentPrepareTopupUseCase = new PaymentPrepareTopupUseCase(paymentPolicy, walletRepository, topupRepository);
+        paymentPrepareTopupUseCase = new PaymentPrepareTopupUseCase(paymentPolicy, walletRepository, topupRepository, memberApi);
     }
 
     @Test
@@ -63,6 +67,18 @@ class PaymentPrepareTopupUseCaseTest {
                 .extracting("resultCode").isEqualTo("400-TOPUP_AMOUNT_INVALID");
 
         verify(walletRepository, never()).findByMemberId(any());
+        verify(topupRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("탈퇴한 회원이면 401 UNAUTHORIZED이고 충전 건을 만들지 않는다 (탈퇴 후 남은 Access Token)")
+    void prepareTopup_withdrawnMember() {
+        willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberApi).checkActiveMember(1L);
+
+        assertThatThrownBy(() -> paymentPrepareTopupUseCase.prepareTopup(1L, 20_000))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("401-UNAUTHORIZED");
+
         verify(topupRepository, never()).save(any());
     }
 

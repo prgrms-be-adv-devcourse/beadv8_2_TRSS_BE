@@ -7,11 +7,11 @@ import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +23,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 import com.backend.boundedContext.payment.domain.Topup;
@@ -66,13 +68,17 @@ class TopupReconcileIntegrationTest {
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
 
-    // 다른 테스트·시드 회원과 겹치지 않는 회원 ID
-    private final Long memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
+    @Autowired
+    private MemberRepository memberRepository;
+
+    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
+    private Long memberId;
 
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
+        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
         wallet = walletRepository.save(Wallet.create(memberId));
     }
 
@@ -82,6 +88,7 @@ class TopupReconcileIntegrationTest {
         topupRepository.deleteAll(topupRepository.findAll().stream()
                 .filter(topup -> topup.getMemberId().equals(memberId)).toList());
         walletRepository.deleteById(wallet.getId());
+        memberRepository.deleteById(memberId);
     }
 
     @Test

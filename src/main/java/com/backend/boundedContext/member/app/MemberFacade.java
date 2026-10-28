@@ -72,6 +72,12 @@ public class MemberFacade {
         return memberSupport.getMember(memberId).toDto();
     }
 
+    // 로그인 상태인 회원인지 확인 (다른 컨텍스트용). 없거나 탈퇴했으면 401 UNAUTHORIZED
+    @Transactional(readOnly = true)
+    public void checkActiveMember(Long memberId) {
+        memberSupport.getLoginMember(memberId);
+    }
+
     // 여러 회원 조회 (다른 컨텍스트용). 없는 ID는 결과에서 빠짐
     @Transactional(readOnly = true)
     public List<MemberDto> getMembersByIds(Collection<Long> memberIds) {

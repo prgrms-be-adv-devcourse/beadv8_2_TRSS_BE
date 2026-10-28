@@ -5,15 +5,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
 
+import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.TopupRepository;
@@ -37,11 +40,20 @@ class TopupHistoryIntegrationTest {
     @Autowired
     private TopupRepository topupRepository;
 
-    // 다른 테스트·시드 회원과 겹치지 않는 회원 ID
-    private final Long memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
-    private final Long otherMemberId = memberId + 1;
+    @Autowired
+    private MemberRepository memberRepository;
+
+    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
+    private Long memberId;
+    private Long otherMemberId;
 
     private final List<Wallet> wallets = new ArrayList<>();
+
+    @BeforeEach
+    void setUp() {
+        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        otherMemberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+    }
 
     @AfterEach
     void cleanUp() {
@@ -49,6 +61,7 @@ class TopupHistoryIntegrationTest {
                 .filter(topup -> topup.getMemberId().equals(memberId) || topup.getMemberId().equals(otherMemberId))
                 .toList());
         walletRepository.deleteAll(wallets);
+        memberRepository.deleteAllById(List.of(memberId, otherMemberId));
     }
 
     @Test

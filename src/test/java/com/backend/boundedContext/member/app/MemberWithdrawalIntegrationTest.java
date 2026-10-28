@@ -101,6 +101,14 @@ class MemberWithdrawalIntegrationTest {
                         """.formatted(email, PASSWORD)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-LOGIN_FAILED"));
+
+        // 탈퇴 전에 받은 Access Token은 아직 만료되지 않았지만, 돈이 들어가는 충전은 막힌다
+        mockMvc.perform(post("/api/v1/topups").header("Authorization", bearer)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"amount": 10000}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
     }
 
     @Test
