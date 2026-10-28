@@ -67,7 +67,7 @@ class AuthFlowIntegrationTest {
     @AfterEach
     void cleanUp() {
         issuedRefreshTokens.forEach(refreshTokenStore::delete);
-        loginAttemptStore.deleteFailCount(email);
+        loginAttemptStore.deleteAttempts(email);
         memberRepository.findByEmail(email).ifPresent(memberRepository::delete);
     }
 
@@ -139,7 +139,7 @@ class AuthFlowIntegrationTest {
         loginWith(email, PASSWORD)
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.resultCode").value("429-LOGIN_LOCKED"));
-        assertThat(loginAttemptStore.getFailCount(email)).isEqualTo(5);
+        assertThat(loginAttemptStore.getAttemptCount(email)).isEqualTo(6);   // 잠금 중 시도도 세지만 잠금 시간은 늘지 않는다
     }
 
     @Test
@@ -152,7 +152,7 @@ class AuthFlowIntegrationTest {
             }
             loginWith(unknownEmail, PASSWORD).andExpect(jsonPath("$.resultCode").value("429-LOGIN_LOCKED"));
         } finally {
-            loginAttemptStore.deleteFailCount(unknownEmail);
+            loginAttemptStore.deleteAttempts(unknownEmail);
         }
     }
 

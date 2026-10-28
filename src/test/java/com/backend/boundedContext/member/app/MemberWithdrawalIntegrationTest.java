@@ -69,7 +69,7 @@ class MemberWithdrawalIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        loginAttemptStore.deleteFailCount(email);
+        loginAttemptStore.deleteAttempts(email);
         walletRepository.findByMemberId(member.getId()).ifPresent(walletRepository::delete);
         memberRepository.deleteById(member.getId());
     }

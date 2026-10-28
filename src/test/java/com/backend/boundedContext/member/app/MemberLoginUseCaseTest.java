@@ -63,7 +63,7 @@ class MemberLoginUseCaseTest {
         given(memberTokenIssuer.issue(member)).willReturn(tokens);
 
         assertThat(memberLoginUseCase.login(EMAIL, "palette123!")).isEqualTo(tokens);
-        verify(loginAttemptStore).deleteFailCount(EMAIL);
+        verify(loginAttemptStore).deleteAttempts(EMAIL);
     }
 
     @Test
@@ -93,36 +93,36 @@ class MemberLoginUseCaseTest {
     }
 
     @Test
-    @DisplayName("로그인에 실패하면 이메일별 실패 횟수를 올린다 (없는 이메일도 같이 센다)")
-    void login_failed_increasesFailCount() {
+    @DisplayName("비밀번호를 확인하기 전에 이메일별 시도 횟수를 올린다 (없는 이메일도 같이 센다)")
+    void login_failed_increasesAttempt() {
         given(memberRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
-        given(loginAttemptStore.increaseFailCount(EMAIL, memberPolicy.loginLockTtl())).willReturn(1L);
 
         assertLoginFailed("palette123!");
-        verify(loginAttemptStore).increaseFailCount(EMAIL, memberPolicy.loginLockTtl());
+        verify(loginAttemptStore).increaseAttempt(EMAIL, memberPolicy.loginLockTtl());
         verify(loginAttemptStore, never()).lock(anyString(), any());
+        verify(loginAttemptStore, never()).deleteAttempts(anyString());
     }
 
     @Test
-    @DisplayName("이번 실패로 5회가 되면 잠금을 시작하고 429 LOGIN_LOCKED")
+    @DisplayName("5번째 시도가 실패하면 잠금을 시작하고 429 LOGIN_LOCKED")
     void login_fifthFailure_locks() {
+        given(loginAttemptStore.increaseAttempt(EMAIL, memberPolicy.loginLockTtl())).willReturn(5L);
         given(memberRepository.findByEmail(EMAIL)).willReturn(Optional.of(member));
         given(passwordEncoder.matches("wrong123!", "encoded")).willReturn(false);
-        given(loginAttemptStore.increaseFailCount(EMAIL, memberPolicy.loginLockTtl())).willReturn(5L);
 
         assertLoginError("wrong123!", MemberErrorCode.LOGIN_LOCKED);
         verify(loginAttemptStore).lock(EMAIL, memberPolicy.loginLockTtl());
     }
 
     @Test
-    @DisplayName("잠긴 이메일이면 비밀번호를 확인하지 않고 429 LOGIN_LOCKED (맞는 비밀번호여도 거절)")
+    @DisplayName("최대 횟수를 넘은 시도는 비밀번호를 확인하지 않고 429 LOGIN_LOCKED (맞는 비밀번호여도 거절, 잠금 시간은 늘리지 않음)")
     void login_locked() {
-        given(loginAttemptStore.getFailCount(EMAIL)).willReturn(5L);
+        given(loginAttemptStore.increaseAttempt(EMAIL, memberPolicy.loginLockTtl())).willReturn(6L);
 
         assertLoginError("palette123!", MemberErrorCode.LOGIN_LOCKED);
         verify(memberRepository, never()).findByEmail(anyString());
         verify(passwordEncoder, never()).matches(any(), any());
-        verify(loginAttemptStore, never()).increaseFailCount(anyString(), any());
+        verify(loginAttemptStore, never()).lock(anyString(), any());
     }
 
     private void assertLoginFailed(String password) {

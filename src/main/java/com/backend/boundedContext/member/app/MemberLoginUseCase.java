@@ -23,26 +23,26 @@ public class MemberLoginUseCase {
     private final MemberPolicy memberPolicy;
 
     // 이메일·비밀번호 확인 후 토큰 발급 (없는 이메일·틀린 비밀번호·탈퇴 회원 모두 401 LOGIN_FAILED로 같게 응답)
-    // 이메일별로 실패를 세어, 잠금 시간 안에 최대 횟수에 도달하면 비밀번호를 확인하지 않고 429 LOGIN_LOCKED로 거절
+    // 이메일별로 시도를 세어, 잠금 시간 안에 최대 횟수를 넘으면 비밀번호를 확인하지 않고 429 LOGIN_LOCKED로 거절
+    // 비밀번호를 확인하기 전에 횟수부터 올려서, 동시에 들어온 요청도 최대 횟수까지만 비밀번호를 확인함
     public AuthTokens login(String email, String password) {
-        if (loginAttemptStore.getFailCount(email) >= memberPolicy.loginMaxAttempts()) {
+        long attempt = loginAttemptStore.increaseAttempt(email, memberPolicy.loginLockTtl());
+        if (attempt > memberPolicy.loginMaxAttempts()) {
             throw new DomainException(MemberErrorCode.LOGIN_LOCKED);
         }
 
         Member member = memberRepository.findByEmail(email)
                 .filter(Member::isActive)
                 .filter(m -> passwordEncoder.matches(password, m.getPassword()))
-                .orElseThrow(() -> loginFailed(email));
+                .orElseThrow(() -> loginFailed(email, attempt));
 
-        loginAttemptStore.deleteFailCount(email);
+        loginAttemptStore.deleteAttempts(email);
         return memberTokenIssuer.issue(member);
     }
 
-    // 실패 횟수를 올리고, 이번 실패로 최대 횟수에 도달하면 잠금을 시작
-    private DomainException loginFailed(String email) {
-        long failCount = loginAttemptStore.increaseFailCount(email, memberPolicy.loginLockTtl());
-
-        if (failCount >= memberPolicy.loginMaxAttempts()) {
+    // 이번 시도가 최대 횟수째면 잠금을 시작 (잠금 시간이 이 시점부터 흐름)
+    private DomainException loginFailed(String email, long attempt) {
+        if (attempt == memberPolicy.loginMaxAttempts()) {
             loginAttemptStore.lock(email, memberPolicy.loginLockTtl());
             return new DomainException(MemberErrorCode.LOGIN_LOCKED);
         }
