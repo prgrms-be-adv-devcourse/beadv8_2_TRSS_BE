@@ -249,7 +249,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 401-LOGIN_FAILED | 이메일·비밀번호 불일치(어느 쪽인지 알려 주지 않음) |
 | | 429-LOGIN_LOCKED | 15분 안에 로그인 5회 실패 → 15분 잠금(5번째 실패부터, 가입하지 않은 이메일도 같음) |
 | | 400-PASSWORD_MISMATCH | 탈퇴 시 비밀번호 재확인 불일치 (로그인 상태라 401 대신 400. 5회 틀리면 429-LOGIN_LOCKED) |
-| | 409-WITHDRAWAL_NOT_ALLOWED | 진행 중 주문·미정산·잔액이 남았거나 판매자 철회 전 (`data.reasons`: `ACTIVE_ORDERS`, `UNSETTLED_AMOUNT`, `BALANCE_REMAINING`, `SELLER_ACTIVE`) |
+| | 409-WITHDRAWAL_NOT_ALLOWED | 진행 중 주문·판매, 미정산, 잔액, 결과 확인 중인 충전 건이 남았거나 판매자 철회 전 (`data.reasons`: `ACTIVE_ORDERS`, `ACTIVE_SALES`, `UNSETTLED_AMOUNT`, `BALANCE_REMAINING`, `PENDING_TOPUPS`, `SELLER_ACTIVE`) |
 | | 404-SELLER_NOT_FOUND | 판매자 신청 내역 없음 (내 판매자 조회·수정·철회 요청, 관리자 판매자 조회·처리) |
 | | 403-SELLER_SANCTIONED | 제재된 판매자의 재신청 |
 | | 403-SELLER_NOT_APPROVED | APPROVED가 아닌 판매자의 판매 기능·정보 수정 (`MemberApi.getApprovedSellerByMemberId`) |

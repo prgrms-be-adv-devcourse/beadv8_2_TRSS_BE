@@ -79,6 +79,7 @@ com.backend
 - 위치와 이름: `src/main/resources/db/migration/V{번호}__{설명}.sql` (예: `V2__add_member_phone.sql`). 번호는 develop 기준 다음 번호입니다.
 - **develop에 머지된 마이그레이션 파일은 고치지 않습니다.** 이미 실행된 DB가 있어서, 고치면 Flyway 체크섬 검증에 실패합니다. 바꿀 내용은 새 파일로 추가합니다. 머지 전 내 브랜치에만 있는 파일은 고쳐도 됩니다.
 - 두 PR이 같은 번호를 쓰면 나중에 머지하는 쪽이 번호를 올립니다.
+- **머지 직전에 최신 develop을 받아 내 마이그레이션 번호가 develop의 마지막 번호보다 큰지 다시 확인합니다.** 더 큰 번호가 먼저 개발 서버에 적용된 뒤 낮은 번호가 들어오면 Flyway 검증이 실패해 서버가 기동되지 않습니다. 번호가 밀렸으면 번호를 올린 뒤 머지합니다.
 - 마이그레이션을 빠뜨리면 `Schema validation: missing column ...` 같은 오류로 앱과 테스트가 시작되지 않습니다.
 - enum 컬럼에는 허용 값 CHECK 제약을 두지 않습니다. 값 검증은 `@Enumerated(STRING)`이 맡고, enum 값을 추가할 때마다 마이그레이션이 필요해지는 것을 피합니다.
 - `columnDefinition = "CHAR(7)"`처럼 `String` 필드를 VARCHAR가 아닌 타입에 매핑하면 `@JdbcTypeCode(SqlTypes.CHAR)`도 함께 붙입니다. 없으면 `validate`가 VARCHAR를 기대해 실패합니다.
@@ -142,7 +143,7 @@ public class ProductApiAdapter implements ProductApi {
 
 ```mermaid
 flowchart LR
-    member -->|getWallet| payment
+    member -->|getWallet, hasPendingTopups| payment
     member -->|stopAllBySeller, resumeAllBySeller| product
     member -->|hasActiveOrders, hasActiveSales, getRecentOrders| order
     member -->|getUnsettledAmount, holdSeller| settlement
@@ -150,10 +151,10 @@ flowchart LR
     product -->|cancelPendingOrders| order
     order -->|getOptions, deductStock, restoreStock, lockProductsForOrderChange| product
     order -->|pay| payment
-    order -->|getSellers, findSellerByMemberId| member
+    order -->|getSellers, findSellerByMemberId, checkActiveMember| member
     settlement -->|transfer| payment
     settlement -->|getSeller| member
-    payment -->|findMemberByEmail, getMembers| member
+    payment -->|findMemberByEmail, getMembers, checkActiveMember| member
     order -. OrderReturnedEvent .-> payment
     order -. OrderConfirmedEvent .-> settlement
     member -. MemberSignedUpEvent .-> payment
