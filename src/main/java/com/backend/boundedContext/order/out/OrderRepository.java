@@ -24,6 +24,21 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
                                      @Param("optionIds") Collection<Long> optionIds,
                                      @Param("statuses") Collection<OrderStatus> statuses);
 
+    @Query("""
+            select distinct i.order.id
+            from OrderItem i
+            where i.order.buyerId = :buyerId
+              and i.order.status in :statuses
+              and i.optionId in :optionIds
+            order by i.order.id
+            """)
+    List<Long> findOrderIdsContainingOptions(@Param("buyerId") Long buyerId,
+                                             @Param("optionIds") Collection<Long> optionIds,
+                                             @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 주문 생성 멱등 키로 이전 주문 조회
+    Optional<Order> findByBuyerIdAndIdempotencyKey(Long buyerId, String idempotencyKey);
+
     // 본인 주문만, 항목까지 한 번에 조회
     @EntityGraph(attributePaths = "items")
     Optional<Order> findWithItemsByIdAndBuyerId(Long id, Long buyerId);
