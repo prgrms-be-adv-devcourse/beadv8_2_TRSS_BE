@@ -80,7 +80,7 @@ class MemberWithdrawUseCaseTest {
     @DisplayName("비밀번호가 맞고 조건을 충족하면 회원을 비식별화하고 실패 횟수를 지운다")
     void withdraw_success() {
         given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
-        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(false, 0, 0, false));
+        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(false, false, 0, 0, false, false));
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
 
         memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!");
@@ -98,7 +98,7 @@ class MemberWithdrawUseCaseTest {
         ReflectionTestUtils.setField(seller, "id", 10L);
         SellerStatusHistory rejected = seller.reject("사업자번호 불일치");
         given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
-        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(false, 0, 0, false));
+        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(false, false, 0, 0, false, false));
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
         given(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(10L)).willReturn(List.of(rejected));
 
@@ -114,7 +114,7 @@ class MemberWithdrawUseCaseTest {
     @DisplayName("조건이 남아 있으면 409 WITHDRAWAL_NOT_ALLOWED이고 data.reasons에 남은 조건을 담는다 (회원은 그대로)")
     void withdraw_notAllowed() {
         given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
-        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(true, 0, 10_000, false));
+        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(true, false, 0, 10_000, false, false));
 
         assertThatThrownBy(() -> memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!"))
                 .isInstanceOf(DomainException.class)

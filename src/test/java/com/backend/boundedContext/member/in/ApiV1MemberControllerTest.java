@@ -92,7 +92,8 @@ class ApiV1MemberControllerTest {
     @DisplayName("탈퇴 조건 조회: 남은 조건과 탈퇴 가능 여부를 돌려준다")
     void getWithdrawalCheck() throws Exception {
         given(memberFacade.getWithdrawalCheck(3L)).willReturn(new WithdrawalCheckDto(
-                false, true, 0, 30_000, List.of(WithdrawalBlockReason.ACTIVE_ORDERS, WithdrawalBlockReason.BALANCE_REMAINING)));
+                false, true, false, 0, 30_000, true,
+                List.of(WithdrawalBlockReason.ACTIVE_ORDERS, WithdrawalBlockReason.BALANCE_REMAINING, WithdrawalBlockReason.PENDING_TOPUPS)));
         String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
 
         mockMvc.perform(get("/api/v1/users/me/withdrawal").header("Authorization", "Bearer " + token))
@@ -100,8 +101,10 @@ class ApiV1MemberControllerTest {
                 .andExpect(jsonPath("$.data.withdrawable").value(false))
                 .andExpect(jsonPath("$.data.hasActiveOrders").value(true))
                 .andExpect(jsonPath("$.data.balance").value(30000))
+                .andExpect(jsonPath("$.data.hasPendingTopups").value(true))
                 .andExpect(jsonPath("$.data.reasons[0]").value("ACTIVE_ORDERS"))
-                .andExpect(jsonPath("$.data.reasons[1]").value("BALANCE_REMAINING"));
+                .andExpect(jsonPath("$.data.reasons[1]").value("BALANCE_REMAINING"))
+                .andExpect(jsonPath("$.data.reasons[2]").value("PENDING_TOPUPS"));
     }
 
     @Test

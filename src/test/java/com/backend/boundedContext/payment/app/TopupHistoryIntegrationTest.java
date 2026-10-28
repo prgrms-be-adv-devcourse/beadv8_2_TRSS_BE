@@ -71,6 +71,21 @@ class TopupHistoryIntegrationTest {
     }
 
     @Test
+    @DisplayName("결과가 정해지지 않은 충전 건(READY)이 있으면 true, 실패로 끝나면 false다 (다른 회원 충전 건은 보지 않음)")
+    void hasPendingTopups() {
+        wallets.add(walletRepository.save(Wallet.create(memberId)));
+        wallets.add(walletRepository.save(Wallet.create(otherMemberId)));
+        assertThat(paymentFacade.hasPendingTopups(memberId)).isFalse();
+
+        Long topupId = paymentFacade.prepareTopup(memberId, 10_000).topupId();
+        paymentFacade.prepareTopup(otherMemberId, 20_000);
+        assertThat(paymentFacade.hasPendingTopups(memberId)).isTrue();
+
+        paymentFacade.failTopup(memberId, topupId, "PAY_PROCESS_CANCELED", "사용자 취소");
+        assertThat(paymentFacade.hasPendingTopups(memberId)).isFalse();
+    }
+
+    @Test
     @DisplayName("내 충전 건은 상세 조회되고, 남의 충전 건은 상세 조회·실패 기록 모두 404")
     void otherMembersTopup() {
         wallets.add(walletRepository.save(Wallet.create(memberId)));
