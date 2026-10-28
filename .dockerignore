@@ -1,0 +1,36 @@
+# 이미지 빌드에 필요한 것은 Gradle 설정과 src뿐이다. 나머지는 빌드 컨텍스트에서 뺀다.
+
+# 빌드 결과물·캐시 (이미지 안에서 새로 빌드한다)
+.gradle
+build
+out
+bin
+
+# 비밀값 (이미지에 절대 들어가면 안 됨)
+.env
+.env.*
+*.pem
+*.key
+
+# Git·IDE·도구 설정
+.git
+.gitattributes
+.gitignore
+.github
+.idea
+.vscode
+.run
+.claude
+.agents
+.codex
+*.iml
+CLAUDE*.md
+
+# 실행에 필요 없는 파일
+docs
+README.md
+HELP.md
+compose*.yaml
+nginx
+Dockerfile
+.dockerignore
