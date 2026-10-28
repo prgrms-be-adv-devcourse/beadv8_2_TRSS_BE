@@ -91,7 +91,7 @@
 - 상품 추가·삭제·수량 변경은 장바구니에서만 한다. 주문이 생긴 뒤에는 결제하거나 전체 취소하는 것만 할 수 있다
 - 장바구니 항목은 주문 결제가 완료되는 시점에 삭제한다(주문에 포함된 항목만)
 - 결제 대기 주문(CREATED·PAYMENT_FAILED)에 들어 있는 장바구니 항목으로는 새 주문을 만들 수 없다
-- 주문 생성 응답을 받지 못해 같은 `Idempotency-Key`로 다시 요청하면 처음 만든 주문을 그대로 돌려준다
+- 주문 생성 응답을 받지 못해 같은 `Idempotency-Key`로 다시 요청하면 처음 만든 주문을 그대로 돌려준다. 그 주문이 취소(만료 포함)됐으면 409로 거절하고 새 키로 다시 주문한다
 - 주문 생성 때 가격·상품·판매자 정보를 스냅샷으로 고정하고 재고를 차감(예약, ORDER_DEDUCT)한다
 - 주문 상태는 CREATED, PAYMENT_FAILED, PAID, CONFIRMED, CANCELED, RETURN_REQUESTED, RETURNED 7개이며, 판매자별로 나누지 않고 주문서 하나에 하나의 상태만 둔다
 
@@ -295,7 +295,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
-| /orders | POST | USER | 주문 생성(장바구니 항목 id, 예상 금액, `Idempotency-Key` 헤더 선택) → CREATED, `expiresAt`(생성 + 15분). 같은 키로 다시 요청하면 처음 만든 주문 응답 | 400 OUT_OF_STOCK, 409 PRICE_CHANGED, 409 PRODUCT_NOT_ON_SALE, 409 CART_ITEM_IN_PENDING_ORDER(`pendingOrderIds`), 400 SELF_PURCHASE_NOT_ALLOWED, 400 IDEMPOTENCY_KEY_INVALID |
+| /orders | POST | USER | 주문 생성(장바구니 항목 id, 예상 금액, `Idempotency-Key` 헤더 선택) → CREATED, `expiresAt`(생성 + 15분). 같은 키로 다시 요청하면 처음 만든 주문 응답 | 400 OUT_OF_STOCK, 409 PRICE_CHANGED, 409 PRODUCT_NOT_ON_SALE, 409 CART_ITEM_IN_PENDING_ORDER(`pendingOrderIds`), 400 SELF_PURCHASE_NOT_ALLOWED, 400 IDEMPOTENCY_KEY_INVALID, 409 IDEMPOTENCY_KEY_EXPIRED |
 | /orders | GET | USER | 내 주문 목록(상태·기간 필터) | - |
 | /orders/{orderId} | GET | USER | 주문 상세(항목 스냅샷, 결제 시도와 실패 사유, 남은 시간) | 403, 404 |
 | /orders/{orderId}/payment | POST | USER | 예치금 결제(CREATED·PAYMENT_FAILED, 만료 전만) → PAID, 장바구니 항목 삭제 | 402 INSUFFICIENT_BALANCE(부족액·추천 충전액·남은 시간), 409 ORDER_EXPIRED, 409 ORDER_STATE_INVALID |
