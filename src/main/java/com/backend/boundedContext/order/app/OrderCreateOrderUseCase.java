@@ -39,6 +39,9 @@ public class OrderCreateOrderUseCase {
     private final MemberApi memberApi;
 
     public OrderCreateResponse create(Long buyerId, List<Long> cartItemIds, long expectedTotalPrice) {
+        // 탈퇴한 회원은 남은 Access Token으로 주문할 수 없게 401 (재고가 차감되지 않도록)
+        memberApi.checkActiveMember(buyerId);
+
         Cart cart = orderSupport.getCartForUpdate(buyerId);
 
         // 내 장바구니 항목인지 확인

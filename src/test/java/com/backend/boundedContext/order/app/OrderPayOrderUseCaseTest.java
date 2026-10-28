@@ -8,6 +8,8 @@ import com.backend.boundedContext.order.in.dto.InsufficientBalanceResponse;
 import com.backend.boundedContext.order.in.dto.OrderPayResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.GlobalErrorCode;
+import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.PayResultStatus;
@@ -28,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -39,6 +42,7 @@ class OrderPayOrderUseCaseTest {
     @Mock OrderRepository orderRepository;
     @Mock OrderSupport orderSupport;
     @Mock PaymentApi paymentApi;
+    @Mock MemberApi memberApi;
     @InjectMocks
     OrderPayOrderUseCase useCase;
 
@@ -71,6 +75,18 @@ class OrderPayOrderUseCaseTest {
                 && cmd.orderId().equals(ORDER_ID)
                 && cmd.orderNumber().equals(order.getOrderNumber())));
         verify(cart).removeItems(List.of(1L));
+    }
+
+    @Test
+    @DisplayName("탈퇴한 회원이면 주문을 잠그지 않고 결제도 호출하지 않으며 401 UNAUTHORIZED (탈퇴 후 남은 Access Token)")
+    void withdrawnMember() {
+        willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberApi).checkActiveMember(BUYER_ID);
+
+        assertThatThrownBy(() -> useCase.pay(BUYER_ID, ORDER_ID))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("401-UNAUTHORIZED");
+
+        verifyNoInteractions(orderRepository, paymentApi);
     }
 
     @Test

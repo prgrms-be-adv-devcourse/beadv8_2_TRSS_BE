@@ -8,6 +8,7 @@ import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.GlobalErrorCode;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.member.out.MemberApi;
@@ -34,8 +35,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCreateOrderUseCaseTest {
@@ -54,6 +57,18 @@ class OrderCreateOrderUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1), productApi, memberApi);
+    }
+
+    @Test
+    @DisplayName("탈퇴한 회원이면 장바구니를 잠그지 않고 재고도 차감하지 않으며 401 UNAUTHORIZED (탈퇴 후 남은 Access Token)")
+    void withdrawnMember() {
+        willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberApi).checkActiveMember(BUYER_ID);
+
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 10_000))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("401-UNAUTHORIZED");
+
+        verifyNoInteractions(orderSupport, orderRepository, productApi);
     }
 
     /** 옵션 ID = 상품 ID × 10, 판매자는 2번 */
