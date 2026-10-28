@@ -344,8 +344,8 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /admin/returns | GET | 주문 | ADMIN | 반품 요청 목록 | - |
 | /admin/returns/{orderId}/approve | POST | 주문 | ADMIN | 반품 승인(주문 항목별 `restoreStock`) → RETURNED + 환불 | 409 ORDER_STATE_INVALID, 409 PRODUCT_DELETED |
 | /admin/returns/{orderId}/reject | POST | 주문 | ADMIN | 반품 거절 → PAID 복귀(결제 후 7일 지났으면 즉시 CONFIRMED) | 409 ORDER_STATE_INVALID |
-| /admin/payments | GET | 결제 | ADMIN | 결제 처리 상태 조회 — 결제 탭 (`keyword`: `@`가 있으면 회원 이메일, 없으면 주문번호 정확히 일치, 기간 `from`~`to`, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID |
-| /admin/topups | GET | 결제 | ADMIN | 충전 처리 상태 조회 — 충전 탭 (`keyword`: 회원 이메일 또는 충전번호 앞부분 일치(10자 이상), 기간 `from`~`to`, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID |
+| /admin/payments | GET | 결제 | ADMIN | 결제 처리 상태 조회 — 결제 탭 (`keyword`: `@`가 있으면 회원 이메일(대소문자 무시), 없으면 주문번호 정확히 일치, 기간 `from`~`to`, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID |
+| /admin/topups | GET | 결제 | ADMIN | 충전 처리 상태 조회 — 충전 탭 (`keyword`: 회원 이메일(대소문자 무시) 또는 충전번호 앞부분 일치(10자 이상), 기간 `from`~`to`, 최신순 고정) | 400 PAYMENT_PERIOD_INVALID |
 | /admin/failed-transactions | GET | 결제 | ADMIN | 실패 거래 조회(충전 정체, 결제 실패, 환불 FAILED, 정산 FAILED·MANUAL_REQUIRED) — 미구현 | - |
 | /admin/settlements/preview | GET | 정산 | ADMIN | 정산월별 판매자 정산 대상·예상 금액 | 400 |
 | /admin/settlements/runs | POST | 정산 | ADMIN | 월 정산 수동 실행(`settleMonth`, 종료된 달만) | 409 SETTLEMENT_RUNNING |
