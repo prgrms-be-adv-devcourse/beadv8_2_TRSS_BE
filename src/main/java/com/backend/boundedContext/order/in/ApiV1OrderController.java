@@ -33,15 +33,16 @@ public class ApiV1OrderController {
 
     private final OrderFacade orderFacade;
 
-    @Operation(summary = "주문 생성", description = "주문을 생성하고 재고를 차감한다")
+    @Operation(summary = "주문 생성", description = "주문을 생성하고 재고를 차감한다.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RsData<OrderCreateResponse> createOrder(
             @AuthenticationPrincipal AuthMember authMember,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody OrderCreateRequest request
     ) {
         OrderCreateResponse response = orderFacade.createOrder(
-                authMember.memberId(), request.cartItemIds(), request.expectedTotalPrice());
+                authMember.memberId(), idempotencyKey, request.cartItemIds(), request.expectedTotalPrice());
         return RsData.of("201-1", "주문을 생성했습니다.", response);
     }
 

@@ -72,8 +72,8 @@ public class OrderFacade {
 
     // 주문생성
     @Transactional
-    public OrderCreateResponse createOrder(Long buyerId, List<Long> cartItemIds, long expectedTotalPrice) {
-        return orderCreateOrderUseCase.create(buyerId, cartItemIds, expectedTotalPrice);
+    public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice) {
+        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice);
     }
 
     // 주문목록 조회
