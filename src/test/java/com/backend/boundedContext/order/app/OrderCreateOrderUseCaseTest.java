@@ -4,8 +4,10 @@ import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.CartItem;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItem;
+import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
+import com.backend.boundedContext.order.in.dto.PendingOrderConflictResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
@@ -19,6 +21,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -27,7 +32,6 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -64,7 +68,7 @@ class OrderCreateOrderUseCaseTest {
     void withdrawnMember() {
         willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberApi).checkActiveMember(BUYER_ID);
 
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 10_000))
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 10_000))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("401-UNAUTHORIZED");
 
@@ -121,7 +125,7 @@ class OrderCreateOrderUseCaseTest {
         givenSeller();
         givenSaveAssignsIds();
 
-        OrderCreateResponse response = useCase.create(BUYER_ID, List.of(1L, 2L), 35000);
+        OrderCreateResponse response = useCase.create(BUYER_ID, null, List.of(1L, 2L), 35000);
 
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
         assertThat(response.totalPrice()).isEqualTo(35000);
@@ -137,7 +141,7 @@ class OrderCreateOrderUseCaseTest {
     void notMyCartItem() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
 
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(999L), 15000))
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(999L), 15000))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "404-CART_ITEM_NOT_FOUND");
         verify(orderRepository, never()).save(any());
@@ -152,21 +156,72 @@ class OrderCreateOrderUseCaseTest {
         given(memberApi.findSellerByMemberId(BUYER_ID)).willReturn(Optional.of(
                 new SellerDto(SELLER_ID, BUYER_ID, "내상점", SellerStatus.APPROVED)));
 
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 15000))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "400-SELF_PURCHASE_NOT_ALLOWED");
     }
 
     @Test
-    @DisplayName("결제 대기 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER")
+    @DisplayName("결제 대기 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER, 응답에 그 주문 ID를 담는다")
     void inPendingOrder() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
         givenOptions(onSale(100L, 15000));
-        given(orderSupport.findOptionIdsInPendingOrders(BUYER_ID, List.of(100L))).willReturn(Set.of(100L));
+        given(orderRepository.findOrderIdsContainingOptions(BUYER_ID, List.of(100L), Order.PAYMENT_PENDING_STATUSES))
+                .willReturn(List.of(ORDER_ID));
 
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 15000))
                 .isInstanceOf(DomainException.class)
-                .hasFieldOrPropertyWithValue("resultCode", "409-CART_ITEM_IN_PENDING_ORDER");
+                .hasFieldOrPropertyWithValue("resultCode", "409-CART_ITEM_IN_PENDING_ORDER")
+                .hasFieldOrPropertyWithValue("data", new PendingOrderConflictResponse(List.of(ORDER_ID)));
+    }
+
+    @Test
+    @DisplayName("멱등 키를 보내면 주문에 저장한다")
+    void createWithIdempotencyKey() {
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
+        givenOptions(onSale(100L, 15000));
+        givenSeller();
+        givenSaveAssignsIds();
+
+        useCase.create(BUYER_ID, "key-1", List.of(1L), 15000);
+
+        ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(saved.capture());
+        assertThat(saved.getValue().getIdempotencyKey()).isEqualTo("key-1");
+    }
+
+    @Test
+    @DisplayName("같은 멱등 키의 주문이 있으면 그 주문을 돌려주고, 새로 저장하거나 재고를 차감하지 않는다")
+    void sameIdempotencyKey() {
+        Order existing = Order.create(BUYER_ID, "key-1", List.of(new OrderItemSpec(
+                1L, 10L, 100L, SELLER_ID, "상품100", "기본", "테스트상점", 15000, 1)), LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(existing, "id", ORDER_ID);
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
+        given(orderRepository.findByBuyerIdAndIdempotencyKey(BUYER_ID, "key-1")).willReturn(Optional.of(existing));
+
+        OrderCreateResponse response = useCase.create(BUYER_ID, "key-1", List.of(1L), 15000);
+
+        assertThat(response).isEqualTo(OrderCreateResponse.from(existing));
+        verify(orderRepository, never()).save(any());
+        verify(productApi, never()).deductStock(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "  "})
+    @DisplayName("멱등 키가 비어 있으면 IDEMPOTENCY_KEY_INVALID")
+    void blankIdempotencyKey(String key) {
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, key, List.of(1L), 15000))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "400-IDEMPOTENCY_KEY_INVALID");
+    }
+
+    @Test
+    @DisplayName("멱등 키가 64자를 넘으면 IDEMPOTENCY_KEY_INVALID, 장바구니를 잠그지 않는다")
+    void tooLongIdempotencyKey() {
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, "a".repeat(65), List.of(1L), 15000))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "400-IDEMPOTENCY_KEY_INVALID");
+        verify(orderSupport, never()).getCartForUpdate(any());
     }
 
     @Test
@@ -176,7 +231,7 @@ class OrderCreateOrderUseCaseTest {
         givenOptions(onSale(100L, 16000));   // 15000 → 16000
         givenSeller();
 
-        assertThatThrownBy(() -> useCase.create(BUYER_ID, List.of(1L), 15000))
+        assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 15000))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "409-PRICE_CHANGED");
         verify(orderRepository, never()).save(any());
