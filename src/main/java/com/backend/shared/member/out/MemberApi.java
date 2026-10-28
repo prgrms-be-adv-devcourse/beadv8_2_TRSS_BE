@@ -18,7 +18,7 @@ public interface MemberApi {
     // 여러 회원 조회. 없는 ID는 결과에서 빠짐
     List<MemberDto> getMembers(Collection<Long> memberIds);
 
-    // 이메일로 회원 조회 (정확히 일치). 없으면 empty
+    // 이메일로 회원 조회 (앞뒤 공백·대소문자는 무시하고 정확히 일치). 없으면 empty
     Optional<MemberDto> findMemberByEmail(String email);
 
     // 판매자 신청 정보 조회. 신청한 적이 없으면 empty

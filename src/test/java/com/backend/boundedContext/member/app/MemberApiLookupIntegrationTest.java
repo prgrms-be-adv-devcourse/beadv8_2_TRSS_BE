@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -60,6 +61,15 @@ class MemberApiLookupIntegrationTest {
 
         assertThat(memberApi.findMemberByEmail(member.getEmail())).map(MemberDto::id).contains(member.getId());
         assertThat(memberApi.findMemberByEmail(keyword)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("다른 컨텍스트가 대소문자·앞뒤 공백이 섞인 이메일로 조회해도 정규화해서 찾는다 (관리자 결제·충전 검색)")
+    void findMemberByEmail_normalized() {
+        Member member = save(keyword + "-a@palette.test");
+
+        assertThat(memberApi.findMemberByEmail("  " + member.getEmail().toUpperCase(Locale.ROOT) + " "))
+                .map(MemberDto::id).contains(member.getId());
     }
 
     private Member save(String email) {

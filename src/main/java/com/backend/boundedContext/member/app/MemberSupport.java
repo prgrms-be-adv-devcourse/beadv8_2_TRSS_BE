@@ -33,9 +33,9 @@ public class MemberSupport {
         return memberRepository.findAllById(memberIds);
     }
 
-    // 이메일로 회원 조회 (정확히 일치)
+    // 이메일로 회원 조회 (정규화한 이메일과 정확히 일치). 회원 컨텍스트 밖(관리자 결제·충전 검색 등)에서 온 값도 여기서 정규화함
     public Optional<Member> findMemberByEmail(String email) {
-        return memberRepository.findByEmail(email);
+        return memberRepository.findByEmail(Member.normalizeEmail(email));
     }
 
     // 로그인 회원 조회 (토큰은 유효하지만 회원이 없거나 탈퇴했으면 로그인 상태가 아니므로 401 UNAUTHORIZED)
