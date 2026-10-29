@@ -123,5 +123,9 @@ custom:
     retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
     batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
     retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+  outbox:
+    relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
+    relayBatchSize: 100         # 릴레이가 한 번에 발행하는 최대 이벤트 수
+    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다
   scheduling:
     enabled: true        # false면 모든 스케줄러가 멈춘다(통합 테스트용)
