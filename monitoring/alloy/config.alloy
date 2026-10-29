@@ -1,0 +1,42 @@
+// compose 프로젝트(palette) 컨테이너의 stdout 로그를 Docker API로 읽어 Loki로 보낸다.
+// 앱은 로그를 파일로 남기지 않으므로 앱 코드·설정을 바꾸지 않아도 수집된다.
+
+discovery.docker "palette" {
+  host = "unix:///var/run/docker.sock"
+
+  // 같은 서버의 다른 컨테이너 로그는 가져오지 않는다
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=palette"]
+  }
+}
+
+discovery.relabel "palette" {
+  targets = []
+
+  // container="palette-app"처럼 컨테이너 이름으로 조회한다 (앞의 / 제거)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // service="app"처럼 compose 서비스 이름으로도 조회할 수 있게 한다
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "palette" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.palette.targets
+  relabel_rules = discovery.relabel.palette.rules
+  forward_to    = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
