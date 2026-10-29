@@ -1,0 +1,23 @@
+# Slack 알림 메시지 형식. slack.yaml의 title·text가 이 템플릿을 쓴다.
+# 알림 하나 = 클래스(log_logger) 하나이므로(slack.yaml의 group_by) 클래스·건수·발생 시각과
+# 그 클래스의 ERROR 로그를 바로 여는 Grafana Explore 링크만 보여 준다.
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: palette-slack
+    template: |
+      {{ define "palette.slack.title" -}}
+      🚨 [palette-app] ERROR{{ with .Alerts.Firing }}{{ with index . 0 }} {{ printf "%.0f" .Values.B }}건{{ end }}{{ end }} (최근 5분)
+      {{- end }}
+
+      {{ define "palette.slack.text" -}}
+      {{ range .Alerts.Firing -}}
+      {{ $logger := .Labels.log_logger -}}
+      {{ $expr := printf `{container="palette-app"} | json | log_level="ERROR" | log_logger="%s"` $logger -}}
+      {{ $panes := printf `{"a":{"datasource":"loki","queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"%s"}],"range":{"from":"now-1h","to":"now"}}}` (reReplaceAll `"` `\"` $expr) -}}
+      • 위치: `{{ reReplaceAll `.*\.` "" $logger }}`
+      • 발생: {{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05" }} (KST)
+      • <{{ reReplaceAll `/$` "" $.ExternalURL }}/explore?schemaVersion=1&orgId=1&panes={{ urlquery $panes }}|Grafana에서 로그 보기>
+      {{ end -}}
+      {{- end }}
