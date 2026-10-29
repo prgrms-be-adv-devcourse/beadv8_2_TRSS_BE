@@ -55,11 +55,13 @@ class ProductTest {
     }
 
     @Test
-    @DisplayName("기본 옵션의 초기 재고는 1 이상이어야 한다")
-    void createDefaultOptionWithZeroStock() {
+    @DisplayName("기본 옵션의 초기 재고는 1 이상, 최대 재고 이하여야 한다")
+    void createDefaultOptionWithInvalidStock() {
         Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
 
         assertThatThrownBy(() -> ProductOption.createDefault(product, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ProductOption.createDefault(product, ProductOption.MAX_STOCK + 1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

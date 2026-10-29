@@ -22,6 +22,7 @@ public enum ProductErrorCode implements ErrorCode {
     PRODUCT_NOT_EDITABLE(409, "판매 중지되었거나 삭제된 상품은 수정할 수 없습니다."),
     OUT_OF_STOCK(400, "재고가 부족합니다."),
     STOCK_NEGATIVE(400, "재고는 0 미만이 될 수 없습니다."),
+    STOCK_LIMIT_EXCEEDED(400, "재고는 1,000,000개를 넘을 수 없습니다."),
     THUMBNAIL_REQUIRED(400, "대표 이미지는 필수입니다."),
     IMAGE_TYPE_NOT_ALLOWED(400, "jpg, png, webp 이미지만 올릴 수 있습니다."),
     DETAIL_IMAGE_LIMIT_EXCEEDED(400, "상세 이미지는 최대 10개까지 올릴 수 있습니다."),

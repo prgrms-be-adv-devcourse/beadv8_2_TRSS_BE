@@ -83,12 +83,14 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("상품 등록: 재고가 0이면 400 VALIDATION_FAILED")
-    void createProduct_zeroStock() throws Exception {
-        create(MemberRole.USER, jsonPart(VALID_REQUEST.replace("\"stock\":30", "\"stock\":0")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.data.fieldErrors[0].field").value("stock"));
+    @DisplayName("상품 등록: 재고가 0이거나 최대 재고를 넘으면 400 VALIDATION_FAILED")
+    void createProduct_invalidStock() throws Exception {
+        for (String stock : List.of("0", "1000001")) {
+            create(MemberRole.USER, jsonPart(VALID_REQUEST.replace("\"stock\":30", "\"stock\":" + stock)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.data.fieldErrors[0].field").value("stock"));
+        }
 
         verify(productFacade, never()).createProduct(any(), any(), any(), any(), anyLong(), anyInt(), any(), any());
     }
@@ -250,12 +252,19 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("재고 조정: 증감량이 0이거나 없으면 400 VALIDATION_FAILED")
+    @DisplayName("재고 조정: 증감량이 0이거나 없거나 절댓값이 최대 재고를 넘으면 400 VALIDATION_FAILED")
     void adjustStock_invalidChangeQty() throws Exception {
         adjust(MemberRole.USER, """
                 {"changeQty":0}""")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        for (String changeQty : List.of("1000001", "-1000001")) {
+            adjust(MemberRole.USER, "{\"changeQty\":" + changeQty + "}")
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.data.fieldErrors[0].field").value("changeQty"));
+        }
 
         adjust(MemberRole.USER, "{}")
                 .andExpect(status().isBadRequest())
