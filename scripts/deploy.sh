@@ -26,10 +26,10 @@ main() {
     echo "▶ 빌드·재시작"
     "${compose[@]}" up -d --build --remove-orphans
 
-      # nginx/default.conf는 파일 하나를 bind mount해서, git pull로 파일이 바뀌어도 실행 중인 nginx는 예전 파일을 본다.
-      # 재시작해야 새 설정을 읽는다(재시작하는 1~2초 동안 요청이 끊긴다).
-      echo "▶ nginx 설정 다시 읽기"
-      "${compose[@]}" restart nginx
+    # nginx/default.conf는 파일 하나를 bind mount해서, git pull로 파일이 바뀌어도 실행 중인 nginx는 예전 파일을 본다.
+    # 재시작해야 새 설정을 읽는다(재시작하는 1~2초 동안 요청이 끊긴다).
+    echo "▶ nginx 설정 다시 읽기"
+    "${compose[@]}" restart nginx
 
     echo "▶ 기동 확인 (최대 150초)"
     for _ in $(seq 1 30); do

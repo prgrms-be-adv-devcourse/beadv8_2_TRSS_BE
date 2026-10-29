@@ -25,7 +25,8 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../palette-web:/usr/share/nginx/html:ro
-    # nginx는 시작할 때 넘길 곳(app, grafana)의 이름을 찾으므로 두 컨테이너가 먼저 떠 있어야 한다
+    # nginx는 시작할 때 app의 이름을 찾으므로 app이 먼저 떠 있어야 한다.
+    # grafana는 요청할 때 찾으므로(nginx/default.conf의 resolver) 꺼져 있어도 nginx는 뜬다.
     depends_on:
       - app
 
