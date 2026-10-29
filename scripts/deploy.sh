@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 개발 서버(EC2)에서 앱을 다시 빌드·실행하고 정상 기동을 확인한다.
 #
-# 자동 배포: GitHub Actions가 배포 전용 키로 SSH 접속하면, 서버의 authorized_keys에 고정한 명령이
-#   develop 최신 코드를 받은 뒤 이 스크립트를 실행한다 (키로는 이 동작만 할 수 있다).
+# 자동 배포: CI가 통과하면 GitHub Actions가 배포 전용 키로 SSH 접속한다. 서버의 authorized_keys에 고정한
+#   scripts/deploy-remote.sh가 그 커밋 SHA를 검증·체크아웃한 뒤 이 스크립트를 실행한다.
 # 수동 배포: cd ~/palette && git pull && bash scripts/deploy.sh
 #
 # 서버의 .env는 Git이 관리하지 않으므로 배포해도 그대로 남는다.
