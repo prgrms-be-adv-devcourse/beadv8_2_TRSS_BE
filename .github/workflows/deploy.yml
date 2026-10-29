@@ -1,14 +1,17 @@
-# develop에 push(머지)되면 개발 서버(EC2)에 배포한다. PR 이벤트로는 실행되지 않는다.
-# 배포 전용 키로 SSH 접속만 한다. 서버의 authorized_keys가 이 키로 실행할 명령을 고정해 두어서
-# (develop 최신 코드 받기 → scripts/deploy.sh), 키가 유출돼도 다른 명령은 실행할 수 없다.
+# develop push로 돈 CI가 성공하면, CI가 테스트한 바로 그 커밋(head_sha)을 개발 서버(EC2)에 배포한다.
+# CI가 실패했거나 PR에서 돈 CI는 배포하지 않는다.
+# 배포 전용 키로 SSH 접속하며 "deploy <SHA>"만 넘긴다. 서버의 authorized_keys가 이 키로 실행할 명령을
+# scripts/deploy-remote.sh로 고정해 두어서, 키가 유출돼도 develop에 있는 커밋 배포 말고는 할 수 없다.
+# 수동 재배포: Actions 탭에서 해당 Deploy 실행을 Re-run 하면 같은 커밋을 다시 배포한다.
 #
 # 필요한 Secrets: EC2_HOST, EC2_USER, EC2_SSH_KEY(배포 전용 비밀키), EC2_KNOWN_HOSTS(서버 지문)
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [develop]
-  workflow_dispatch:   # Actions 탭에서 수동 재배포
 
 permissions:
   contents: read
@@ -20,6 +23,8 @@ concurrency:
 
 jobs:
   deploy:
+    # develop push로 돈 CI가 성공했을 때만 배포한다.
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -39,12 +44,15 @@ jobs:
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          echo "▶ 배포할 커밋: $DEPLOY_SHA"
+          # 넘긴 명령은 서버에서 $SSH_ORIGINAL_COMMAND로 받는다 (scripts/deploy-remote.sh가 검증).
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
             -o ServerAliveInterval=30 \
-            "$EC2_USER@$EC2_HOST"
+            "$EC2_USER@$EC2_HOST" "deploy $DEPLOY_SHA"
 
       - name: Clean up SSH key
         if: always()
