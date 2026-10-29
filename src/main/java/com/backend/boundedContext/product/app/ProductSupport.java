@@ -287,7 +287,7 @@ public class ProductSupport {
 
     /**
      * 사용 중인 카테고리만 정렬 순서대로 트리로 만든다.
-     * 상품 수는 구매자 검색 기본값과 같은 기준(판매 중, 품절 포함)이고, 대분류는 아래 소분류 상품 수의 합이다.
+     * 상품 수는 구매자 검색 기본값과 같은 기준(판매 중, 품절 제외)이고, 대분류는 아래 소분류 상품 수의 합이다.
      */
     public List<CategoryTreeDto> getCategoryTree() {
         List<Category> categories = categoryRepository.findAllByOrderBySortOrderAscIdAsc().stream()
