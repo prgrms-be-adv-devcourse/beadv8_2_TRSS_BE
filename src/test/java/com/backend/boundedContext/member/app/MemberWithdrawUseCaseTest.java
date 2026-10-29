@@ -143,7 +143,7 @@ class MemberWithdrawUseCaseTest {
     @DisplayName("비밀번호가 맞으면 조건 때문에 거절돼도 시도 횟수를 지운다")
     void withdraw_notAllowed_resetsAttempts() {
         given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
-        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(true, 0, 0, false));
+        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(true, false, 0, 0, false, false));
 
         assertThatThrownBy(() -> memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!")).isInstanceOf(DomainException.class);
         verify(loginAttemptStore).deleteAttempts(EMAIL);
