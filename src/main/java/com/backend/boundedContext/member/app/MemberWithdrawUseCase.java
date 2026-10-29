@@ -43,20 +43,23 @@ public class MemberWithdrawUseCase {
             seller.anonymize();
             sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()).forEach(SellerStatusHistory::anonymize);
         });
-        loginAttemptStore.deleteFailCount(member.getEmail());
         member.withdraw();
     }
 
     // Access Token만 가진 사람이 비밀번호를 계속 넣어 볼 수 없도록, 로그인과 같은 이메일별 실패 횟수·잠금을 씀
     private void checkPassword(Member member, String password) {
         String email = member.getEmail();
-        if (loginAttemptStore.getFailCount(email) >= memberPolicy.loginMaxAttempts()) {
+        long attempt = loginAttemptStore.increaseAttempt(email, memberPolicy.loginLockTtl());
+        if (attempt > memberPolicy.loginMaxAttempts()) {
             throw new DomainException(MemberErrorCode.LOGIN_LOCKED);
         }
-        if (passwordEncoder.matches(password, member.getPassword())) return;
+        if (passwordEncoder.matches(password, member.getPassword())) {
+            // 본인 확인이 끝났으므로 횟수를 지움 (탈퇴 조건 때문에 거절돼도 시도 횟수가 쌓이지 않게)
+            loginAttemptStore.deleteAttempts(email);
+            return;
+        }
 
-        long failCount = loginAttemptStore.increaseFailCount(email, memberPolicy.loginLockTtl());
-        if (failCount >= memberPolicy.loginMaxAttempts()) {
+        if (attempt == memberPolicy.loginMaxAttempts()) {
             loginAttemptStore.lock(email, memberPolicy.loginLockTtl());
             throw new DomainException(MemberErrorCode.LOGIN_LOCKED);
         }

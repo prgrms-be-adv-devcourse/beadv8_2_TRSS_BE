@@ -59,7 +59,7 @@ public interface MemberApi {
     /** 여러 회원 조회 (관리자 결제·충전 조회의 이메일 표시). 없는 ID는 결과에서 빠짐 */
     List<MemberDto> getMembers(Collection<Long> memberIds);
 
-    /** 이메일로 회원 조회 (정확히 일치, 관리자 결제·충전 검색). 없으면 empty */
+    /** 이메일로 회원 조회 (앞뒤 공백·대소문자를 무시하고 정확히 일치, 관리자 결제·충전 검색). 없으면 empty */
     Optional<MemberDto> findMemberByEmail(String email);
 
     /** 회원의 판매자 정보 (회원당 1개, 상태 무관). 판매자 신청 이력이 없으면 empty */

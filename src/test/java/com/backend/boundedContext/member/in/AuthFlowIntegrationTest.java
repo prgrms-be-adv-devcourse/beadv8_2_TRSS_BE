@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -54,6 +55,9 @@ class AuthFlowIntegrationTest {
     @Autowired
     private LoginAttemptStore loginAttemptStore;
 
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
     private final String email = "auth-it-" + UUID.randomUUID() + "@palette.com";
 
     // 테스트 중 발급된 Refresh Token (끝나면 Redis에서 지운다)
@@ -67,7 +71,7 @@ class AuthFlowIntegrationTest {
     @AfterEach
     void cleanUp() {
         issuedRefreshTokens.forEach(refreshTokenStore::delete);
-        loginAttemptStore.deleteFailCount(email);
+        loginAttemptStore.deleteAttempts(email);
         memberRepository.findByEmail(email).ifPresent(memberRepository::delete);
     }
 
@@ -139,7 +143,7 @@ class AuthFlowIntegrationTest {
         loginWith(email, PASSWORD)
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.resultCode").value("429-LOGIN_LOCKED"));
-        assertThat(loginAttemptStore.getFailCount(email)).isEqualTo(5);
+        assertThat(redisTemplate.opsForValue().get(LoginAttemptStore.ATTEMPT_COUNT_KEY + email)).isEqualTo("6");   // 잠금 중 시도도 세지만 잠금 시간은 늘지 않는다
     }
 
     @Test
@@ -152,7 +156,7 @@ class AuthFlowIntegrationTest {
             }
             loginWith(unknownEmail, PASSWORD).andExpect(jsonPath("$.resultCode").value("429-LOGIN_LOCKED"));
         } finally {
-            loginAttemptStore.deleteFailCount(unknownEmail);
+            loginAttemptStore.deleteAttempts(unknownEmail);
         }
     }
 

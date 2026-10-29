@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,7 +88,7 @@ class MemberWithdrawUseCaseTest {
 
         assertThat(member.getStatus()).isEqualTo(MemberStatus.DELETED);
         assertThat(member.getEmail()).isEqualTo("deleted-3@deleted.palette");
-        verify(loginAttemptStore).deleteFailCount(EMAIL);
+        verify(loginAttemptStore).deleteAttempts(EMAIL);
     }
 
     @Test
@@ -128,29 +129,40 @@ class MemberWithdrawUseCaseTest {
     }
 
     @Test
-    @DisplayName("비밀번호가 틀리면 400 PASSWORD_MISMATCH이고 로그인과 같은 실패 횟수를 올린다 (조건은 확인하지 않음)")
+    @DisplayName("비밀번호가 틀리면 400 PASSWORD_MISMATCH이고, 확인 전에 로그인과 같은 시도 횟수를 올린다 (조건은 확인하지 않음)")
     void withdraw_wrongPassword() {
+        given(loginAttemptStore.increaseAttempt(EMAIL, memberPolicy.loginLockTtl())).willReturn(1L);
         given(passwordEncoder.matches("wrong123!", "encoded")).willReturn(false);
-        given(loginAttemptStore.increaseFailCount(EMAIL, memberPolicy.loginLockTtl())).willReturn(1L);
 
         assertError(MemberErrorCode.PASSWORD_MISMATCH);
         verify(memberWithdrawalSupport, never()).check(anyLong());
+        verify(loginAttemptStore, never()).deleteAttempts(anyString());
     }
 
     @Test
-    @DisplayName("이번 실패로 5회가 되면 잠그고 429 LOGIN_LOCKED")
+    @DisplayName("비밀번호가 맞으면 조건 때문에 거절돼도 시도 횟수를 지운다")
+    void withdraw_notAllowed_resetsAttempts() {
+        given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
+        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(true, false, 0, 0, false, false));
+
+        assertThatThrownBy(() -> memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!")).isInstanceOf(DomainException.class);
+        verify(loginAttemptStore).deleteAttempts(EMAIL);
+    }
+
+    @Test
+    @DisplayName("5번째 시도가 실패하면 잠그고 429 LOGIN_LOCKED")
     void withdraw_fifthFailure_locks() {
+        given(loginAttemptStore.increaseAttempt(EMAIL, memberPolicy.loginLockTtl())).willReturn(5L);
         given(passwordEncoder.matches("wrong123!", "encoded")).willReturn(false);
-        given(loginAttemptStore.increaseFailCount(EMAIL, memberPolicy.loginLockTtl())).willReturn(5L);
 
         assertError(MemberErrorCode.LOGIN_LOCKED);
         verify(loginAttemptStore).lock(EMAIL, memberPolicy.loginLockTtl());
     }
 
     @Test
-    @DisplayName("잠긴 이메일이면 비밀번호를 확인하지 않고 429 LOGIN_LOCKED")
+    @DisplayName("최대 횟수를 넘은 시도는 비밀번호를 확인하지 않고 429 LOGIN_LOCKED")
     void withdraw_locked() {
-        given(loginAttemptStore.getFailCount(EMAIL)).willReturn(5L);
+        given(loginAttemptStore.increaseAttempt(EMAIL, memberPolicy.loginLockTtl())).willReturn(6L);
 
         assertError(MemberErrorCode.LOGIN_LOCKED);
         verify(passwordEncoder, never()).matches(any(), any());
