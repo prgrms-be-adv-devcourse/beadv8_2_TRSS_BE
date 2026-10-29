@@ -26,11 +26,6 @@ public class ProductCreateCategoryUseCase {
         return categoryRepository.save(category);
     }
 
-    /** 대분류를 추가한다. 초기 데이터에서만 쓴다. */
-    public Category createRootCategory(String name, int sortOrder) {
-        return categoryRepository.save(Category.createRoot(name, sortOrder));
-    }
-
     private int nextSortOrder(Category parent) {
         return categoryRepository.findTopByParentOrderBySortOrderDesc(parent)
                 .map(last -> last.getSortOrder() + 1)

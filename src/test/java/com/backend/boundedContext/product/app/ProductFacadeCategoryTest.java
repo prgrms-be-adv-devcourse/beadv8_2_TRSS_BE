@@ -10,13 +10,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * ProductDataInit이 넣은 초기 카테고리(뷰티·의류 각 8개)를 기준으로 검증한다.
+ * 마이그레이션(V13)이 넣은 기본 카테고리(뷰티·의류 각 8개)를 기준으로 검증한다.
  * 테스트마다 롤백된다.
  */
 @SpringBootTest
@@ -34,14 +33,6 @@ class ProductFacadeCategoryTest {
         assertThat(tree).extracting(CategoryTreeDto::name).containsExactly("뷰티", "의류");
         assertThat(tree).allSatisfy(root -> assertThat(root.children()).hasSize(8));
         assertThat(tree.getFirst().children().getFirst().name()).isEqualTo("메이크업");
-    }
-
-    @Test
-    @DisplayName("초기 데이터를 다시 넣어도 중복으로 들어가지 않는다")
-    void createBaseCategoriesTwice() {
-        productFacade.createBaseCategories(Map.of("테스트", List.of("하위")));
-
-        assertThat(productFacade.getCategoryTreeForAdmin()).hasSize(2);
     }
 
     @Test

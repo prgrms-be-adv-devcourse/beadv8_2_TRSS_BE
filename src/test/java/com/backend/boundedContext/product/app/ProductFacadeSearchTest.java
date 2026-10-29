@@ -39,7 +39,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 상품 검색·상세를 Facade로 검증한다. 다른 데이터(샘플 상품 등)와 섞이지 않도록 상품명에 고유한 단어(KEY)를 넣고 그 단어로 검색한다.
- * 카테고리는 ProductDataInit의 초기 데이터를 쓰고, 테스트마다 롤백된다.
+ * 카테고리는 마이그레이션(V13)이 넣은 기본 카테고리를 쓰고, 테스트마다 롤백된다.
  */
 @SpringBootTest
 @Transactional

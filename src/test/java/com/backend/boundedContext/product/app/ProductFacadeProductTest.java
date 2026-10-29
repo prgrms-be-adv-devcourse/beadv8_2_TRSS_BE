@@ -34,7 +34,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 판매자 정보는 회원 컨텍스트 대신 MemberApi를 mock으로 바꿔서 준비한다.
- * 카테고리는 ProductDataInit의 초기 데이터를 쓴다. 테스트마다 롤백된다.
+ * 카테고리는 마이그레이션(V13)이 넣은 기본 카테고리를 쓴다. 테스트마다 롤백된다.
  */
 @SpringBootTest
 @Transactional

@@ -379,10 +379,12 @@ custom:
 
 각 컨텍스트의 `<Ctx>DataInit`(`ApplicationRunner`)이 개발용 데이터를 넣습니다. 데이터가 이미 있으면 아무것도 하지 않습니다(멱등).
 
+운영에도 필요한 기본 데이터(카테고리)는 DataInit이 아니라 마이그레이션(`V13`)으로 넣습니다. 카테고리가 하나라도 있으면 넣지 않습니다.
+
 | `@Order` | DataInit | 넣는 데이터 |
 | --- | --- | --- |
 | 1 | `MemberDataInit` | **1번 관리자, 2번 판매자(APPROVED), 3번 구매자** + 각자 지갑 (ID 고정, `adminMemberId: 1`과 연결) |
-| 2 | `ProductDataInit` | 카테고리(뷰티/의류 + 소분류), 2번 판매자의 상품 몇 개 |
+| 2 | `ProductDataInit` | 2번 판매자의 샘플 상품 (`local` 프로필에서만) |
 | 3 | `PaymentDataInit` | 3번 구매자의 결제 완료 건·HELD 홀딩(정산 시드 주문 -1·-2용, 잔액·원장 변화 없음, `MEMBER_SEED_PASSWORD`가 있을 때만) |
 | 4 | `OrderDataInit` | (필요하면) 테스트 주문 |
 | 5 | `SettlementDataInit` | (필요하면) 정산 후보 |

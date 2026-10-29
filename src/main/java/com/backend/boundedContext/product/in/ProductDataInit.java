@@ -8,22 +8,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * 상품 컨텍스트 개발용 초기 데이터. 이미 데이터가 있으면 아무것도 하지 않는다.
- * 카테고리는 항상 넣고, 샘플 상품은 회원 시드의 승인된 판매자(2번 회원)가 있을 때만 넣는다.
+ * 상품 컨텍스트 로컬 개발용 샘플 상품. 상품이 이미 있으면 아무것도 하지 않는다.
+ * 회원 시드의 승인된 판매자(2번 회원)가 있을 때만 넣는다. 기본 카테고리는 마이그레이션(V13)이 넣는다.
  * 샘플 상품의 대표 이미지는 모두 {@value #SAMPLE_THUMBNAIL}을 쓴다 (상품마다 파일은 따로 저장된다).
  */
 @Slf4j
 @Configuration
+@Profile("local")
 @RequiredArgsConstructor
 public class ProductDataInit {
     private final ProductFacade productFacade;
@@ -32,14 +32,6 @@ public class ProductDataInit {
     private static final long SEED_SELLER_MEMBER_ID = 2L;
 
     private static final String SAMPLE_THUMBNAIL = "sample/product-sample.png";
-
-    /** 기획서 1장의 카테고리. 넣은 순서가 정렬 순서가 된다. */
-    private static final Map<String, List<String>> BASE_CATEGORIES = new LinkedHashMap<>();
-
-    static {
-        BASE_CATEGORIES.put("뷰티", List.of("메이크업", "바디케어", "선케어", "마스크팩", "클렌징", "스킨케어", "헤어케어", "건강식품"));
-        BASE_CATEGORIES.put("의류", List.of("상의", "아우터", "바지", "원피스/스커트", "신발", "가방", "모자", "소품"));
-    }
 
     /** 소분류마다 2개. 재고가 5개 이하인 상품을 섞어서 품절·재고 부족 흐름을 확인할 수 있게 한다. */
     private static final List<ProductSampleDto> SAMPLE_PRODUCTS = List.of(
@@ -81,8 +73,6 @@ public class ProductDataInit {
     @Order(2)   // 회원 시드(@Order(1)) 다음에 실행해야 시드 판매자가 있다
     public ApplicationRunner productDataInitApplicationRunner() {
         return args -> {
-            productFacade.createBaseCategories(BASE_CATEGORIES);
-
             int created = productFacade.createSampleProducts(SEED_SELLER_MEMBER_ID, SAMPLE_PRODUCTS, sampleThumbnail());
             if (created > 0) log.info("샘플 상품 {}개 등록 (판매자 회원 ID {})", created, SEED_SELLER_MEMBER_ID);
         };

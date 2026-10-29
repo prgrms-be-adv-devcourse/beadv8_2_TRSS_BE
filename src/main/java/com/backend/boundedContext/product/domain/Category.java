@@ -46,7 +46,7 @@ public class Category extends BaseIdAndTime {
         this.active = true;
     }
 
-    /** 대분류를 만든다. 초기 데이터에서만 쓴다. */
+    /** 대분류를 만든다. 기본 대분류는 마이그레이션(V13)이 넣으므로 테스트에서만 쓴다. */
     public static Category createRoot(String name, int sortOrder) {
         return new Category(null, name, sortOrder);
     }
