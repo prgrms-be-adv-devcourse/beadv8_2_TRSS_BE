@@ -58,7 +58,8 @@
 - 상태는 PENDING → APPROVED/REJECTED, 철회는 APPROVED → WITHDRAW_REQUESTED → WITHDRAWN(거절 시 APPROVED), 제재는 APPROVED·WITHDRAW_REQUESTED → SANCTIONED이다
     - REJECTED·WITHDRAWN은 같은 신청 API로 재신청하면 PENDING으로 돌아가고, SANCTIONED는 재신청할 수 없다
 - 판매자 정보는 회원당 1개이며, 사업자번호는 심사 중·판매 중·철회 심사 중·제재된 판매자와 겹칠 수 없다(반려·본인 철회 시 비워져 재사용 가능)
-- 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인)
+- 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인). 상품 관리는 내 상품 목록·재고 이력 조회까지 포함한다
+    - 제재·철회된 판매자도 지난 판매 주문 항목·정산 내역은 조회할 수 있지만, 이전에 등록한 상품 목록은 볼 수 없다
 - 판매자도 일반 회원처럼 구매할 수 있다. 단, 본인 상품은 장바구니에 담거나 주문할 수 없다
 - 판매자 정산금은 해당 회원의 기존 예치금 지갑에 지급하며, 판매자는 정산받은 예치금으로 상품을 구매할 수 있다
 - **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN
