@@ -1,5 +1,7 @@
 package com.backend.boundedContext.product.in.dto;
 
+import com.backend.boundedContext.product.domain.ProductOption;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -12,13 +14,13 @@ import jakarta.validation.constraints.Size;
  * @param price       가격 (원)
  * @param categoryId  소분류 ID (사용 중인 소분류만 가능)
  * @param description 상품 설명
- * @param stock       초기 재고. 기본 옵션의 재고가 된다
+ * @param stock       초기 재고. 기본 옵션의 재고가 된다 (최대 {@value ProductOption#MAX_STOCK})
  */
 public record ProductCreateRequest(
         @NotBlank @Size(max = 100) String name,
         @NotNull @Positive Long price,
         @NotNull Long categoryId,
         @NotBlank String description,
-        @NotNull @Positive Integer stock
+        @NotNull @Positive @Max(ProductOption.MAX_STOCK) Integer stock
 ) {
 }

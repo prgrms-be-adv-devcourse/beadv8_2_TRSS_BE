@@ -18,7 +18,7 @@ import static jakarta.persistence.FetchType.LAZY;
 
 /**
  * 상품 옵션. 장바구니에 담고 재고를 세는 판매 단위(SKU)다.
- * 이번 범위에서는 상품마다 기본 옵션 1개만 만든다. 재고는 0 이상이다.
+ * 이번 범위에서는 상품마다 기본 옵션 1개만 만든다. 재고는 0 이상 {@value #MAX_STOCK} 이하다.
  */
 @Entity
 @Table(name = "product_option")
@@ -32,6 +32,9 @@ public class ProductOption extends BaseIdAndTime {
     /** 재고가 이 수 이하면 구매자에게 남은 수량을 보여 준다. */
     public static final int LOW_STOCK_THRESHOLD = 5;
 
+    /** 옵션 하나에 둘 수 있는 최대 재고. 재고 조정·복원이 int 범위를 넘지 않게 막는다. */
+    public static final int MAX_STOCK = 1_000_000;
+
     @ManyToOne(fetch = LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
@@ -44,10 +47,10 @@ public class ProductOption extends BaseIdAndTime {
 
     private LocalDateTime deletedAt;
 
-    /** 상품 등록 시 기본 옵션을 만든다. 초기 재고는 1 이상이다. */
+    /** 상품 등록 시 기본 옵션을 만든다. 초기 재고는 1 이상 {@value #MAX_STOCK} 이하다. */
     public static ProductOption createDefault(Product product, int stock) {
-        if (stock < 1) {
-            throw new IllegalArgumentException("초기 재고는 1 이상이어야 합니다. stock=" + stock);
+        if (stock < 1 || stock > MAX_STOCK) {
+            throw new IllegalArgumentException("초기 재고는 1 이상 " + MAX_STOCK + " 이하여야 합니다. stock=" + stock);
         }
 
         ProductOption option = new ProductOption();
@@ -101,6 +104,7 @@ public class ProductOption extends BaseIdAndTime {
     /**
      * 주문 취소·반품으로 재고를 되돌린다. 상품 상태는 바꾸지 않는다 (중지된 상품도 재고만 는다).
      * 반품 복원(RETURN_RESTORE)은 삭제된 상품·옵션이면 409. 주문 취소 복원은 삭제돼도 재고를 늘린다.
+     * 결과가 {@value #MAX_STOCK}를 넘으면 400.
      */
     public void restoreStock(int quantity, StockChangeType changeType) {
         checkQuantity(quantity);
@@ -108,12 +112,13 @@ public class ProductOption extends BaseIdAndTime {
             if (product.isDeleted()) throw new DomainException(ProductErrorCode.PRODUCT_DELETED);
             if (isDeleted()) throw new DomainException(ProductErrorCode.OPTION_DELETED);
         }
-        stock += quantity;
+        addStock(quantity);
     }
 
     /**
      * 판매자가 재고를 증감량만큼 조정한다. 늘리면 양수, 줄이면 음수.
-     * 판매 중지·삭제된 상품이면 409(상품을 먼저 본다), 삭제된 옵션이면 409, 결과가 0 미만이면 400.
+     * 판매 중지·삭제된 상품이면 409(상품을 먼저 본다), 삭제된 옵션이면 409,
+     * 결과가 0 미만이거나 {@value #MAX_STOCK}를 넘으면 400.
      */
     public void adjustStock(int changeQty) {
         if (changeQty == 0) {
@@ -123,10 +128,19 @@ public class ProductOption extends BaseIdAndTime {
         if (isDeleted()) {
             throw new DomainException(ProductErrorCode.OPTION_DELETED);
         }
-        if (stock + changeQty < 0) {
+        addStock(changeQty);
+    }
+
+    /** 재고를 change만큼 바꾼다. int가 넘치지 않게 long으로 계산한다. */
+    private void addStock(long change) {
+        long next = stock + change;
+        if (next < 0) {
             throw new DomainException(ProductErrorCode.STOCK_NEGATIVE);
         }
-        stock += changeQty;
+        if (next > MAX_STOCK) {
+            throw new DomainException(ProductErrorCode.STOCK_LIMIT_EXCEEDED);
+        }
+        stock = (int) next;
     }
 
     private void checkQuantity(int quantity) {

@@ -254,7 +254,7 @@ class ProductFacadeSearchTest {
     }
 
     @Test
-    @DisplayName("카테고리 트리 상품 수: 판매 중 상품(품절 포함)만 세고, 대분류는 소분류 합이며, 검색 결과 개수와 같다")
+    @DisplayName("카테고리 트리 상품 수: 판매 중 상품(품절 제외)만 세고, 대분류는 소분류 합이며, 검색 기본값의 결과 개수와 같다")
     void categoryProductCount() {
         long skincareBefore = child("뷰티", "스킨케어").productCount();
         long beautyBefore = root("뷰티").productCount();
@@ -269,13 +269,13 @@ class ProductFacadeSearchTest {
         productRepository.flush();
 
         CategoryTreeDto beauty = root("뷰티");
-        assertThat(child("뷰티", "스킨케어").productCount()).isEqualTo(skincareBefore + 2);
-        assertThat(beauty.productCount()).isEqualTo(beautyBefore + 3);
+        assertThat(child("뷰티", "스킨케어").productCount()).isEqualTo(skincareBefore + 1);
+        assertThat(beauty.productCount()).isEqualTo(beautyBefore + 2);
         assertThat(beauty.productCount()).isEqualTo(beauty.children().stream().mapToLong(CategoryTreeDto::productCount).sum());
         assertThat(child("의류", "상의").productCount()).isEqualTo(topBefore);
-        assertThat(search(null, skincare.getId(), ProductSort.LATEST, false).totalElements())
+        assertThat(search(null, skincare.getId(), ProductSort.LATEST, true).totalElements())
                 .isEqualTo(child("뷰티", "스킨케어").productCount());
-        assertThat(search(null, skincare.getParent().getId(), ProductSort.LATEST, false).totalElements())
+        assertThat(search(null, skincare.getParent().getId(), ProductSort.LATEST, true).totalElements())
                 .isEqualTo(beauty.productCount());
     }
 

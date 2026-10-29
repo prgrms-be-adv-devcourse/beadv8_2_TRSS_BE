@@ -273,14 +273,14 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | --- | --- | --- | --- | --- |
 | /products | GET | 모두 | 상품 검색·목록(`keyword`, `categoryId`, `sort`=LATEST·PRICE_ASC·PRICE_DESC, `excludeSoldOut`=true) | 400 |
 | /products/{productId} | GET | 모두 | 상품 상세(가격, 설명, 상호명, 품절 여부, 재고 5개 이하면 남은 수량) | 404 |
-| /categories | GET | 모두 | 카테고리 트리(대분류-소분류, 사용 중인 것만). 노드마다 `productCount`(판매 중 상품 수, 품절 포함, 대분류는 소분류 합) | - |
+| /categories | GET | 모두 | 카테고리 트리(대분류-소분류, 사용 중인 것만). 노드마다 `productCount`(판매 중 상품 수, 품절 제외, 대분류는 소분류 합) | - |
 | /seller/products | POST | SELLER | 상품 등록(multipart: `request` JSON + `thumbnail` 필수 + `detailImages` 최대 10개, jpg·png·webp 장당 5MB) | 400 THUMBNAIL_REQUIRED·IMAGE_TYPE_NOT_ALLOWED·DETAIL_IMAGE_LIMIT_EXCEEDED, 403 |
 | /seller/products | GET | SELLER | 본인 상품 목록(`status`=ON_SALE·SOLD_OUT·STOPPED, `keyword`, 최신순, 삭제 상품 제외) | - |
 | /seller/products/counts | GET | SELLER | 탭별 개수(전체·판매중·품절·판매 중지, 목록과 같은 `keyword`) | - |
 | /seller/products/{productId} | GET | SELLER | 수정 폼 조회(상품 정보, 대표·상세 이미지 ID·URL) | 404 |
 | /seller/products/{productId} | PATCH | SELLER | 상품 수정(multipart, 재고 제외, 보낸 항목만. `thumbnail` 교체, `detailImageIds`로 남길 상세 이미지·순서, `detailImages`는 뒤에 추가) | 400 DETAIL_IMAGE_NOT_FOUND·DETAIL_IMAGE_LIMIT_EXCEEDED, 404, 409 PRODUCT_NOT_EDITABLE |
 | /seller/products/{productId} | DELETE | SELLER | 상품 삭제(소프트 삭제, 판매 중·품절만. 결제 대기 주문 취소) | 404, 409 PRODUCT_NOT_EDITABLE |
-| /seller/products/{productId}/options/{optionId}/stock-adjustments | POST | SELLER | 옵션 재고 조정(증감량 `changeQty`, 사유 없음) | 400 STOCK_NEGATIVE, 404, 409 PRODUCT_NOT_EDITABLE·OPTION_DELETED |
+| /seller/products/{productId}/options/{optionId}/stock-adjustments | POST | SELLER | 옵션 재고 조정(증감량 `changeQty`, 사유 없음) | 400 STOCK_NEGATIVE·STOCK_LIMIT_EXCEEDED, 404, 409 PRODUCT_NOT_EDITABLE·OPTION_DELETED |
 | /seller/products/{productId}/options/{optionId}/stock-history | GET | SELLER | 옵션 재고 이력(최신순, 판매 중지 상품도 조회 가능) | 404 |
 | /seller/products/{productId}/stop-requests | POST | SELLER | 판매 중지 요청(사유 필수, 최대 300자) → 관리자 검토, 승인 전까지 판매 계속 | 404, 409 PRODUCT_NOT_EDITABLE·STOP_REQUEST_PENDING |
 

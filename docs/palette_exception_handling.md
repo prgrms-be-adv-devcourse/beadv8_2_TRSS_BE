@@ -263,6 +263,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-PRODUCT_NOT_ON_SALE | 판매 중이 아닌 상품 차감(주문), 관리자 즉시 중지 시 이미 중지·삭제된 상품 |
 | | 409-PRODUCT_NOT_EDITABLE | 판매 중지·삭제된 상품의 수정·삭제·재고 조정·중지 요청 |
 | | 400-STOCK_NEGATIVE | 재고 조정 결과가 음수 |
+| | 400-STOCK_LIMIT_EXCEEDED | 재고 조정·복원 결과가 1,000,000개 초과 |
 | | 400-OUT_OF_STOCK | 주문 수량 > 재고 |
 | | 400-THUMBNAIL_REQUIRED | 상품 등록 시 대표 이미지 없음 |
 | | 400-IMAGE_TYPE_NOT_ALLOWED | jpg·png·webp가 아닌 이미지 (파일 내용으로 확인) |

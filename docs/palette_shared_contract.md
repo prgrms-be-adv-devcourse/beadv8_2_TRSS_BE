@@ -134,6 +134,7 @@ public interface ProductApi {
      * 재고만 바꾸고 상품 상태는 바꾸지 않는다(STOPPED 상품도 재고만 늘어난다).
      * 삭제된 상품·옵션은 ORDER_RESTORE만 재고를 늘리고, RETURN_RESTORE면 409 PRODUCT_DELETED / OPTION_DELETED
      * (주문 컨텍스트가 반품 승인에서 삭제된 대상을 미리 거른다).
+     * 복원 결과가 옵션 최대 재고(1,000,000)를 넘으면 400 STOCK_LIMIT_EXCEEDED.
      * 같은 주문 항목·사유로 다시 호출하면 아무것도 하지 않고 정상 종료한다. 차감한 적 없는 항목이면 IllegalStateException.
      */
     void restoreStock(List<StockChangeDto> items, StockRestoreReason reason);

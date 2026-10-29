@@ -88,6 +88,21 @@ class ProductOptionTest {
     }
 
     @Test
+    @DisplayName("복원 결과가 최대 재고를 넘으면 STOCK_LIMIT_EXCEEDED, 최대 재고까지는 늘릴 수 있다")
+    void restoreStockLimitExceeded() {
+        option.restoreStock(ProductOption.MAX_STOCK - 5, StockChangeType.ORDER_RESTORE);
+        assertThat(option.getStock()).isEqualTo(ProductOption.MAX_STOCK);
+
+        assertThatThrownBy(() -> option.restoreStock(1, StockChangeType.ORDER_RESTORE))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
+        assertThatThrownBy(() -> option.restoreStock(Integer.MAX_VALUE, StockChangeType.RETURN_RESTORE))   // int가 넘쳐 음수가 되지 않는다
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
+        assertThat(option.getStock()).isEqualTo(ProductOption.MAX_STOCK);
+    }
+
+    @Test
     @DisplayName("반품 복원은 삭제된 상품이면 PRODUCT_DELETED, 삭제된 옵션이면 OPTION_DELETED (상품을 먼저 본다)")
     void returnRestoreDeleted() {
         deleteOption();
@@ -127,6 +142,21 @@ class ProductOptionTest {
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_NEGATIVE");
         assertThat(option.getStock()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("재고 조정: 결과가 최대 재고를 넘으면 STOCK_LIMIT_EXCEEDED, 재고는 그대로다")
+    void adjustStockLimitExceeded() {
+        assertThatThrownBy(() -> option.adjustStock(ProductOption.MAX_STOCK - 4))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
+        assertThatThrownBy(() -> option.adjustStock(Integer.MAX_VALUE))   // int가 넘쳐 음수로 판단되지 않는다
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
+        assertThat(option.getStock()).isEqualTo(5);
+
+        option.adjustStock(ProductOption.MAX_STOCK - 5);
+        assertThat(option.getStock()).isEqualTo(ProductOption.MAX_STOCK);
     }
 
     @Test
