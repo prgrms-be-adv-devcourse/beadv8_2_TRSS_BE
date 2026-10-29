@@ -8,10 +8,12 @@ import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
+import com.backend.boundedContext.order.in.dto.PendingOrderConflictResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.out.MemberApi;
+import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.out.ProductApi;
 import lombok.RequiredArgsConstructor;
@@ -32,17 +34,32 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OrderCreateOrderUseCase {
 
+    private static final int IDEMPOTENCY_KEY_MAX_LENGTH = 64;
+
     private final OrderSupport orderSupport;
     private final OrderRepository orderRepository;
     private final OrderPolicy orderPolicy;
     private final ProductApi productApi;
     private final MemberApi memberApi;
 
-    public OrderCreateResponse create(Long buyerId, List<Long> cartItemIds, long expectedTotalPrice) {
+    public OrderCreateResponse create(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice) {
         // 탈퇴한 회원은 남은 Access Token으로 주문할 수 없게 401 (재고가 차감되지 않도록)
         memberApi.checkActiveMember(buyerId);
+        validateIdempotencyKey(idempotencyKey);
 
         Cart cart = orderSupport.getCartForUpdate(buyerId);
+
+        // 같은 키로 다시 온 요청이면 처음 만든 주문을 그대로 돌려준다
+        // 그 주문이 취소(만료 포함)됐으면 키를 다시 쓸 수 없으므로 409로 알려 새 키로 주문하게 한다
+        if (idempotencyKey != null) {
+            Optional<Order> existing = orderRepository.findByBuyerIdAndIdempotencyKey(buyerId, idempotencyKey);
+            if (existing.isPresent()) {
+                if (existing.get().getStatus() == OrderStatus.CANCELED) {
+                    throw new DomainException(OrderErrorCode.IDEMPOTENCY_KEY_EXPIRED);
+                }
+                return OrderCreateResponse.from(existing.get());
+            }
+        }
 
         // 내 장바구니 항목인지 확인
         List<CartItem> cartItems = cartItemIds.stream()
@@ -62,7 +79,7 @@ public class OrderCreateOrderUseCase {
         List<OrderItemSpec> specs = cartItems.stream()
                 .map(item -> toSpec(item, options.get(item.getOptionId()), sellerNames))
                 .toList();
-        Order order = Order.create(buyerId, specs, LocalDateTime.now(), orderPolicy.getExpireMinutes());
+        Order order = Order.create(buyerId, idempotencyKey, specs, LocalDateTime.now(), orderPolicy.getExpireMinutes());
 
         if (order.getTotalPrice() != expectedTotalPrice) {
             throw new DomainException(OrderErrorCode.PRICE_CHANGED);
@@ -73,7 +90,15 @@ public class OrderCreateOrderUseCase {
                 .map(OrderItem::toStockChangeDto)
                 .toList());
 
-        return new OrderCreateResponse(order.getId(), order.getOrderNumber(), order.getTotalPrice(), order.getExpiresAt());
+        return OrderCreateResponse.from(order);
+    }
+
+    // 키를 보냈다면 비어 있지 않고 컬럼 길이 이내여야 함
+    private void validateIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey != null
+                && (idempotencyKey.isBlank() || idempotencyKey.length() > IDEMPOTENCY_KEY_MAX_LENGTH)) {
+            throw new DomainException(OrderErrorCode.IDEMPOTENCY_KEY_INVALID);
+        }
     }
 
     // 최대 구매 수량
@@ -100,9 +125,14 @@ public class OrderCreateOrderUseCase {
     }
 
     // 결제 대기 주문에 들어 있는 옵션으로는 새 주문을 만들 수 없음
+    // 응답 유실 후 키 없이 다시 보낸 경우에도 주문서로 돌아갈 수 있게 결제 대기 주문 ID를 담는다
     private void validateNotInPendingOrder(Long buyerId, List<Long> optionIds) {
-        if (!orderSupport.findOptionIdsInPendingOrders(buyerId, optionIds).isEmpty()) {
-            throw new DomainException(OrderErrorCode.CART_ITEM_IN_PENDING_ORDER);
+        List<Long> pendingOrderIds = orderRepository.findOrderIdsContainingOptions(
+                buyerId, optionIds, Order.PAYMENT_PENDING_STATUSES);
+
+        if (!pendingOrderIds.isEmpty()) {
+            throw new DomainException(OrderErrorCode.CART_ITEM_IN_PENDING_ORDER,
+                    new PendingOrderConflictResponse(pendingOrderIds));
         }
     }
 

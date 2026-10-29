@@ -1,0 +1,55 @@
+# 앱 ERROR 로그 알림 규칙. 1분마다 최근 5분의 ERROR 로그 수를 클래스별로 세고, 1건이라도 있으면 알린다.
+# 앱 로그는 운영에서 JSON(ECS)으로 찍히므로(compose.prod.yaml의 LOGGING_STRUCTURED_FORMAT_CONSOLE)
+# | json 으로 log.level → log_level, log.logger → log_logger 필드를 꺼내 쓴다.
+# 4xx는 GlobalExceptionHandler가 ERROR로 남기지 않으므로 알림 대상이 아니다.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: palette-app
+    folder: Palette
+    interval: 1m
+    rules:
+      - uid: palette-app-error-log
+        title: 앱 ERROR 로그
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              expr: >-
+                sum by (log_logger) (
+                  count_over_time({container="palette-app"} | json | __error__="" | log_level="ERROR" [5m])
+                )
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        for: 0s
+        noDataState: OK       # ERROR가 없으면 결과가 비어 있으므로 정상으로 본다
+        execErrState: Error   # Loki 조회 자체가 실패하면 그것도 알린다
+        labels:
+          severity: error
+        annotations:
+          summary: "{{ $labels.log_logger }}에서 최근 5분간 ERROR {{ $values.B }}건"
+          description: >-
+            Grafana Explore에서 확인:
+            {container="palette-app"} | json | log_level="ERROR" | log_logger="{{ $labels.log_logger }}"

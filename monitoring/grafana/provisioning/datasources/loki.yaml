@@ -1,0 +1,11 @@
+# Grafana가 뜰 때 Loki를 데이터 소스로 자동 등록한다. 알림 규칙(alerting/)이 uid "loki"로 이 소스를 찾는다.
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: false

@@ -216,7 +216,7 @@ if (updated == 0) throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
   - 5xx·`ALREADY_PROCESSED_PAYMENT`·승인 후 DB 반영 실패 → 충전 PROCESSING, `200-1` + `data.status: "PROCESSING"`
   - 연결 5초·응답 30초 제한 (`custom.toss`)
 - **응답 시간 초과는 실패로 단정하지 않는다.** 카드 승인은 이미 됐을 수 있다. 충전을 `PROCESSING`으로 두고 성공 응답 `200-1` + `data.status: "PROCESSING"`(결과 확인 중)으로 돌려준다. 프론트는 `data.status`로 완료와 확인 중을 구분한다. 대사 스케줄러가 토스 조회로 결과를 확정한다.
-- 같은 `Idempotency-Key` + 같은 요청은 오류가 아니라 처음 응답을 그대로 돌려준다. 다른 본문이면 `409-IDEMPOTENCY_KEY_REUSED`다. (헤더는 미구현. 지금은 충전 승인 재요청이 `409-TOPUP_ALREADY_PROCESSED`이고 상태는 `GET /topups/{id}`로 확인한다. 내부 `PaymentApi.pay()`만 같은 키에 처음 결과를 돌려준다)
+- 같은 `Idempotency-Key` + 같은 요청은 오류가 아니라 처음 응답을 그대로 돌려준다. 다른 본문이면 `409-IDEMPOTENCY_KEY_REUSED`다. (주문 생성 `POST /orders`는 구현: 같은 구매자·같은 키면 처음 만든 주문을 돌려주고(그 주문이 취소됐으면 `409-IDEMPOTENCY_KEY_EXPIRED`), 본문은 비교하지 않는다. 그 밖의 API는 헤더 미구현. 지금은 충전 승인 재요청이 `409-TOPUP_ALREADY_PROCESSED`이고 상태는 `GET /topups/{id}`로 확인한다. 내부 `PaymentApi.pay()`만 같은 키에 처음 결과를 돌려준다)
 
 ### 6.5 스케줄러·Spring Batch·이벤트 리스너
 
@@ -282,7 +282,9 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | order (은정) | 400-SELF_PURCHASE_NOT_ALLOWED | 본인 상품 담기·주문 |
 | | 400-STOCK_EXCEEDED | 장바구니 수량 > 재고 |
 | | 409-PRICE_CHANGED | 예상 금액 ≠ 현재 금액 (`data.currentAmount`) |
-| | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기 주문에 포함된 장바구니 항목 |
+| | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기 주문에 포함된 장바구니 항목 (`data.pendingOrderIds`: 그 결제 대기 주문 ID, 오름차순) |
+| | 400-IDEMPOTENCY_KEY_INVALID | 주문 생성 `Idempotency-Key`가 비어 있거나 64자 초과 |
+| | 409-IDEMPOTENCY_KEY_EXPIRED | 같은 `Idempotency-Key`로 만든 주문이 이미 취소(만료 포함)됨. 새 키로 다시 주문 |
 | | 404-ORDER_NOT_FOUND | |
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |

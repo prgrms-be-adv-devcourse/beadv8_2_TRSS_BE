@@ -92,6 +92,7 @@
 - 상품 추가·삭제·수량 변경은 장바구니에서만 한다. 주문이 생긴 뒤에는 결제하거나 전체 취소하는 것만 할 수 있다
 - 장바구니 항목은 주문 결제가 완료되는 시점에 삭제한다(주문에 포함된 항목만)
 - 결제 대기 주문(CREATED·PAYMENT_FAILED)에 들어 있는 장바구니 항목으로는 새 주문을 만들 수 없다
+- 주문 생성 응답을 받지 못해 같은 `Idempotency-Key`로 다시 요청하면 처음 만든 주문을 그대로 돌려준다. 그 주문이 취소(만료 포함)됐으면 409로 거절하고 새 키로 다시 주문한다
 - 주문 생성 때 가격·상품·판매자 정보를 스냅샷으로 고정하고 재고를 차감(예약, ORDER_DEDUCT)한다
 - 주문 상태는 CREATED, PAYMENT_FAILED, PAID, CONFIRMED, CANCELED, RETURN_REQUESTED, RETURNED 7개이며, 판매자별로 나누지 않고 주문서 하나에 하나의 상태만 둔다
 
@@ -241,7 +242,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
   - 인증 실패 401, 권한 부족 403, 상태 충돌 409, 잔액 부족 402. 아래 표의 "주요 오류" `409 EMAIL_DUPLICATED`는 `resultCode` `409-EMAIL_DUPLICATED`를 뜻한다
   - 예외 처리 방식은 `palette_exception_handling.md`를 따른다
 - 목록: `page`(0부터), `size`(기본 20, 최대 100. 상품 검색 `GET /products`만 최대 50), 기본 최신순(관리자 회원·판매자 목록처럼 정렬이 고정된 목록은 표에 적는다)
-- 돈이 움직이는 쓰기 API(충전·결제·충전 취소)는 `Idempotency-Key` 헤더를 받아 24시간 같은 응답을 돌려준다 (헤더는 미구현. 현재 충전 승인은 결제키 UNIQUE로 한 번만 반영하고 재요청은 409 TOPUP_ALREADY_PROCESSED, 주문 결제는 주문 모듈이 시도마다 만든 내부 멱등 키로 처리한다)
+- 돈이 움직이는 쓰기 API(충전·결제·충전 취소)는 `Idempotency-Key` 헤더를 받아 24시간 같은 응답을 돌려준다 (주문 생성만 구현: 같은 구매자·같은 키면 처음 만든 주문을 돌려주며 기간 제한 없음. 충전·결제·충전 취소는 헤더 미구현으로, 충전 승인은 결제키 UNIQUE로 한 번만 반영하고 재요청은 409 TOPUP_ALREADY_PROCESSED, 주문 결제는 주문 모듈이 시도마다 만든 내부 멱등 키로 처리한다)
 - 금액은 원 단위 정수, 시각은 KST ISO-8601
 
 ### 3.1 회원, 판매자
@@ -295,7 +296,7 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
-| /orders | POST | USER | 주문 생성(장바구니 항목 id, 예상 금액) → CREATED, `expiresAt`(생성 + 15분) | 400 OUT_OF_STOCK, 409 PRICE_CHANGED, 409 PRODUCT_NOT_ON_SALE, 409 CART_ITEM_IN_PENDING_ORDER, 400 SELF_PURCHASE_NOT_ALLOWED |
+| /orders | POST | USER | 주문 생성(장바구니 항목 id, 예상 금액, `Idempotency-Key` 헤더 선택) → CREATED, `expiresAt`(생성 + 15분). 같은 키로 다시 요청하면 처음 만든 주문 응답 | 400 OUT_OF_STOCK, 409 PRICE_CHANGED, 409 PRODUCT_NOT_ON_SALE, 409 CART_ITEM_IN_PENDING_ORDER(`pendingOrderIds`), 400 SELF_PURCHASE_NOT_ALLOWED, 400 IDEMPOTENCY_KEY_INVALID, 409 IDEMPOTENCY_KEY_EXPIRED |
 | /orders | GET | USER | 내 주문 목록(상태·기간 필터) | - |
 | /orders/{orderId} | GET | USER | 주문 상세(항목 스냅샷, 결제 시도와 실패 사유, 남은 시간) | 403, 404 |
 | /orders/{orderId}/payment | POST | USER | 예치금 결제(CREATED·PAYMENT_FAILED, 만료 전만) → PAID, 장바구니 항목 삭제 | 402 INSUFFICIENT_BALANCE(부족액·추천 충전액·남은 시간), 409 ORDER_EXPIRED, 409 ORDER_STATE_INVALID |
