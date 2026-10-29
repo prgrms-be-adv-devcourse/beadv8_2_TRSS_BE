@@ -1,19 +1,59 @@
 package com.backend.global.eventPublisher;
 
+import com.backend.global.outbox.OutboxEvent;
+import com.backend.global.outbox.OutboxEventRepository;
+import com.backend.shared.event.DomainEvent;
+import com.backend.shared.event.EventEnvelope;
+import com.backend.shared.member.event.MemberSignedUpEvent;
+import com.backend.shared.order.event.OrderConfirmedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import tools.jackson.databind.ObjectMapper;
+
+import java.time.LocalDateTime;
+import java.util.Set;
 
 /**
  * 도메인 이벤트 발행기.
- * 지금은 스프링 이벤트로 발행하고, Outbox·Kafka로 바꿀 때 이 클래스와 폴러만 바꾼다.
+ * 호출한 쪽 트랜잭션 안에서 이벤트를 outbox_event에 저장한다. 비즈니스 변경이 롤백되면 이벤트도 함께 롤백된다.
  */
 @Component
 @RequiredArgsConstructor
 public class EventPublisher {
-    private final ApplicationEventPublisher applicationEventPublisher;
 
-    public void publish(Object event) {
-        applicationEventPublisher.publishEvent(event);
+    /**
+     * 아직 릴레이로 옮기지 않은 이벤트. Outbox 도입 전처럼 호출한 쪽 트랜잭션 안에서 바로 스프링 이벤트로 발행한다.
+     */
+    private static final Set<Class<? extends DomainEvent>> DIRECT_PUBLISH_EVENTS =
+            Set.of(MemberSignedUpEvent.class, OrderConfirmedEvent.class);
+
+    private final OutboxEventRepository outboxEventRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * 이벤트를 outbox에 저장한다.
+     * 아직 릴레이로 옮기지 않은 이벤트는 바로 스프링 이벤트로 발행하고, 릴레이가 다시 보내지 않게 PUBLISHED로 저장한다.
+     *
+     * @throws IllegalStateException 쓰기 트랜잭션 밖에서 호출한 경우. 저장할 트랜잭션이 없으면 이벤트가 유실된다
+     */
+    public void publish(DomainEvent event) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            throw new IllegalStateException(
+                    "이벤트는 쓰기 트랜잭션 안에서 발행해야 합니다: " + event.getClass().getSimpleName());
+        }
+
+        EventEnvelope<DomainEvent> envelope = EventEnvelope.wrap(event);
+        OutboxEvent outbox = OutboxEvent.create(envelope, objectMapper.writeValueAsString(event));
+
+        if (DIRECT_PUBLISH_EVENTS.contains(event.getClass())) {
+            applicationEventPublisher.publishEvent(event);
+            outbox.markPublished(LocalDateTime.now());
+        }
+
+        outboxEventRepository.save(outbox);
     }
 }
