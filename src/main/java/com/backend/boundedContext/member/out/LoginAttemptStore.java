@@ -17,7 +17,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class LoginAttemptStore {
 
-    private static final String ATTEMPT_COUNT_KEY = "member:login-fail:";
+    // 테스트에서 Redis 값을 직접 확인할 때도 이 접두어를 씀
+    public static final String ATTEMPT_COUNT_KEY = "member:login-fail:";
 
     // INCR과 TTL 설정을 한 명령으로 실행해, 그 사이 장애가 나도 TTL 없는 키(영구 잠금)가 남지 않게 함
     // TTL이 없는 키(이전 방식에서 남은 키)도 여기서 TTL을 붙여 풀리게 함. INCR은 기존 TTL을 유지함
@@ -36,12 +37,6 @@ public class LoginAttemptStore {
     public long increaseAttempt(String email, Duration ttl) {
         Long count = redisTemplate.execute(INCREASE_ATTEMPT_SCRIPT, List.of(ATTEMPT_COUNT_KEY + email), String.valueOf(ttl.toMillis()));
         return count == null ? 0 : count;
-    }
-
-    // 현재 시도 횟수 (없거나 만료됐으면 0)
-    public long getAttemptCount(String email) {
-        String count = redisTemplate.opsForValue().get(ATTEMPT_COUNT_KEY + email);
-        return count == null ? 0 : Long.parseLong(count);
     }
 
     // 잠금 시작: 잠금 시간이 이 시점부터 다시 흐르도록 TTL을 새로 시작

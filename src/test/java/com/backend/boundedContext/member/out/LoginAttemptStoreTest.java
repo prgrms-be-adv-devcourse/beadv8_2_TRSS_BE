@@ -28,7 +28,7 @@ class LoginAttemptStoreTest {
     private StringRedisTemplate redisTemplate;
 
     private final String email = "login-attempt-it-" + UUID.randomUUID() + "@palette.com";
-    private final String key = "member:login-fail:" + email;
+    private final String key = LoginAttemptStore.ATTEMPT_COUNT_KEY + email;
 
     @AfterEach
     void cleanUp() {
@@ -43,7 +43,7 @@ class LoginAttemptStoreTest {
 
         assertThat(loginAttemptStore.increaseAttempt(email, TTL)).isEqualTo(2);
         assertThat(redisTemplate.getExpire(key, TimeUnit.SECONDS)).isBetween(1L, 180L);
-        assertThat(loginAttemptStore.getAttemptCount(email)).isEqualTo(2);
+        assertThat(redisTemplate.opsForValue().get(key)).isEqualTo("2");
     }
 
     @Test

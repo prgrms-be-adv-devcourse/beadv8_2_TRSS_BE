@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.util.Locale;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -63,6 +64,19 @@ class MemberLoginUseCaseTest {
         given(memberTokenIssuer.issue(member)).willReturn(tokens);
 
         assertThat(memberLoginUseCase.login(EMAIL, "palette123!")).isEqualTo(tokens);
+        verify(loginAttemptStore).deleteAttempts(EMAIL);
+    }
+
+    @Test
+    @DisplayName("요청 DTO를 거치지 않고 대소문자·앞뒤 공백이 섞인 이메일이 와도 정규화한 이메일로 조회하고 시도 횟수를 센다")
+    void login_normalizesEmail() {
+        AuthTokens tokens = new AuthTokens("access", "refresh");
+        given(memberRepository.findByEmail(EMAIL)).willReturn(Optional.of(member));
+        given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
+        given(memberTokenIssuer.issue(member)).willReturn(tokens);
+
+        assertThat(memberLoginUseCase.login("  " + EMAIL.toUpperCase(Locale.ROOT) + " ", "palette123!")).isEqualTo(tokens);
+        verify(loginAttemptStore).increaseAttempt(EMAIL, memberPolicy.loginLockTtl());
         verify(loginAttemptStore).deleteAttempts(EMAIL);
     }
 
