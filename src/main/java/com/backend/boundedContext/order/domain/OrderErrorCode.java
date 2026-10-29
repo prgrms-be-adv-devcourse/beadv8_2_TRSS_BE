@@ -26,6 +26,8 @@ public enum OrderErrorCode implements ErrorCode {
 
     // 주문
     ORDER_NOT_FOUND(404, "주문을 찾을 수 없습니다."),
+    IDEMPOTENCY_KEY_INVALID(400, "Idempotency-Key는 1자 이상 64자 이하로 보내 주세요."),
+    IDEMPOTENCY_KEY_EXPIRED(409, "취소된 주문에 쓰인 Idempotency-Key입니다. 새 키로 다시 주문해 주세요."),
     PRICE_CHANGED(409, "상품 가격이 변경되었습니다. 금액을 다시 확인해 주세요."),
     ORDER_STATE_INVALID(409, "현재 주문 상태에서는 처리할 수 없습니다."),
     ORDER_EXPIRED(409, "결제 가능 시간이 지난 주문입니다."),
