@@ -216,7 +216,7 @@ public class SettlementEventListener {
   | 구분 | 무엇을 막나 | 어디서 |
   | --- | --- | --- |
   | 역할 (수직) | 구매자가 관리자 API, 관리자가 판매자·구매자 API 호출 | `SecurityConfig`의 URL 규칙. 역할은 USER·ADMIN 두 가지 |
-  | 판매자 상태 | 승인되지 않은(심사 중·철회·제재) 판매자의 판매 기능 | 판매 기능 UseCase에서 `MemberApi.getApprovedSellerByMemberId`(다른 컨텍스트) 또는 `Seller`의 상태 확인(회원 컨텍스트). 아니면 `403-SELLER_NOT_APPROVED` |
+  | 판매자 상태 | 승인되지 않은(심사 중·철회·제재) 판매자의 판매 기능 | 판매 기능 UseCase에서 `MemberApi.getApprovedSellerByMemberId`(다른 컨텍스트) 또는 `Seller`의 상태 확인(회원 컨텍스트). 아니면 `403-SELLER_NOT_APPROVED`. 상품 관리는 조회(내 상품 목록·상품 수정 화면·재고 이력)도 APPROVED를 확인하고, 판매 주문 항목·정산 조회는 `MemberApi.findSellerByMemberId`로 판매자 정보만 확인한다(제재·철회된 판매자도 지난 기록 조회 가능) |
   | 소유자 (수평) | 구매자 A가 구매자 B의 주문·충전, 판매자 A가 판매자 B의 상품·정산서 조회·수정 | 경로에 리소스 ID를 받는 UseCase에서 **조회 조건에 소유자를 넣는다**(`findByIdAndBuyerId` 등). 없으면 404 → [예외 처리 5.1](palette_exception_handling.md) |
   - `/me` 경로처럼 `AuthMember`의 회원 ID로만 조회하는 API는 소유자 검사가 따로 필요 없습니다.
   - **구매자 API 경로를 추가하면 `SecurityConfig`의 `BUYER_API_URLS`도 갱신합니다.** 목록에 없는 경로는 `authenticated()`만 걸려 관리자도 호출할 수 있습니다. 예를 들어 회원 탈퇴(`DELETE /api/v1/users/me`)는 관리자가 호출하면 수수료를 받는 계정이 사라지므로 따로 `USER`만 허용합니다.
