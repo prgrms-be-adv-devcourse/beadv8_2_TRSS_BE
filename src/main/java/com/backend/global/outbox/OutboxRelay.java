@@ -57,7 +57,7 @@ public class OutboxRelay {
                 if (current.get() == null) throw e;   // 이벤트를 꺼내기 전 실패(DB 연결 등)는 스케줄러가 로그를 남기고 다음 실행에서 다시 한다
                 recordFailure(current.get(), e);
             }
-            afterId = current.get().getId();   // 실패한 이벤트도 건너뛰어, 이번 실행에서 같은 이벤트를 다시 시도하지 않는다
+            afterId = current.get().getId();   // 실패한 이벤트는 이번 실행에서 다시 시도하지 않는다. 같은 대상의 뒤 이벤트는 쿼리가 막는다
         }
         return published;
     }
@@ -80,8 +80,12 @@ public class OutboxRelay {
 
     private void recordFailure(OutboxEvent failed, RuntimeException cause) {
         transactionTemplate.executeWithoutResult(status ->
-                outboxEventRepository.findById(failed.getId()).ifPresent(outbox -> {
-                    outbox.recordFailure(outboxPolicy.getMaxRetryCount());
+                outboxEventRepository.findByIdForUpdate(failed.getId()).ifPresent(outbox -> {
+                    if (!outbox.recordFailure(outboxPolicy.getMaxRetryCount())) {
+                        log.info("발행 실패를 기록하려 했지만 그사이 다른 릴레이가 처리했습니다. eventId={}, status={}",
+                                outbox.getEventId(), outbox.getStatus());
+                        return;
+                    }
                     if (outbox.getStatus() == OutboxEventStatus.FAILED) {
                         log.error("이벤트 발행이 {}번 실패해 FAILED로 둡니다. eventId={}, eventType={}",
                                 outbox.getRetryCount(), outbox.getEventId(), outbox.getEventType(), cause);

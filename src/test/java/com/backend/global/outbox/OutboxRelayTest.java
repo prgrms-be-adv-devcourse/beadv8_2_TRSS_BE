@@ -44,6 +44,19 @@ class OutboxRelayTest {
         }
     }
 
+    /** 가입 이벤트와 같은 대상(MEMBER)이지만 릴레이가 모르는 이벤트. 앞 이벤트를 실패시키는 데 쓴다 */
+    record UnknownMemberEvent(Long memberId) implements DomainEvent {
+        @Override
+        public String aggregateType() {
+            return "MEMBER";
+        }
+
+        @Override
+        public Long aggregateId() {
+            return memberId;
+        }
+    }
+
     @TestConfiguration
     static class FailingListenerConfig {
         @Bean
@@ -85,10 +98,13 @@ class OutboxRelayTest {
 
     private UUID eventId;
 
+    private UUID laterEventId;
+
     @AfterEach
     void cleanUp() {
         failingSignUpListener.failMemberId = null;
         if (eventId != null) outboxEventRepository.findByEventId(eventId).ifPresent(outboxEventRepository::delete);
+        if (laterEventId != null) outboxEventRepository.findByEventId(laterEventId).ifPresent(outboxEventRepository::delete);
         walletRepository.findByMemberId(memberId).ifPresent(walletRepository::delete);
     }
 
@@ -132,6 +148,28 @@ class OutboxRelayTest {
         outboxRelay.relayPending();
         assertThat(outboxEventRepository.findByEventId(eventId).orElseThrow().getRetryCount())
                 .isEqualTo(outboxPolicy.getMaxRetryCount());
+    }
+
+    @Test
+    @DisplayName("같은 대상의 앞 이벤트가 실패해 PENDING이면 뒤 이벤트는 발행하지 않고, 앞 이벤트가 끝나면(FAILED) 발행한다")
+    void keepOrderPerAggregate() {
+        EventEnvelope<UnknownMemberEvent> earlier = EventEnvelope.wrap(new UnknownMemberEvent(memberId));
+        eventId = earlier.eventId();
+        outboxEventRepository.save(OutboxEvent.create(earlier, "{\"memberId\":" + memberId + "}"));
+        laterEventId = publish(new MemberSignedUpEvent(memberId));
+
+        relayUntil(outbox -> outbox.getRetryCount() > 0);   // 앞 이벤트가 한 번 실패
+
+        assertThat(outboxEventRepository.findByEventId(laterEventId).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(walletRepository.findByMemberId(memberId)).isEmpty();
+
+        relayUntil(outbox -> outbox.getStatus() == OutboxEventStatus.FAILED);   // 앞 이벤트가 한도까지 실패
+        outboxRelay.relayPending();
+
+        assertThat(outboxEventRepository.findByEventId(laterEventId).orElseThrow().getStatus())
+                .isEqualTo(OutboxEventStatus.PUBLISHED);
+        assertThat(walletRepository.findByMemberId(memberId)).isPresent();
     }
 
     // 릴레이를 기다리는 가입 이벤트를 outbox에 넣는다

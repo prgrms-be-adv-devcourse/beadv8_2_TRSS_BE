@@ -23,6 +23,7 @@ import com.backend.global.outbox.OutboxEvent;
 import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.event.DomainEvent;
+import com.backend.shared.event.OutboxTestEvent;
 import com.backend.shared.member.event.MemberSignedUpEvent;
 
 /**
@@ -32,8 +33,8 @@ import com.backend.shared.member.event.MemberSignedUpEvent;
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class EventPublisherTest {
 
-    /** 다른 리스너가 반응하지 않는 테스트 전용 이벤트 */
-    record TestEvent(Long testId) implements DomainEvent {
+    /** com.backend.shared 밖에 있어 릴레이가 모르는 이벤트 */
+    record NotSharedEvent(Long testId) implements DomainEvent {
         @Override
         public String aggregateType() {
             return "TEST";
@@ -54,10 +55,10 @@ class EventPublisherTest {
     }
 
     static class TestEventListener {
-        final List<TestEvent> received = new ArrayList<>();
+        final List<OutboxTestEvent> received = new ArrayList<>();
 
         @EventListener
-        void handle(TestEvent event) {
+        void handle(OutboxTestEvent event) {
             received.add(event);
         }
     }
@@ -93,14 +94,14 @@ class EventPublisherTest {
     @Test
     @DisplayName("트랜잭션 안에서 발행하면 outbox에 PENDING으로 저장되고, 리스너에는 바로 전달하지 않는다(릴레이가 전달)")
     void publishInTransaction() {
-        TestEvent event = new TestEvent(testId);
+        OutboxTestEvent event = new OutboxTestEvent(testId);
 
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> eventPublisher.publish(event));
 
         List<OutboxEvent> saved = findOutbox();
         assertThat(saved).hasSize(1);
         OutboxEvent outbox = saved.getFirst();
-        assertThat(outbox.getEventType()).isEqualTo("TestEvent");
+        assertThat(outbox.getEventType()).isEqualTo("OutboxTestEvent");
         assertThat(outbox.getAggregateType()).isEqualTo("TEST");
         assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(outbox.getPayload()).contains("\"testId\"").contains(testId.toString());
@@ -128,7 +129,7 @@ class EventPublisherTest {
     @DisplayName("호출한 쪽 트랜잭션이 롤백되면 outbox에도 남지 않는다")
     void rollbackTogether() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            eventPublisher.publish(new TestEvent(testId));
+            eventPublisher.publish(new OutboxTestEvent(testId));
             status.setRollbackOnly();
         });
 
@@ -136,9 +137,19 @@ class EventPublisherTest {
     }
 
     @Test
+    @DisplayName("com.backend.shared 밖의 이벤트는 릴레이가 되돌릴 수 없어 발행할 때 바로 예외가 난다")
+    void publishNotSharedEvent() {
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> eventPublisher.publish(new NotSharedEvent(testId))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(findOutbox()).isEmpty();
+    }
+
+    @Test
     @DisplayName("트랜잭션 밖에서 발행하면 예외가 나고 아무것도 저장·발행되지 않는다")
     void publishWithoutTransaction() {
-        assertThatThrownBy(() -> eventPublisher.publish(new TestEvent(testId)))
+        assertThatThrownBy(() -> eventPublisher.publish(new OutboxTestEvent(testId)))
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(findOutbox()).isEmpty();
@@ -151,7 +162,7 @@ class EventPublisherTest {
         TransactionTemplate readOnly = new TransactionTemplate(transactionManager);
         readOnly.setReadOnly(true);
 
-        assertThatThrownBy(() -> readOnly.executeWithoutResult(status -> eventPublisher.publish(new TestEvent(testId))))
+        assertThatThrownBy(() -> readOnly.executeWithoutResult(status -> eventPublisher.publish(new OutboxTestEvent(testId))))
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(findOutbox()).isEmpty();

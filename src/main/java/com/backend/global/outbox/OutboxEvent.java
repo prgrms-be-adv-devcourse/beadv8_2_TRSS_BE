@@ -74,11 +74,18 @@ public class OutboxEvent extends BaseIdAndTime {
         publishedAt = now;
     }
 
-    /** 발행에 실패했다. 실패 횟수가 한도에 닿으면 FAILED로 두고 더 이상 발행하지 않는다. */
-    public void recordFailure(int maxRetryCount) {
+    /**
+     * 발행에 실패했다. 실패 횟수가 한도에 닿으면 FAILED로 두고 더 이상 발행하지 않는다.
+     * 그사이 다른 릴레이가 발행했으면(PENDING이 아니면) 아무것도 바꾸지 않는다.
+     *
+     * @return 실패를 기록했으면 true
+     */
+    public boolean recordFailure(int maxRetryCount) {
+        if (status != OutboxEventStatus.PENDING) return false;
         retryCount++;
         if (retryCount >= maxRetryCount) {
             status = OutboxEventStatus.FAILED;
         }
+        return true;
     }
 }

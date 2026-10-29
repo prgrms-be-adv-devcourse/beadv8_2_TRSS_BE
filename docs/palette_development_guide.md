@@ -242,8 +242,9 @@ public class SettlementEventListener {
 
 - `custom.outbox.relayIntervalMillis`(1초)마다 PENDING 이벤트를 최대 `relayBatchSize`(100)개 발행합니다. 이벤트가 리스너에 닿기까지 최대 이 간격만큼 늦어집니다.
 - 이벤트 하나마다 트랜잭션을 열고 `SELECT ... FOR UPDATE SKIP LOCKED`로 한 행을 잠근 뒤, payload를 `eventType`의 클래스로 되돌려 스프링 이벤트로 발행하고 PUBLISHED로 바꿉니다. 서버가 여러 대여도 같은 이벤트를 동시에 두 번 발행하지 않습니다.
-- 리스너가 실패하면 그 트랜잭션은 롤백되고, 별도 트랜잭션에서 `retry_count`를 올립니다. 이번 실행에서는 다음 이벤트로 넘어가고 다음 실행에서 다시 시도합니다. `maxRetryCount`(5)번 실패하면 FAILED로 두고 에러 로그를 남깁니다(FAILED는 사람이 확인).
-- 릴레이가 아는 이벤트 클래스는 `com.backend.shared` 안의 `DomainEvent` 구현체입니다. 클래스 단순 이름이 겹치면 앱이 시작하지 않습니다.
+- 리스너가 실패하면 그 트랜잭션은 롤백되고, 별도 트랜잭션에서 행을 잠근 뒤 아직 PENDING일 때만 `retry_count`를 올립니다(그사이 다른 서버가 발행했으면 그대로 둠). 이번 실행에서는 다음 이벤트로 넘어가고 다음 실행에서 다시 시도합니다. `maxRetryCount`(5)번 실패하면 FAILED로 두고 에러 로그를 남깁니다(FAILED는 사람이 확인).
+- 같은 대상(`aggregate_type`, `aggregate_id`)에 앞선 PENDING 이벤트가 있으면 뒤 이벤트는 가져오지 않습니다. 앞 이벤트가 재시도 중이거나 다른 서버가 처리 중이어도 대상별 발행 순서가 지켜집니다. 앞 이벤트가 FAILED가 되면 뒤 이벤트가 이어서 발행됩니다.
+- 릴레이가 아는 이벤트 클래스는 `com.backend.shared` 안의 `DomainEvent` 구현체입니다. 클래스 단순 이름이 겹치면 앱이 시작하지 않고, 그 밖에 둔 이벤트를 `publish()`하면 `IllegalArgumentException`이 납니다.
 - 통합 테스트는 `custom.scheduling.enabled=false`로 스케줄러를 끄고, 필요하면 `OutboxRelay.relayPending()`을 직접 부릅니다.
 
 - 구매 확정과 `OrderConfirmedEvent` 발행은 주문 컨텍스트의 메서드 하나로 묶고, 확정 경로 3개(수동·7일 자동·반품 거절)가 모두 그 메서드를 호출합니다 → [공유 계약 7.3](palette_shared_contract.md)
