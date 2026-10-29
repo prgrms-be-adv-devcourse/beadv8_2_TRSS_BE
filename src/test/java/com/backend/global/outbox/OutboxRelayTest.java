@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.Ordered;
@@ -93,6 +94,9 @@ class OutboxRelayTest {
     @Autowired
     private FailingSignUpListener failingSignUpListener;
 
+    @Autowired
+    private ApplicationContext applicationContext;
+
     // 다른 테스트·시드 회원과 겹치지 않는 회원 ID
     private final Long memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
 
@@ -106,6 +110,12 @@ class OutboxRelayTest {
         if (eventId != null) outboxEventRepository.findByEventId(eventId).ifPresent(outboxEventRepository::delete);
         if (laterEventId != null) outboxEventRepository.findByEventId(laterEventId).ifPresent(outboxEventRepository::delete);
         walletRepository.findByMemberId(memberId).ifPresent(walletRepository::delete);
+    }
+
+    @Test
+    @DisplayName("테스트에서는 릴레이 스케줄러가 등록되지 않는다(다른 테스트의 PENDING 이벤트를 몰래 발행하지 않게)")
+    void relaySchedulerDisabledInTests() {
+        assertThat(applicationContext.getBeanNamesForType(OutboxRelayScheduler.class)).isEmpty();
     }
 
     @Test
