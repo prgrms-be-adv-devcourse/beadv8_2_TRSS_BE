@@ -14,12 +14,12 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +30,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.Topup;
@@ -71,15 +73,20 @@ class TopupConfirmIntegrationTest {
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
 
-    // 다른 테스트·시드 회원과 겹치지 않는 회원 ID
-    private final Long memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
-    private final String paymentKey = PAYMENT_KEY + "-" + memberId;
+    @Autowired
+    private MemberRepository memberRepository;
+
+    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
+    private Long memberId;
+    private String paymentKey;
 
     private Wallet wallet;
     private String orderId;
 
     @BeforeEach
     void setUp() {
+        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        paymentKey = PAYMENT_KEY + "-" + memberId;
         wallet = walletRepository.save(Wallet.create(memberId));
         TopupPrepareDto prepared = paymentFacade.prepareTopup(memberId, AMOUNT);
         orderId = prepared.orderId();
@@ -91,6 +98,7 @@ class TopupConfirmIntegrationTest {
         topupRepository.deleteAll(topupRepository.findAll().stream()
                 .filter(topup -> topup.getMemberId().equals(memberId)).toList());
         walletRepository.deleteById(wallet.getId());
+        memberRepository.deleteById(memberId);
     }
 
     @Test

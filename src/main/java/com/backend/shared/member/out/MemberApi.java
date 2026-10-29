@@ -15,6 +15,10 @@ public interface MemberApi {
     // 회원 조회
     MemberDto getMember(Long memberId);
 
+    // 로그인 상태인 회원인지 확인. 없거나 탈퇴했으면 401 UNAUTHORIZED
+    // 탈퇴 후에도 Access Token은 만료 전까지 유효하므로, 돈이 움직이는 진입점(충전·주문·결제)에서 호출함
+    void checkActiveMember(Long memberId);
+
     // 여러 회원 조회. 없는 ID는 결과에서 빠짐
     List<MemberDto> getMembers(Collection<Long> memberIds);
 

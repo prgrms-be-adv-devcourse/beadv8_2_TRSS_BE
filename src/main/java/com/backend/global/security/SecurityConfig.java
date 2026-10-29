@@ -58,6 +58,10 @@ public class SecurityConfig {
             "/api/v1/wallet/**",
             "/api/v1/sellers/**"
     };
+    // 회원 탈퇴(조건 조회 포함)도 구매자만. 관리자 계정은 탈퇴할 수 없음 (1번 관리자는 수수료를 받는 계정이라 탈퇴하면 정산 지급이 실패)
+    private static final String[] WITHDRAWAL_API_URLS = {
+            "/api/v1/users/me/withdrawal"
+    };
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
@@ -91,6 +95,8 @@ public class SecurityConfig {
                         // 판매자 여부는 역할이 아니라 판매자 상태(APPROVED)로 판단하므로, URL에서는 관리자만 막고 판매 기능에서 상태를 확인한다
                         .requestMatchers(SELLER_API_URLS).hasRole("USER")
                         .requestMatchers(BUYER_API_URLS).hasRole("USER")
+                        .requestMatchers(WITHDRAWAL_API_URLS).hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/users/me").hasRole("USER")
                         .anyRequest().authenticated()
                 )
                 // 필터는 빈으로 등록하지 않음 (빈이면 서블릿 필터로도 자동 등록됨)

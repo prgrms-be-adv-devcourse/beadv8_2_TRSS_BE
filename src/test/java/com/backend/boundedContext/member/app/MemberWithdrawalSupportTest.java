@@ -86,6 +86,31 @@ class MemberWithdrawalSupportTest {
     }
 
     @Test
+    @DisplayName("제재된 판매자라도 판매자 상품이 든 진행 중인 주문이 있으면 탈퇴할 수 없다 (판매자 상태와 무관하게 확인)")
+    void sanctionedSeller_activeSales_blocked() {
+        givenSeller(SellerStatus.SANCTIONED, 0);
+        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(true);
+
+        WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
+
+        assertThat(check.hasActiveSales()).isTrue();
+        assertThat(check.reasons()).containsExactly(WithdrawalBlockReason.ACTIVE_SALES);
+    }
+
+    @Test
+    @DisplayName("결과가 정해지지 않은 충전 건이 있으면 잔액이 0이어도 탈퇴할 수 없다 (판매자가 아니면 판매는 조회하지 않음)")
+    void buyer_pendingTopups_blocked() {
+        givenBuyer(false, 0);
+        given(paymentApi.hasPendingTopups(MEMBER_ID)).willReturn(true);
+
+        WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
+
+        assertThat(check.hasPendingTopups()).isTrue();
+        assertThat(check.reasons()).containsExactly(WithdrawalBlockReason.PENDING_TOPUPS);
+        verify(orderApi, never()).hasActiveSales(anyLong());
+    }
+
+    @Test
     @DisplayName("판매자 철회를 마쳤고 정산받지 않은 금액이 없으면 탈퇴할 수 있다")
     void withdrawnSeller_withdrawable() {
         givenSeller(SellerStatus.WITHDRAWN, 0);

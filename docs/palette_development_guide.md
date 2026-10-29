@@ -79,6 +79,7 @@ com.backend
 - 위치와 이름: `src/main/resources/db/migration/V{번호}__{설명}.sql` (예: `V2__add_member_phone.sql`). 번호는 develop 기준 다음 번호입니다.
 - **develop에 머지된 마이그레이션 파일은 고치지 않습니다.** 이미 실행된 DB가 있어서, 고치면 Flyway 체크섬 검증에 실패합니다. 바꿀 내용은 새 파일로 추가합니다. 머지 전 내 브랜치에만 있는 파일은 고쳐도 됩니다.
 - 두 PR이 같은 번호를 쓰면 나중에 머지하는 쪽이 번호를 올립니다.
+- **머지 직전에 최신 develop을 받아 내 마이그레이션 번호가 develop의 마지막 번호보다 큰지 다시 확인합니다.** 더 큰 번호가 먼저 개발 서버에 적용된 뒤 낮은 번호가 들어오면 Flyway 검증이 실패해 서버가 기동되지 않습니다. 번호가 밀렸으면 번호를 올린 뒤 머지합니다.
 - 마이그레이션을 빠뜨리면 `Schema validation: missing column ...` 같은 오류로 앱과 테스트가 시작되지 않습니다.
 - enum 컬럼에는 허용 값 CHECK 제약을 두지 않습니다. 값 검증은 `@Enumerated(STRING)`이 맡고, enum 값을 추가할 때마다 마이그레이션이 필요해지는 것을 피합니다.
 - `columnDefinition = "CHAR(7)"`처럼 `String` 필드를 VARCHAR가 아닌 타입에 매핑하면 `@JdbcTypeCode(SqlTypes.CHAR)`도 함께 붙입니다. 없으면 `validate`가 VARCHAR를 기대해 실패합니다.
@@ -142,7 +143,7 @@ public class ProductApiAdapter implements ProductApi {
 
 ```mermaid
 flowchart LR
-    member -->|getWallet| payment
+    member -->|getWallet, hasPendingTopups| payment
     member -->|stopAllBySeller, resumeAllBySeller| product
     member -->|hasActiveOrders, hasActiveSales, getRecentOrders| order
     member -->|getUnsettledAmount, holdSeller| settlement
@@ -150,10 +151,10 @@ flowchart LR
     product -->|cancelPendingOrders| order
     order -->|getOptions, deductStock, restoreStock, lockProductsForOrderChange| product
     order -->|pay| payment
-    order -->|getSellers, findSellerByMemberId| member
+    order -->|getSellers, findSellerByMemberId, checkActiveMember| member
     settlement -->|transfer| payment
     settlement -->|getSeller| member
-    payment -->|findMemberByEmail, getMembers| member
+    payment -->|findMemberByEmail, getMembers, checkActiveMember| member
     order -. OrderReturnedEvent .-> payment
     order -. OrderConfirmedEvent .-> settlement
     member -. MemberSignedUpEvent .-> payment
@@ -215,9 +216,10 @@ public class SettlementEventListener {
   | 구분 | 무엇을 막나 | 어디서 |
   | --- | --- | --- |
   | 역할 (수직) | 구매자가 관리자 API, 관리자가 판매자·구매자 API 호출 | `SecurityConfig`의 URL 규칙. 역할은 USER·ADMIN 두 가지 |
-  | 판매자 상태 | 승인되지 않은(심사 중·철회·제재) 판매자의 판매 기능 | 판매 기능 UseCase에서 `MemberApi.getApprovedSellerByMemberId`(다른 컨텍스트) 또는 `Seller`의 상태 확인(회원 컨텍스트). 아니면 `403-SELLER_NOT_APPROVED` |
+  | 판매자 상태 | 승인되지 않은(심사 중·철회·제재) 판매자의 판매 기능 | 판매 기능 UseCase에서 `MemberApi.getApprovedSellerByMemberId`(다른 컨텍스트) 또는 `Seller`의 상태 확인(회원 컨텍스트). 아니면 `403-SELLER_NOT_APPROVED`. 상품 관리는 조회(내 상품 목록·상품 수정 화면·재고 이력)도 APPROVED를 확인하고, 판매 주문 항목·정산 조회는 `MemberApi.findSellerByMemberId`로 판매자 정보만 확인한다(제재·철회된 판매자도 지난 기록 조회 가능) |
   | 소유자 (수평) | 구매자 A가 구매자 B의 주문·충전, 판매자 A가 판매자 B의 상품·정산서 조회·수정 | 경로에 리소스 ID를 받는 UseCase에서 **조회 조건에 소유자를 넣는다**(`findByIdAndBuyerId` 등). 없으면 404 → [예외 처리 5.1](palette_exception_handling.md) |
   - `/me` 경로처럼 `AuthMember`의 회원 ID로만 조회하는 API는 소유자 검사가 따로 필요 없습니다.
+  - **구매자 API 경로를 추가하면 `SecurityConfig`의 `BUYER_API_URLS`도 갱신합니다.** 목록에 없는 경로는 `authenticated()`만 걸려 관리자도 호출할 수 있습니다. 예를 들어 회원 탈퇴(`DELETE /api/v1/users/me`)는 관리자가 호출하면 수수료를 받는 계정이 사라지므로 따로 `USER`만 허용합니다.
   - 판매자 여부를 역할(`SELLER`)로 두지 않는 이유: 승인·제재·철회 때마다 역할을 바꾸고 토큰을 다시 발급해야 하고, 제재된 판매자가 남은 토큰 시간 동안 판매 기능을 쓸 수 있기 때문입니다.
   - **컨트롤러 테스트(`@WebMvcTest`)에서 Security 쓰기**
     - `@WebMvcTest`는 컨트롤러 주변만 띄우므로 Security 설정과 JWT 빈 5개를 `@Import`로 넣습니다.

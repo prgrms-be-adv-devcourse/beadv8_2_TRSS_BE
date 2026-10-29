@@ -36,7 +36,8 @@
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기, 같은 Tx |
 | 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) | 동기, 같은 Tx |
 | 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller(sellerId, reason)` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
-| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · 판매자 정보가 있으면 `SettlementApi.getUnsettledAmount` | 동기 조회 |
+| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 |
+| 충전 준비·승인, 주문 생성·결제 | payment, order | `MemberApi.checkActiveMember(memberId)`: 탈퇴한 회원이면 401 (탈퇴 후 남은 Access Token 차단) | 동기 조회 |
 | 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 |
 | 관리자 결제·충전 조회 | payment | `MemberApi.findMemberByEmail`(이메일 검색) · `MemberApi.getMembers`(이메일 표시) | 동기 조회 |
 
@@ -51,6 +52,9 @@ public interface MemberApi {
 
     /** 회원 조회. 없으면 404 MEMBER_NOT_FOUND */
     MemberDto getMember(Long memberId);
+
+    /** 로그인 상태인 회원인지 확인. 없거나 탈퇴했으면 401 UNAUTHORIZED (충전 준비·승인, 주문 생성·결제에서 호출) */
+    void checkActiveMember(Long memberId);
 
     /** 여러 회원 조회 (관리자 결제·충전 조회의 이메일 표시). 없는 ID는 결과에서 빠짐 */
     List<MemberDto> getMembers(Collection<Long> memberIds);
@@ -204,7 +208,7 @@ public interface OrderApi {
 
     /**
      * 판매자 상품이 들어간 진행 중인 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지.
-     * 판매자 철회 승인 검사용. 있으면 회원 컨텍스트가 409로 승인을 거절한다.
+     * 판매자 철회 승인·회원 탈퇴 검사용. 있으면 회원 컨텍스트가 409로 승인·탈퇴를 거절한다.
      */
     boolean hasActiveSales(Long sellerId);
 }
@@ -246,6 +250,9 @@ public interface PaymentApi {
 
     /** 잔액과 홀딩 중 금액. 지갑이 없으면 404 WALLET_NOT_FOUND */
     WalletSummaryDto getWallet(Long memberId);
+
+    /** 결과가 정해지지 않은 충전 건(READY·PROCESSING)이 있는지. 회원 탈퇴 검사용 (반영 전이라 잔액에 잡히지 않음) */
+    boolean hasPendingTopups(Long memberId);
 
     /**
      * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.

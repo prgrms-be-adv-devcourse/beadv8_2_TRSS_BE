@@ -44,7 +44,10 @@
 - 휴대폰 번호는 판매자에게만 받고, 휴대폰 본인인증 절차는 진행하지 않는다
 - 로그인은 Access Token 30분, Refresh Token 14일(재발급 시 회전)이다
 - 역할은 USER·ADMIN이며 인증 실패는 401, 권한 부족은 403으로 구분한다. 판매자는 역할이 아니라 판매자 상태로 구분한다
-- 탈퇴는 진행 중인 주문, 미정산 금액, 예치금 잔액이 모두 0일 때만 가능하고, 탈퇴 시 개인정보를 비식별화한다
+- 탈퇴는 진행 중인 주문·판매, 미정산 금액, 예치금 잔액, 결과 확인 중인 충전 건이 모두 없을 때만 가능하고, 탈퇴 시 개인정보를 비식별화한다
+    - 판매자 정보가 있으면 판매자 상태와 무관하게 진행 중인 판매(판매자 상품이 든 진행 중 주문)를 확인한다
+    - 관리자는 탈퇴할 수 없다
+    - 탈퇴 후 남은 Access Token으로는 충전·주문·결제를 할 수 없다(진입점에서 회원 상태 확인)
     - 예치금이 남아 있으면 탈퇴를 거절하고, 미사용 충전 건은 충전 취소로 환불받도록 안내한다
     - 탈퇴 시 시스템 차원의 자동 환불은 하지 않는다
 - 회원 상태는 ACTIVE·DELETED를 쓴다
@@ -55,7 +58,8 @@
 - 상태는 PENDING → APPROVED/REJECTED, 철회는 APPROVED → WITHDRAW_REQUESTED → WITHDRAWN(거절 시 APPROVED), 제재는 APPROVED·WITHDRAW_REQUESTED → SANCTIONED이다
     - REJECTED·WITHDRAWN은 같은 신청 API로 재신청하면 PENDING으로 돌아가고, SANCTIONED는 재신청할 수 없다
 - 판매자 정보는 회원당 1개이며, 사업자번호는 심사 중·판매 중·철회 심사 중·제재된 판매자와 겹칠 수 없다(반려·본인 철회 시 비워져 재사용 가능)
-- 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인)
+- 판매 기능은 판매자 상태가 APPROVED일 때만 쓸 수 있다(요청마다 DB에서 확인). 상품 관리는 내 상품 목록·재고 이력 조회까지 포함한다
+    - 제재·철회된 판매자도 지난 판매 주문 항목·정산 내역은 조회할 수 있지만, 이전에 등록한 상품 목록은 볼 수 없다
 - 판매자도 일반 회원처럼 구매할 수 있다. 단, 본인 상품은 장바구니에 담거나 주문할 수 없다
 - 판매자 정산금은 해당 회원의 기존 예치금 지갑에 지급하며, 판매자는 정산받은 예치금으로 상품을 구매할 수 있다
 - **판매자 스스로 철회:** 철회 요청(WITHDRAW_REQUESTED) → 관리자 승인 → WITHDRAWN
@@ -252,8 +256,8 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /auth/refresh | POST | 비회원(Refresh 쿠키) | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
 | /auth/logout | POST | 회원 | 로그아웃 | 401 |
 | /users/me | GET | 회원 | 내 정보 조회 | 401 |
-| /users/me/withdrawal | GET | 회원 | 탈퇴 조건 조회(진행 중 주문 여부·미정산 금액·잔액) | 401 |
-| /users/me | DELETE | 회원 | 회원 탈퇴(비밀번호 재확인, 주문·미정산·잔액 0일 때만) | 400 PASSWORD_MISMATCH, 409 WITHDRAWAL_NOT_ALLOWED, 429 LOGIN_LOCKED |
+| /users/me/withdrawal | GET | USER | 탈퇴 조건 조회(진행 중 주문·판매 여부, 미정산 금액, 잔액, 결과 확인 중인 충전 건 여부) | 401, 403 |
+| /users/me | DELETE | USER | 회원 탈퇴(비밀번호 재확인, 진행 중 주문·판매, 미정산, 잔액, 결과 확인 중인 충전 건이 없을 때만. 관리자는 불가) | 400 PASSWORD_MISMATCH, 403, 409 WITHDRAWAL_NOT_ALLOWED, 429 LOGIN_LOCKED |
 
 | 경로 | 메서드 | 권한 | 설명 | 주요 오류 |
 | --- | --- | --- | --- | --- |
@@ -367,6 +371,8 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | `lockProductsForOrderChange(productIds)` | 상품 | 주문 취소·만료·반품 승인 전 상품 먼저 잠금 (잠금 순서 상품 → 주문) |
 | `stopAllBySeller(sellerId, reason)` / `resumeAllBySeller(sellerId)` | 상품 | 판매자 철회 요청·제재 시 전체 중지 / 철회 거절 시 되돌림 |
 | `getWallet(memberId)` | 결제 | 지갑 잔액·홀딩 금액(회원 탈퇴 조건, 관리자 회원 상세) |
+| `hasPendingTopups(memberId)` | 결제 | 결과가 정해지지 않은 충전 건(READY·PROCESSING) 여부(회원 탈퇴 조건) |
+| `checkActiveMember(memberId)` | 회원 | 로그인 상태인 회원인지 확인, 탈퇴했으면 401(충전 준비·승인, 주문 생성·결제) |
 | `pay(PayCommand: orderId, orderNumber, buyerId, amount, orderExpiresAt, idempotencyKey)` | 결제 | 지갑 → 홀딩, 결과 PAID / FAILED_INSUFFICIENT_BALANCE / FAILED_ORDER_EXPIRED |
 | `getPaymentAttempts(orderId)` | 결제 | 주문의 결제 시도 목록(실패 포함, 오래된 순) — 주문 상세 |
 | `cancelPendingOrders(productIds, cancelType)` | 주문 | 상품 판매 중지·삭제·판매자 철회·제재 시 결제 대기 주문 취소 |
