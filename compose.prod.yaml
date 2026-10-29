@@ -25,8 +25,10 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../palette-web:/usr/share/nginx/html:ro
+    # nginx는 시작할 때 넘길 곳(app, grafana)의 이름을 찾으므로 두 컨테이너가 먼저 떠 있어야 한다
     depends_on:
       - app
+      - grafana
 
   app:
     build: .
@@ -93,8 +95,9 @@ services:
       retries: 10
 
   # ── 로그 모니터링: Alloy(수집) → Loki(저장) → Grafana(조회·Slack 알림) ──
-  # Grafana는 서버 안(127.0.0.1:3000)에서만 열린다. 보려면 SSH 터널을 쓴다.
-  #   ssh -L 3000:localhost:3000 {EC2_USER}@{EC2_HOST} 후 http://localhost:3000
+  # Grafana는 nginx를 거쳐 http://{EC2_HOST}/grafana/ 로 연다(nginx/default.conf). 3000번은 외부에 열지 않는다.
+  # nginx가 안 될 때는 SSH 터널로도 볼 수 있다.
+  #   ssh -L 3000:localhost:3000 {EC2_USER}@{EC2_HOST} 후 http://localhost:3000/grafana/
   loki:
     image: grafana/loki:3.5.0
     container_name: palette-loki
@@ -130,8 +133,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD가 .env에 없습니다}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
-      # Slack 알림의 링크가 이 주소로 만들어진다 (SSH 터널로 여는 주소)
-      GF_SERVER_ROOT_URL: http://localhost:3000
+      # 브라우저로 여는 주소. Slack 알림의 "Grafana에서 로그 보기" 링크도 이 주소로 만들어진다.
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:?GRAFANA_ROOT_URL이 .env에 없습니다}
+      # ROOT_URL의 경로(/grafana/) 아래에서 동작한다. nginx는 /grafana를 떼지 않고 그대로 넘긴다.
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       # monitoring/grafana/provisioning/alerting/slack.yaml이 읽는다
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?SLACK_BOT_TOKEN이 .env에 없습니다}
     ports:
