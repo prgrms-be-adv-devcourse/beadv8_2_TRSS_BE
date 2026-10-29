@@ -45,14 +45,4 @@ class LoginAttemptStoreTest {
         assertThat(redisTemplate.getExpire(key, TimeUnit.SECONDS)).isBetween(1L, 180L);
         assertThat(redisTemplate.opsForValue().get(key)).isEqualTo("2");
     }
-
-    @Test
-    @DisplayName("TTL이 없는 키(이전 방식에서 INCR 뒤 EXPIRE 전에 장애가 난 경우)도 다음 시도에서 TTL이 붙어 영구 잠금이 되지 않는다")
-    void increaseAttempt_healsKeyWithoutTtl() {
-        redisTemplate.opsForValue().set(key, "5");
-        assertThat(redisTemplate.getExpire(key)).isEqualTo(-1);
-
-        assertThat(loginAttemptStore.increaseAttempt(email, TTL)).isEqualTo(6);
-        assertThat(redisTemplate.getExpire(key, TimeUnit.SECONDS)).isBetween(1L, TTL.toSeconds());
-    }
 }

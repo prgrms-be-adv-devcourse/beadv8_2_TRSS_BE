@@ -21,10 +21,10 @@ public class LoginAttemptStore {
     public static final String ATTEMPT_COUNT_KEY = "member:login-fail:";
 
     // INCR과 TTL 설정을 한 명령으로 실행해, 그 사이 장애가 나도 TTL 없는 키(영구 잠금)가 남지 않게 함
-    // TTL이 없는 키(이전 방식에서 남은 키)도 여기서 TTL을 붙여 풀리게 함. INCR은 기존 TTL을 유지함
+    // 첫 시도에만 TTL을 설정하고, 이후 INCR은 기존 TTL을 유지함
     private static final RedisScript<Long> INCREASE_ATTEMPT_SCRIPT = RedisScript.of("""
             local count = redis.call('INCR', KEYS[1])
-            if count == 1 or redis.call('PTTL', KEYS[1]) == -1 then
+            if count == 1 then
                 redis.call('PEXPIRE', KEYS[1], ARGV[1])
             end
             return count
