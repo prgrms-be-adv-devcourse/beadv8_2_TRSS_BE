@@ -1,5 +1,7 @@
 package com.backend.boundedContext.order.in.dto;
 
+import com.backend.boundedContext.order.domain.Order;
+
 import java.time.LocalDateTime;
 
 /**
@@ -16,4 +18,7 @@ public record OrderCreateResponse(
         long totalPrice,
         LocalDateTime expiresAt
 ) {
+    public static OrderCreateResponse from(Order order) {
+        return new OrderCreateResponse(order.getId(), order.getOrderNumber(), order.getTotalPrice(), order.getExpiresAt());
+    }
 }

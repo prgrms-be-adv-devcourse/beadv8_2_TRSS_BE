@@ -43,6 +43,10 @@ public class Order extends BaseIdAndTime {
     @Column(nullable = false)
     private Long buyerId;
 
+    // 주문 생성 멱등 키 (키 없이 만든 주문은 null)
+    @Column(length = 64)
+    private String idempotencyKey;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private OrderStatus status;
@@ -97,6 +101,11 @@ public class Order extends BaseIdAndTime {
 
     // 주문생성
     public static Order create(Long buyerId, List<OrderItemSpec> specs, LocalDateTime now, int expireMinutes) {
+        return create(buyerId, null, specs, now, expireMinutes);
+    }
+
+    // 주문생성 (멱등 키 포함)
+    public static Order create(Long buyerId, String idempotencyKey, List<OrderItemSpec> specs, LocalDateTime now, int expireMinutes) {
         if (specs == null || specs.isEmpty()) {
             throw new DomainException(OrderErrorCode.ORDER_ITEM_EMPTY);
         }
@@ -105,6 +114,7 @@ public class Order extends BaseIdAndTime {
         Order order = new Order();
         order.orderNumber = generateOrderNumber(now);
         order.buyerId = buyerId;
+        order.idempotencyKey = idempotencyKey;
         order.changeStatus(OrderStatus.CREATED, null);
         order.expiresAt = now.plusMinutes(expireMinutes);
 
