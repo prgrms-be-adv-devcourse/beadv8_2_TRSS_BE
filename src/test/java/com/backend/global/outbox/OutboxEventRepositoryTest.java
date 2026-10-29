@@ -3,7 +3,6 @@ package com.backend.global.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -51,7 +50,7 @@ class OutboxEventRepositoryTest {
         assertThat(found.getEventType()).isEqualTo("MemberSignedUpEvent");
         assertThat(found.getAggregateType()).isEqualTo("MEMBER");
         assertThat(found.getAggregateId()).isEqualTo(42L);
-        assertThat(found.getOccurredAt()).isEqualTo(envelope.occurredAt().truncatedTo(ChronoUnit.MICROS));   // timestamp(6)
+        assertThat(found.getOccurredAt()).isEqualTo(envelope.occurredAt());   // 봉투가 마이크로초로 맞춰 두므로 timestamp(6)에 저장해도 같다
         assertThat(found.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(found.getRetryCount()).isZero();
         assertThat(found.getPublishedAt()).isNull();

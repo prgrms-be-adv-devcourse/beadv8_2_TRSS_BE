@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -28,13 +29,14 @@ class EventEnvelopeTest {
     @Test
     @DisplayName("봉투에 담으면 새 eventId, 클래스 이름 eventType, 집합 정보가 채워진다")
     void wrap() {
-        LocalDateTime before = LocalDateTime.now();
+        LocalDateTime before = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
 
         EventEnvelope<OrderConfirmedEvent> envelope = EventEnvelope.wrap(orderConfirmed);
 
         assertThat(envelope.eventId()).isNotNull();
         assertThat(envelope.eventType()).isEqualTo("OrderConfirmedEvent");
         assertThat(envelope.occurredAt()).isAfterOrEqualTo(before);
+        assertThat(envelope.occurredAt().getNano() % 1_000).isZero();   // 마이크로초까지만 (DB timestamp(6)과 같게)
         assertThat(envelope.aggregateType()).isEqualTo("ORDER");
         assertThat(envelope.aggregateId()).isEqualTo(10L);
         assertThat(envelope.payload()).isSameAs(orderConfirmed);
