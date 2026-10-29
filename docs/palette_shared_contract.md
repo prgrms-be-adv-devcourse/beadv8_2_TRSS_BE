@@ -14,13 +14,32 @@
 | payment | 지은·시연 | `PaymentApi` | - |
 | settlement | 다은 | `SettlementApi` | - |
 
+### 이벤트 공통 규격
+
+```java
+package com.backend.shared.event;
+
+/** 다른 컨텍스트에 알리는 이벤트 record가 구현한다 */
+public interface DomainEvent {
+    String aggregateType();   // 이벤트가 생긴 대상 종류. 대문자 단수형(ORDER, MEMBER)
+    Long aggregateId();       // 그 대상의 ID
+}
+
+/** 모든 이벤트에 붙는 봉투. EventEnvelope.wrap(event)로 만든다 */
+public record EventEnvelope<T extends DomainEvent>(UUID eventId, String eventType, LocalDateTime occurredAt,
+                                                   String aggregateType, Long aggregateId, T payload) { }
+```
+
+- 아래 컨텍스트별 이벤트는 모두 `DomainEvent`를 구현한다. 새 이벤트를 추가할 때도 구현한다.
+- 봉투는 Outbox 도입(TRSS-121)에서 쓴다. 단계와 필드 설명은 [개발 가이드 6.5](palette_development_guide.md#65-outbox)
+
 ## 1. 시나리오별 호출 흐름
 
 계약이 왜 필요한지 보여 주는 표입니다. "같은 Tx"는 호출한 쪽 트랜잭션에 참여한다는 뜻입니다.
 
 | 시나리오 | 시작 | 호출 순서 | 방식 |
 | --- | --- | --- | --- |
-| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로) |
+| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로. 릴레이 전환 예정) |
 | 장바구니 조회 | order | `ProductApi.getOptions(optionIds)` → 현재 가격·판매 가능 여부·대표 이미지로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
@@ -98,11 +117,12 @@ public enum SellerStatus { PENDING, APPROVED, REJECTED, WITHDRAW_REQUESTED, WITH
 ```java
 package com.backend.shared.member.event;
 
-/** 회원 가입 완료. 결제가 받아 잔액 0인 지갑을 생성한다 */
-public record MemberSignedUpEvent(Long memberId) { }
+/** 회원 가입 완료. 결제가 받아 잔액 0인 지갑을 생성한다. aggregate: MEMBER / memberId */
+public record MemberSignedUpEvent(Long memberId) implements DomainEvent { }
 ```
 
-- 지금은 `@EventListener`로 가입 트랜잭션 안에서 처리해, 지갑 생성이 실패하면 가입도 롤백된다.
+- 지금은 `EventPublisher`가 가입 트랜잭션 안에서 바로 리스너에 전달해, 지갑 생성이 실패하면 가입도 롤백된다(outbox에는 PUBLISHED로 기록).
+- 릴레이 전환 예정(2026-10-23 결정, payment 담당): 지갑 생성이 가입과 별도 트랜잭션이 된다. 그 전에 결제가 가입 직후 지갑이 아직 없는 구간을 처리해야 한다.
 
 ## 3. product
 
@@ -220,12 +240,12 @@ public interface OrderApi {
 ```java
 package com.backend.shared.order.event;
 
-/** 구매 확정. 정산 컨텍스트가 주문 항목별 정산 후보를 만든다 */
+/** 구매 확정. 정산 컨텍스트가 주문 항목별 정산 후보를 만든다. aggregate: ORDER / orderId */
 public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime confirmedAt,
-                                  ConfirmType confirmType, List<ConfirmedOrderItemDto> items) { }
+                                  ConfirmType confirmType, List<ConfirmedOrderItemDto> items) implements DomainEvent { }
 
-/** 반품 승인. 결제 컨텍스트가 홀딩 금액을 구매자 지갑으로 환불한다 */
-public record OrderReturnedEvent(Long orderId, Long buyerId, long refundAmount, LocalDateTime returnedAt) { }
+/** 반품 승인. 결제 컨텍스트가 홀딩 금액을 구매자 지갑으로 환불한다. aggregate: ORDER / orderId */
+public record OrderReturnedEvent(Long orderId, Long buyerId, long refundAmount, LocalDateTime returnedAt) implements DomainEvent { }
 ```
 
 ### DTO
@@ -353,6 +373,8 @@ public interface SettlementApi {
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
 | `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `settlement_candidate.order_item_id` 유니크 |
+
+- 지금은 구매 확정 커밋 뒤(`AFTER_COMMIT`) 처리한다. 릴레이 전환 예정(settlement 담당): 리스너를 `@EventListener` + `@Transactional`로 바꾸면 실패 시 재시도된다.
 
 ## 7. 구현 주의사항
 
