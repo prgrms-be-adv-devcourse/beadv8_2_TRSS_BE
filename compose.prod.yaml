@@ -4,11 +4,20 @@
 # 외부에는 nginx 80번만 연다. app·postgres·redis는 Docker 내부 네트워크로만 통신한다.
 name: palette
 
+# 컨테이너 로그(docker logs) 파일 크기 제한. 없으면 서버 디스크(50GB)를 계속 차지한다.
+# 오래 보관할 로그는 Loki(monitoring/loki/config.yaml, 14일)에서 본다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   nginx:
     image: nginx:stable
     container_name: palette-nginx
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
     volumes:
@@ -24,6 +33,7 @@ services:
     image: palette-app
     container_name: palette-app
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       # .env의 값보다 우선한다. 컨테이너끼리는 서비스 이름으로 찾는다.
@@ -33,6 +43,9 @@ services:
       REDIS_PORT: 6379
       # nginx가 넘긴 X-Forwarded-* 헤더로 원래 요청 주소·프로토콜을 판단한다.
       SERVER_FORWARD_HEADERS_STRATEGY: native
+      # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
+      # 로컬은 이 값이 없어 지금처럼 사람이 읽는 형식으로 찍힌다.
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     # JVM 힙은 이 값의 75%(Dockerfile의 MaxRAMPercentage). 서버 8GB를 DB·Redis와 나눠 쓴다.
     mem_limit: 2g
     depends_on:
@@ -45,6 +58,7 @@ services:
     image: postgres:17
     container_name: palette-postgres
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${DB_NAME:?DB_NAME이 .env에 없습니다}
       POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME이 .env에 없습니다}
@@ -65,6 +79,7 @@ services:
     image: redis:7.4
     container_name: palette-redis
     restart: unless-stopped
+    logging: *default-logging
     # 재시작해도 Refresh Token·인증코드가 사라지지 않게 디스크에 남긴다.
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -77,6 +92,60 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── 로그 모니터링: Alloy(수집) → Loki(저장) → Grafana(조회·Slack 알림) ──
+  # Grafana는 서버 안(127.0.0.1:3000)에서만 열린다. 보려면 SSH 터널을 쓴다.
+  #   ssh -L 3000:localhost:3000 {EC2_USER}@{EC2_HOST} 후 http://localhost:3000
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: palette-loki
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./monitoring/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    mem_limit: 512m
+
+  alloy:
+    image: grafana/alloy:v1.10.0
+    container_name: palette-alloy
+    restart: unless-stopped
+    logging: *default-logging
+    # storage.path: 어디까지 보냈는지 기억해, 재시작해도 로그를 중복으로 보내지 않는다
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    mem_limit: 256m
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: palette-grafana
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD가 .env에 없습니다}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # Slack 알림의 링크가 이 주소로 만들어진다 (SSH 터널로 여는 주소)
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      # monitoring/grafana/provisioning/alerting/slack.yaml이 읽는다
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?SLACK_BOT_TOKEN이 .env에 없습니다}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    mem_limit: 256m
+    depends_on:
+      - loki
+
 volumes:
   postgres-data:
   redis-data:
+  loki-data:
+  alloy-data:
+  grafana-data:
