@@ -35,8 +35,14 @@ import static org.mockito.BDDMockito.willThrow;
 
 /**
  * OrderConfirmedEvent가 Outbox 릴레이로 정산 후보까지 전달되는지 실제 DB로 확인한다(TRSS-121 4-1).
- * 스케줄러는 끄고 릴레이를 직접 호출한다. 로컬 DB에 남아 있던 다른 PENDING 이벤트도 함께 발행될 수 있다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 스케줄러는 끄고 릴레이를 직접 호출한다. 로컬 Docker PostgreSQL·Redis가 필요하다.
+ *
+ * 이 테스트는 outbox를 혼자 읽는다고 가정한다. 아래 경우에는 실패하거나 로컬 DB를 바꿀 수 있다.
+ * - 같은 DB를 쓰는 앱(local 프로필)이 떠 있으면, 그 앱의 릴레이가 테스트 이벤트를 먼저 전달해 실패한다.
+ *   테스트를 돌리기 전에 로컬 앱을 꺼 둔다.
+ * - 릴레이는 한 번에 오래된 것부터 최대 relayBatchSize(100)건을 처리한다.
+ *   DB에 남아 있던 다른 PENDING 이벤트(시드 등)도 함께 전달되고(cleanUp에서 지우지 않음),
+ *   그런 이벤트가 100건 이상이면 테스트 이벤트까지 오지 않아 실패한다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class SettlementOutboxRelayIntegrationTest {
