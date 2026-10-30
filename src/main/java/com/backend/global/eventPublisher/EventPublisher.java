@@ -6,7 +6,6 @@ import com.backend.global.outbox.OutboxEventTypes;
 import com.backend.shared.event.DomainEvent;
 import com.backend.shared.event.EventEnvelope;
 import com.backend.shared.member.event.MemberSignedUpEvent;
-import com.backend.shared.order.event.OrderConfirmedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -28,7 +27,7 @@ public class EventPublisher {
      * 아직 릴레이로 옮기지 않은 이벤트. Outbox 도입 전처럼 호출한 쪽 트랜잭션 안에서 바로 스프링 이벤트로 발행한다.
      */
     private static final Set<Class<? extends DomainEvent>> DIRECT_PUBLISH_EVENTS =
-            Set.of(MemberSignedUpEvent.class, OrderConfirmedEvent.class);
+            Set.of(MemberSignedUpEvent.class);
 
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxEventTypes outboxEventTypes;

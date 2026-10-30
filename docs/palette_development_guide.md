@@ -104,7 +104,7 @@ com.backend
 | 방식 | 언제 쓰나 | 구현 |
 | --- | --- | --- |
 | **동기 Api** | 결과가 바로 필요하거나 같은 트랜잭션이어야 할 때 | `shared/<ctx>/out/<Ctx>Api` 인터페이스 → 제공 컨텍스트의 `<Ctx>ApiAdapter`가 구현 |
-| **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 전달 (지금 있는 이벤트는 아직 바로 발행, [6.5](#65-outbox)) |
+| **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 전달 (`MemberSignedUpEvent`는 아직 바로 발행, [6.5](#65-outbox)) |
 
 기획서가 같은 트랜잭션을 요구하므로(주문 생성 + 재고 차감, 결제 + 주문 PAID) 동기 호출은 Java 인터페이스로 합니다. MSA로 나눌 때는 `<Ctx>Api` 구현체만 `RestClient` 기반으로 바꾸면 됩니다.
 
@@ -161,7 +161,7 @@ flowchart LR
     member -. MemberSignedUpEvent .-> payment
 ```
 
-실선은 동기 Api, 점선은 이벤트입니다(outbox에 기록하지만 아직 릴레이로 옮기지 않아 바로 발행, `MemberSignedUpEvent`는 같은 트랜잭션에서 처리. [6.5](#65-outbox)). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
+실선은 동기 Api, 점선은 이벤트입니다(outbox에 기록. `OrderConfirmedEvent`는 릴레이가 전달하고, `MemberSignedUpEvent`는 아직 릴레이로 옮기지 않아 바로 발행해 같은 트랜잭션에서 처리. [6.5](#65-outbox)). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
 
 ### 6.4 이벤트 규칙
 
@@ -179,8 +179,8 @@ public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime conf
 public class SettlementEventListener {
     private final SettlementFacade settlementFacade;
 
-    @TransactionalEventListener(phase = AFTER_COMMIT)
-    @Transactional(propagation = REQUIRES_NEW)
+    @EventListener
+    @Transactional   // 릴레이가 이벤트마다 연 트랜잭션에 참여
     public void handle(OrderConfirmedEvent event) {
         settlementFacade.createCandidates(event);
     }
@@ -189,9 +189,9 @@ public class SettlementEventListener {
 
 - 이벤트는 불변 record로 만들고, 받는 쪽이 다시 조회하지 않아도 되도록 필요한 값을 모두 담습니다.
 - 다른 컨텍스트에 알리는 이벤트는 `shared.event.DomainEvent`를 구현합니다. `aggregateType()`은 이벤트가 생긴 대상 종류(대문자 단수형, 예: `ORDER`, `MEMBER`), `aggregateId()`는 그 대상의 ID입니다. record 필드에는 넣지 않습니다.
-- 리스너는 Facade 한 줄만 호출합니다. 지금은 `AFTER_COMMIT` + `REQUIRES_NEW`를 씁니다.
-  - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
-  - 릴레이로 옮긴 이벤트의 리스너는 `@EventListener` + `@Transactional`을 씁니다. 릴레이가 이벤트마다 연 트랜잭션에 참여하므로, 리스너가 실패하면 리스너의 변경과 PUBLISHED 표시가 함께 롤백되고 이벤트가 다시 전달됩니다. 릴레이로 옮긴 뒤에도 `AFTER_COMMIT` + `REQUIRES_NEW`로 두면 실패한 이벤트가 재시도되지 않고 유실됩니다([6.5](#65-outbox)).
+- 리스너는 Facade 한 줄만 호출합니다.
+  - 릴레이로 옮긴 이벤트(`OrderConfirmedEvent`)의 리스너는 `@EventListener` + `@Transactional`을 씁니다. 릴레이가 이벤트마다 연 트랜잭션에 참여하므로, 리스너가 실패하면 리스너의 변경과 PUBLISHED 표시가 함께 롤백되고 이벤트가 다시 전달됩니다. `AFTER_COMMIT` + `REQUIRES_NEW`로 두면 실패한 이벤트가 재시도되지 않고 유실됩니다([6.5](#65-outbox)).
+  - 아직 릴레이로 옮기지 않은 `MemberSignedUpEvent`는 정책상 발행한 쪽과 같은 트랜잭션이어야 하므로 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
 - **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, 환불 구현 시 `payment_refund.payment_id`)으로 중복을 막습니다.
 - 발행은 UseCase에서 `EventPublisher.publish(...)`로 합니다. 엔티티에서 스프링 빈을 꺼내 쓰지 않습니다.
 - `publish()`는 **쓰기 트랜잭션 안에서만** 부릅니다. 이벤트를 호출한 쪽 트랜잭션에서 `outbox_event`에 저장하므로, 트랜잭션이 없거나 읽기 전용이면 `IllegalStateException`이 납니다.
@@ -201,7 +201,8 @@ public class SettlementEventListener {
 이벤트는 Transactional Outbox로 발행합니다(TRSS-121). 비즈니스 변경과 이벤트 저장을 한 트랜잭션으로 묶어, 커밋된 변경의 이벤트가 유실되지 않게 합니다.
 
 - 리스너 전환은 받는 쪽 담당자가 합니다. 전환 전 이벤트는 `EventPublisher.DIRECT_PUBLISH_EVENTS`에 두어, outbox에 PUBLISHED로 기록만 하고 Outbox 도입 전처럼 바로 스프링 이벤트로 발행합니다(리스너 동작은 도입 전과 같음).
-- 지금은 `MemberSignedUpEvent`, `OrderConfirmedEvent` 둘 다 이 목록에 있어서, 릴레이가 실제로 전달하는 이벤트는 아직 없습니다.
+- 지금 이 목록에는 `MemberSignedUpEvent`만 있습니다. `OrderConfirmedEvent`는 릴레이가 전달하므로, 구매 확정 후 정산 후보가 생기기까지 최대 약 1초(릴레이 간격) 걸립니다.
+- 5번 실패해 FAILED가 된 이벤트는 자동으로 다시 전달되지 않습니다. 원인을 고친 뒤 outbox 행의 상태를 PENDING으로 되돌리면 릴레이가 다시 전달합니다.
 
 | 단계 | 내용 | 상태 |
 | --- | --- | --- |
@@ -209,7 +210,7 @@ public class SettlementEventListener {
 | 2 | `outbox_event` 테이블 (`V12`), 엔티티 `global.outbox.OutboxEvent` | 완료 |
 | 3 | `EventPublisher.publish()`가 호출한 쪽 트랜잭션 안에서 outbox에 저장 (트랜잭션 밖 호출은 예외) | 완료 |
 | 4 | 릴레이: 미발행 이벤트를 스프링 이벤트로 발행 (`OutboxRelay`, `OutboxRelayScheduler`) | 완료 |
-| 4-1 | `OrderConfirmedEvent` 릴레이 전환: `SettlementEventListener`를 `@EventListener` + `@Transactional`로 바꾸고 `EventPublisher.DIRECT_PUBLISH_EVENTS`에서 뺀다 | settlement 담당 |
+| 4-1 | `OrderConfirmedEvent` 릴레이 전환: `SettlementEventListener`를 `@EventListener` + `@Transactional`로 바꾸고 `EventPublisher.DIRECT_PUBLISH_EVENTS`에서 뺀다 | 완료 |
 | 4-2 | `MemberSignedUpEvent` 릴레이 전환: 결제가 지갑이 아직 없는 구간을 처리(조회는 0, 쓰기는 지갑을 먼저 생성)하고, `PaymentEventListener`에 `@Transactional`을 붙인 뒤 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | payment 담당 |
 | 5 | Kafka 발행 | 도입 승인 후 |
 
@@ -414,7 +415,7 @@ custom:
 - [x] Adapter `@Lazy` 주입: `lombok.config`에 한 줄 추가
 - [x] 시드 계정: 1 관리자, 2 판매자, 3 구매자
 - [x] Facade는 DTO를 반환
-- [x] Outbox: 도입함(TRSS-121, 6.5). 리스너 전환은 받는 쪽 담당자가 함(정산: `OrderConfirmedEvent`, 결제: `MemberSignedUpEvent`). `MemberSignedUpEvent`도 옮기기로 함(2026-10-23 결정), 지갑이 아직 없는 구간 처리는 payment 담당
+- [x] Outbox: 도입함(TRSS-121, 6.5). 리스너 전환은 받는 쪽 담당자가 함(정산: `OrderConfirmedEvent` 완료(TRSS-134), 결제: `MemberSignedUpEvent`). `MemberSignedUpEvent`도 옮기기로 함(2026-10-23 결정), 지갑이 아직 없는 구간 처리는 payment 담당
 - [x] 미정산 금액: 구매 확정된 금액만 (확정 전 주문은 포함하지 않음)
 - [x] 목록 조회 형식: 10장
 - [x] 결제 `PROCESSING`: 쓰지 않아 제거 (결제 건은 PAID·FAILED_*로만 저장)

@@ -374,7 +374,8 @@ public interface SettlementApi {
 | --- | --- | --- |
 | `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `settlement_candidate.order_item_id` 유니크 |
 
-- 지금은 구매 확정 커밋 뒤(`AFTER_COMMIT`) 처리한다. 릴레이 전환 예정(settlement 담당): 리스너를 `@EventListener` + `@Transactional`로 바꾸면 실패 시 재시도된다.
+- Outbox 릴레이가 전달한다(`@EventListener` + `@Transactional`, 릴레이 트랜잭션에 참여). 구매 확정 후 후보가 생기기까지 최대 약 1초(릴레이 간격) 걸린다.
+- 후보 생성이 실패하면 후보와 PUBLISHED 표시가 함께 롤백되고, 다음 릴레이에서 다시 전달된다. 5번 실패하면 FAILED로 남으며, 원인 수정 후 outbox 상태를 PENDING으로 되돌려 재전달한다.
 
 ## 7. 구현 주의사항
 
