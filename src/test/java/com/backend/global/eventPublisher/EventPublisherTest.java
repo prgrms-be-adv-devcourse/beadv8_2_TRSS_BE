@@ -109,19 +109,18 @@ class EventPublisherTest {
     }
 
     @Test
-    @DisplayName("가입 이벤트는 같은 트랜잭션에서 바로 지갑을 만들고, outbox에는 PUBLISHED로 남아 릴레이가 다시 보내지 않는다")
-    void publishSameTransactionEvent() {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            eventPublisher.publish(new MemberSignedUpEvent(testId));
-            assertThat(walletRepository.findByMemberId(testId)).isPresent();   // 커밋 전, 같은 트랜잭션 안에서 이미 생성
-        });
+    @DisplayName("가입 이벤트는 outbox에 PENDING으로 저장만 되고, 릴레이가 전달하기 전까지 지갑은 생기지 않는다")
+    void publishSignUpEvent_waitsForRelay() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                eventPublisher.publish(new MemberSignedUpEvent(testId)));
 
+        assertThat(walletRepository.findByMemberId(testId)).isEmpty();
         assertThat(outboxEventRepository.findAll().stream()
                 .filter(outbox -> outbox.getAggregateType().equals("MEMBER") && outbox.getAggregateId().equals(testId)))
                 .singleElement()
                 .satisfies(outbox -> {
-                    assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
-                    assertThat(outbox.getPublishedAt()).isNotNull();
+                    assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+                    assertThat(outbox.getPublishedAt()).isNull();
                 });
     }
 

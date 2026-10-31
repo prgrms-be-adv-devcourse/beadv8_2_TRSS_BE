@@ -26,7 +26,7 @@ import com.backend.shared.member.event.MemberSignedUpEvent;
 /**
  * Outbox 릴레이가 미발행 이벤트를 리스너에 전달하고 상태를 바꾸는지 실제 DB로 확인한다.
  * 스케줄러는 끄고 릴레이를 직접 호출한다. 로컬 DB에 남아 있던 다른 PENDING 이벤트도 함께 발행될 수 있다.
- * 가입 이벤트는 지금 EventPublisher가 같은 트랜잭션에서 바로 전달하므로, 여기서는 PENDING 행을 직접 넣어 릴레이를 확인한다.
+ * 가입 이벤트 PENDING 행을 직접 넣어 릴레이를 확인한다.
  * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
