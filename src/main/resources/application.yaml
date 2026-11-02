@@ -116,6 +116,16 @@ custom:
     secretKey: ${TOSS_SECRET_KEY:}
     connectTimeoutSeconds: 5   # 토스 서버 접속 제한 시간(초)
     readTimeoutSeconds: 30     # 요청 후 토스 응답 대기 제한 시간(초). 넘으면 충전 건을 PROCESSING으로 두고, 스케줄러가 토스 조회로 최종 결과를 반영
+  # 카카오 로그인(이미 가입한 회원이 카카오 계정을 연결해 로그인 수단으로 씀). 프론트가 받은 인가 코드를 서버가 토큰으로 바꿔 회원번호를 조회한다.
+  # Client Secret은 환경변수로만 주입하고, 키가 없으면 카카오를 호출할 때만 실패한다.
+  kakao:
+    authBaseUrl: https://kauth.kakao.com    # 토큰 발급
+    apiBaseUrl: https://kapi.kakao.com      # 사용자 정보 조회
+    clientId: ${KAKAO_CLIENT_ID:}           # REST API 키 (프론트 인가 주소에도 들어가는 공개 값)
+    clientSecret: ${KAKAO_CLIENT_SECRET:}
+    redirectUri: ${KAKAO_REDIRECT_URI:http://localhost:5173/oauth/kakao/callback}   # 프론트 콜백 화면. 인가 요청 때와 같아야 토큰을 받을 수 있다
+    connectTimeoutSeconds: 3
+    readTimeoutSeconds: 5
   settlement:
     feeRate: 10                # 수수료율(%)
     payDayOfMonth: 10          # 매월 정산일
