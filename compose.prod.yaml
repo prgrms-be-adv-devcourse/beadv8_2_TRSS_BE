@@ -117,7 +117,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      # 토픽은 앱이 시작할 때 만든다(OutboxKafkaConfig). 오타로 엉뚱한 토픽이 생기지 않게 자동 생성은 끈다
+      # 토픽은 릴레이가 처음 보낼 때 만든다(OutboxKafkaSender). 오타로 엉뚱한 토픽이 생기지 않게 브로커 자동 생성은 끈다
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       # 이벤트 원본은 outbox_event에 남으므로 Kafka에는 3일·파티션당 512MB까지만 둔다(디스크 50GB)
       KAFKA_LOG_RETENTION_HOURS: 72
