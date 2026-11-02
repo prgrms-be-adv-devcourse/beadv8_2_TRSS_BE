@@ -42,6 +42,7 @@ public class SecurityConfig {
             "/api/v1/auth/email/**",
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
+            "/api/v1/auth/kakao",
             "/api/v1/auth/refresh"
     };
     private static final String[] ADMIN_API_URLS = {

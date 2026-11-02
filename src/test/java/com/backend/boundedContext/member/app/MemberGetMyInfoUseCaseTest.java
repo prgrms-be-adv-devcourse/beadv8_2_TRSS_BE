@@ -16,7 +16,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.SocialProvider;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
 import com.backend.shared.member.dto.MemberRole;
@@ -28,16 +30,20 @@ class MemberGetMyInfoUseCaseTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private MemberSocialAccountRepository memberSocialAccountRepository;
+
     @InjectMocks
     private MemberGetMyInfoUseCase memberGetMyInfoUseCase;
 
     private final Member member = Member.signUp("user@palette.com", "encoded", "홍길동");
 
     @Test
-    @DisplayName("로그인 회원의 ID, 이메일, 이름, 역할을 돌려준다")
+    @DisplayName("로그인 회원의 ID, 이메일, 이름, 역할, 카카오 연결 여부를 돌려준다")
     void getMyInfo_success() {
         ReflectionTestUtils.setField(member, "id", 1L);
         given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(memberSocialAccountRepository.existsByMemberIdAndProvider(1L, SocialProvider.KAKAO)).willReturn(true);
 
         MyInfoDto myInfo = memberGetMyInfoUseCase.getMyInfo(1L);
 
@@ -45,6 +51,7 @@ class MemberGetMyInfoUseCaseTest {
         assertThat(myInfo.email()).isEqualTo("user@palette.com");
         assertThat(myInfo.name()).isEqualTo("홍길동");
         assertThat(myInfo.role()).isEqualTo(MemberRole.USER);
+        assertThat(myInfo.kakaoLinked()).isTrue();
     }
 
     @Test

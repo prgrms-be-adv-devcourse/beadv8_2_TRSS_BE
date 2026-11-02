@@ -21,8 +21,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.SocialProvider;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.security.JwtTokenProvider;
@@ -58,6 +60,12 @@ class MemberWithdrawalIntegrationTest {
     @Autowired
     private LoginAttemptStore loginAttemptStore;
 
+    @Autowired
+    private MemberSocialAccountLinker memberSocialAccountLinker;
+
+    @Autowired
+    private MemberSocialAccountRepository memberSocialAccountRepository;
+
     private final String email = "withdraw-it-" + UUID.randomUUID() + "@palette.com";
     private Member member;
 
@@ -70,13 +78,17 @@ class MemberWithdrawalIntegrationTest {
     @AfterEach
     void cleanUp() {
         loginAttemptStore.deleteAttempts(email);
+        memberSocialAccountRepository.findByMemberIdAndProvider(member.getId(), SocialProvider.KAKAO)
+                .ifPresent(memberSocialAccountRepository::delete);
         walletRepository.findByMemberId(member.getId()).ifPresent(walletRepository::delete);
         memberRepository.deleteById(member.getId());
     }
 
     @Test
-    @DisplayName("조건을 충족하면 탈퇴되고, 개인정보가 비식별화되어 원래 이메일로 로그인할 수 없다")
+    @DisplayName("조건을 충족하면 탈퇴되고, 개인정보가 비식별화되어 원래 이메일로 로그인할 수 없다. 카카오 연결 정보도 지워진다")
     void withdraw() throws Exception {
+        String kakaoUserId = "test-" + UUID.randomUUID();
+        memberSocialAccountLinker.link(member.getId(), SocialProvider.KAKAO, kakaoUserId);
         String bearer = "Bearer " + jwtTokenProvider.createAccessToken(member.getId(), member.getRole());
 
         mockMvc.perform(get("/api/v1/users/me/withdrawal")
@@ -95,6 +107,8 @@ class MemberWithdrawalIntegrationTest {
         assertThat(withdrawn.getEmail()).isEqualTo("deleted-" + member.getId() + "@deleted.palette");
         assertThat(withdrawn.getName()).isEqualTo(Member.WITHDRAWN_NAME);
         assertThat(memberRepository.findByEmail(email)).isEmpty();
+        // 탈퇴한 회원의 카카오 계정으로는 로그인할 수 없고, 같은 카카오 계정을 새 회원에게 다시 연결할 수 있다
+        assertThat(memberSocialAccountRepository.findByProviderAndProviderUserId(SocialProvider.KAKAO, kakaoUserId)).isEmpty();
 
         mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("""
                         {"email": "%s", "password": "%s"}

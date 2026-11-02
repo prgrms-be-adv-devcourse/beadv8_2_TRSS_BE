@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,7 +59,7 @@ class ApiV1MemberControllerTest {
     @DisplayName("내 정보 조회: 토큰의 회원 ID로 조회해 돌려준다")
     void getMyInfo_success() throws Exception {
         given(memberFacade.getMyInfo(3L)).willReturn(
-                new MyInfoDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, LocalDateTime.of(2026, 10, 11, 15, 0)));
+                new MyInfoDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, LocalDateTime.of(2026, 10, 11, 15, 0), true));
         String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
 
         mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + token))
@@ -66,7 +67,8 @@ class ApiV1MemberControllerTest {
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
                 .andExpect(jsonPath("$.data.memberId").value(3))
                 .andExpect(jsonPath("$.data.email").value("buyer@palette.test"))
-                .andExpect(jsonPath("$.data.role").value("USER"));
+                .andExpect(jsonPath("$.data.role").value("USER"))
+                .andExpect(jsonPath("$.data.kakaoLinked").value(true));
     }
 
     @Test
@@ -176,6 +178,48 @@ class ApiV1MemberControllerTest {
                 .andExpect(status().isOk());
 
         verify(memberFacade, never()).withdraw(anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("카카오 계정 연결: 인가 코드를 로그인한 회원 ID와 함께 넘긴다")
+    void linkKakao() throws Exception {
+        mockMvc.perform(post("/api/v1/users/me/social/kakao").header("Authorization", bearer())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"code": "auth-code"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"));
+
+        verify(memberFacade).linkKakao(3L, "auth-code");
+    }
+
+    @Test
+    @DisplayName("카카오 계정 연결: code가 비어 있으면 400 VALIDATION_FAILED, 이미 다른 회원에 연결된 계정이면 409")
+    void linkKakao_invalid() throws Exception {
+        mockMvc.perform(post("/api/v1/users/me/social/kakao").header("Authorization", bearer())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"code": ""}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        willThrow(new DomainException(MemberErrorCode.SOCIAL_ACCOUNT_LINKED_TO_OTHER)).given(memberFacade).linkKakao(3L, "other-code");
+        mockMvc.perform(post("/api/v1/users/me/social/kakao").header("Authorization", bearer())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"code": "other-code"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.resultCode").value("409-SOCIAL_ACCOUNT_LINKED_TO_OTHER"));
+    }
+
+    @Test
+    @DisplayName("카카오 계정 연결 해제: 로그인한 회원의 연결을 해제한다")
+    void unlinkKakao() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me/social/kakao").header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"));
+
+        verify(memberFacade).unlinkKakao(3L);
     }
 
     private String bearer() {

@@ -142,7 +142,7 @@ catch (RestClientException e) {
 | 403-FORBIDDEN | 역할 부족(URL 규칙). 판매자 상태가 APPROVED가 아니면 member의 `403-SELLER_NOT_APPROVED`를 쓴다 |
 | 409-IDEMPOTENCY_KEY_REUSED | 결제 멱등 키(`PayCommand.idempotencyKey`)가 다른 주문·구매자·금액에 다시 쓰임 (`Idempotency-Key` 헤더는 미구현) |
 | 429-TOO_MANY_REQUESTS | 인증코드 재발송 제한 등 |
-| 502-EXTERNAL_SERVICE_ERROR | 토스·메일 서버가 오류로 응답 (`cause`와 함께) |
+| 502-EXTERNAL_SERVICE_ERROR | 토스·카카오·메일 서버가 오류로 응답하거나 응답이 없음 (`cause`와 함께) |
 | 500-INTERNAL_ERROR | 잡은 예외를 감싸 다시 던질 때 (`cause`와 함께) |
 
 ## 5. 레이어별 책임
@@ -249,6 +249,10 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 401-LOGIN_FAILED | 이메일·비밀번호 불일치(어느 쪽인지 알려 주지 않음) |
 | | 429-LOGIN_LOCKED | 15분 안에 로그인 5회 실패 → 15분 잠금(5번째 실패부터, 가입하지 않은 이메일도 같음) |
 | | 400-PASSWORD_MISMATCH | 탈퇴 시 비밀번호 재확인 불일치 (로그인 상태라 401 대신 400. 5회 틀리면 429-LOGIN_LOCKED) |
+| | 400-KAKAO_AUTH_FAILED | 카카오가 인가 코드를 거절(`invalid_grant`): 코드 만료·재사용, redirect_uri 불일치. 키 설정 오류·카카오 장애는 502-EXTERNAL_SERVICE_ERROR |
+| | 401-SOCIAL_NOT_LINKED | 카카오 로그인 시 연결된 회원이 없음 (카카오로는 가입하지 않음) |
+| | 409-SOCIAL_ACCOUNT_LINKED_TO_OTHER | 연결하려는 카카오 계정이 다른 회원에 이미 연결됨 |
+| | 409-SOCIAL_PROVIDER_ALREADY_LINKED | 회원에 다른 카카오 계정이 이미 연결됨 (해제 후 다시 연결) |
 | | 409-WITHDRAWAL_NOT_ALLOWED | 진행 중 주문·판매, 미정산, 잔액, 결과 확인 중인 충전 건이 남았거나 판매자 철회 전 (`data.reasons`: `ACTIVE_ORDERS`, `ACTIVE_SALES`, `UNSETTLED_AMOUNT`, `BALANCE_REMAINING`, `PENDING_TOPUPS`, `SELLER_ACTIVE`) |
 | | 404-SELLER_NOT_FOUND | 판매자 신청 내역 없음 (내 판매자 조회·수정·철회 요청, 관리자 판매자 조회·처리) |
 | | 403-SELLER_SANCTIONED | 제재된 판매자의 재신청 |

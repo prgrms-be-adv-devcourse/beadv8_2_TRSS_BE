@@ -12,6 +12,7 @@ import com.backend.boundedContext.member.in.dto.AccessTokenResponse;
 import com.backend.boundedContext.member.in.dto.EmailCodeVerifyRequest;
 import com.backend.boundedContext.member.in.dto.EmailCodeVerifyResponse;
 import com.backend.boundedContext.member.in.dto.EmailRequest;
+import com.backend.boundedContext.member.in.dto.KakaoCodeRequest;
 import com.backend.boundedContext.member.in.dto.LoginRequest;
 import com.backend.boundedContext.member.in.dto.SignUpRequest;
 import com.backend.boundedContext.member.in.dto.SignUpResponse;
@@ -36,36 +37,62 @@ public class ApiV1AuthController {
 
     @Operation(summary = "이메일 중복 확인")
     @PostMapping("/email/check")
-    public RsData<Void> checkEmail(@Valid @RequestBody EmailRequest request) {
+    public RsData<Void> checkEmail(
+            @Valid @RequestBody EmailRequest request
+    ) {
         memberFacade.checkEmail(request.email());
         return RsData.of("200-1", "사용할 수 있는 이메일입니다.");
     }
 
     @Operation(summary = "이메일 인증코드 발송")
     @PostMapping("/email/code")
-    public RsData<Void> sendEmailCode(@Valid @RequestBody EmailRequest request) {
+    public RsData<Void> sendEmailCode(
+            @Valid @RequestBody EmailRequest request
+    ) {
         memberFacade.sendEmailCode(request.email());
         return RsData.of("200-1", "인증코드를 발송했습니다.");
     }
 
     @Operation(summary = "이메일 인증코드 확인")
     @PostMapping("/email/verify")
-    public RsData<EmailCodeVerifyResponse> verifyEmailCode(@Valid @RequestBody EmailCodeVerifyRequest request) {
+    public RsData<EmailCodeVerifyResponse> verifyEmailCode(
+            @Valid @RequestBody EmailCodeVerifyRequest request
+    ) {
         String token = memberFacade.verifyEmailCode(request.email(), request.code());
         return RsData.of("200-1", "이메일 인증이 완료되었습니다.", new EmailCodeVerifyResponse(token));
     }
 
     @Operation(summary = "회원가입")
     @PostMapping("/signup")
-    public RsData<SignUpResponse> signUp(@Valid @RequestBody SignUpRequest request) {
+    public RsData<SignUpResponse> signUp(
+            @Valid @RequestBody SignUpRequest request
+    ) {
         Long memberId = memberFacade.signUp(request.email(), request.password(), request.name(), request.verificationToken());
         return RsData.of("200-1", "회원가입이 완료되었습니다.", new SignUpResponse(memberId));
     }
 
     @Operation(summary = "로그인", description = "Access Token은 응답 바디, Refresh Token은 HttpOnly 쿠키로 발급")
     @PostMapping("/login")
-    public RsData<AccessTokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+    public RsData<AccessTokenResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletResponse response
+    ) {
         AuthTokens tokens = memberFacade.login(request.email(), request.password());
+        refreshTokenCookie.add(response, tokens.refreshToken());
+        return RsData.of("200-1", "로그인되었습니다.", new AccessTokenResponse(tokens.accessToken()));
+    }
+
+    @Operation(summary = "카카오 로그인", description = """
+            프론트가 카카오 인가 화면에서 받은 code로 로그인한다. 응답은 이메일 로그인과 같다(Access Token은 바디, Refresh Token은 HttpOnly 쿠키).
+            카카오 계정이 연결된 회원만 로그인할 수 있고(카카오로 가입하지 않음), 연결되지 않았으면 401 SOCIAL_NOT_LINKED.
+            code가 만료·재사용됐으면 400 KAKAO_AUTH_FAILED
+            """)
+    @PostMapping("/kakao")
+    public RsData<AccessTokenResponse> kakaoLogin(
+            @Valid @RequestBody KakaoCodeRequest request,
+            HttpServletResponse response
+    ) {
+        AuthTokens tokens = memberFacade.kakaoLogin(request.code());
         refreshTokenCookie.add(response, tokens.refreshToken());
         return RsData.of("200-1", "로그인되었습니다.", new AccessTokenResponse(tokens.accessToken()));
     }

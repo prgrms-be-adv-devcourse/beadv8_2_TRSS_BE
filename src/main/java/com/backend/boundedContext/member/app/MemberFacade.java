@@ -14,6 +14,7 @@ import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberType;
+import com.backend.boundedContext.member.domain.SocialProvider;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberStatus;
@@ -42,6 +43,9 @@ public class MemberFacade {
     private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
     private final MemberGetWithdrawalCheckUseCase memberGetWithdrawalCheckUseCase;
     private final MemberWithdrawUseCase memberWithdrawUseCase;
+    private final MemberLinkKakaoUseCase memberLinkKakaoUseCase;
+    private final MemberKakaoLoginUseCase memberKakaoLoginUseCase;
+    private final MemberSocialAccountLinker memberSocialAccountLinker;
     private final MemberSupport memberSupport;
 
     // 가입 가능한 이메일인지 확인
@@ -96,6 +100,11 @@ public class MemberFacade {
         return memberLoginUseCase.login(email, password);
     }
 
+    // 카카오 로그인 (연결된 회원만). 카카오 API를 DB 트랜잭션 밖에서 부르려고 @Transactional을 두지 않음 (조회는 각 리포지토리 호출이 짧게 처리)
+    public AuthTokens kakaoLogin(String authorizationCode) {
+        return memberKakaoLoginUseCase.login(authorizationCode);
+    }
+
     // Access·Refresh Token 재발급 (Refresh Token 회전)
     @Transactional(readOnly = true)
     public AuthTokens refresh(String refreshToken) {
@@ -141,6 +150,16 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public WithdrawalCheckDto getWithdrawalCheck(Long memberId) {
         return memberGetWithdrawalCheckUseCase.getWithdrawalCheck(memberId);
+    }
+
+    // 카카오 계정 연결. 카카오 API를 트랜잭션 밖에서 부르고 저장만 짧은 트랜잭션으로 하려고 여기에는 @Transactional을 두지 않음
+    public void linkKakao(Long memberId, String authorizationCode) {
+        memberLinkKakaoUseCase.link(memberId, authorizationCode);
+    }
+
+    // 카카오 계정 연결 해제 (트랜잭션은 MemberSocialAccountLinker)
+    public void unlinkKakao(Long memberId) {
+        memberSocialAccountLinker.unlink(memberId, SocialProvider.KAKAO);
     }
 
     // 회원 탈퇴 (비식별화까지 한 트랜잭션)
