@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.ObjectMapper;
 
-import java.time.LocalDateTime;
 import java.util.Set;
 
 /**
@@ -24,7 +23,7 @@ import java.util.Set;
 public class EventPublisher {
 
     /**
-     * 아직 릴레이로 옮기지 않은 이벤트. Outbox 도입 전처럼 호출한 쪽 트랜잭션 안에서 바로 스프링 이벤트로 발행한다.
+     * 받는 쪽이 아직 Kafka 컨슈머로 옮기지 않은 이벤트. 기존 스프링 리스너에도 호출한 쪽 트랜잭션 안에서 바로 발행한다.
      */
     private static final Set<Class<? extends DomainEvent>> DIRECT_PUBLISH_EVENTS =
             Set.of(MemberSignedUpEvent.class);
@@ -35,8 +34,8 @@ public class EventPublisher {
     private final ObjectMapper objectMapper;
 
     /**
-     * 이벤트를 outbox에 저장한다.
-     * 아직 릴레이로 옮기지 않은 이벤트는 바로 스프링 이벤트로 발행하고, 릴레이가 다시 보내지 않게 PUBLISHED로 저장한다.
+     * 이벤트를 outbox에 저장한다. 릴레이가 커밋 뒤에 Kafka로 발행한다.
+     * 아직 Kafka 컨슈머로 옮기지 않은 이벤트는 기존 스프링 리스너에도 바로 발행한다.
      *
      * @throws IllegalStateException    쓰기 트랜잭션 밖에서 호출한 경우. 저장할 트랜잭션이 없으면 이벤트가 유실된다
      * @throws IllegalArgumentException 릴레이가 되돌릴 수 없는 이벤트인 경우(com.backend.shared 밖에 둔 이벤트)
@@ -59,7 +58,6 @@ public class EventPublisher {
 
         if (DIRECT_PUBLISH_EVENTS.contains(event.getClass())) {
             applicationEventPublisher.publishEvent(event);
-            outbox.markPublished(LocalDateTime.now());
         }
 
         outboxEventRepository.save(outbox);

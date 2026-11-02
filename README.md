@@ -90,6 +90,8 @@ docker compose up -d
 
 PostgreSQL 17 컨테이너(`palette-postgres`)가 `localhost:5432`에 뜹니다. 기본 계정은 DB `palette` / 사용자 `palette` / 비밀번호 `palette`입니다.
 
+함께 Redis(`localhost:6379`)와 Kafka(`palette-kafka`, `localhost:9092`)도 뜹니다. Kafka는 Outbox 릴레이가 이벤트를 발행하는 곳입니다(개발 가이드 6.5).
+
 DB 테이블은 앱이 시작될 때 Flyway가 `src/main/resources/db/migration`의 마이그레이션으로 만듭니다.
 
 ### 3. 환경 변수 파일 만들기

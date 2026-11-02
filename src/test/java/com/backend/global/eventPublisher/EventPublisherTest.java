@@ -109,7 +109,7 @@ class EventPublisherTest {
     }
 
     @Test
-    @DisplayName("가입 이벤트는 같은 트랜잭션에서 바로 지갑을 만들고, outbox에는 PUBLISHED로 남아 릴레이가 다시 보내지 않는다")
+    @DisplayName("Kafka 컨슈머로 옮기기 전 이벤트(가입)는 기존 리스너가 같은 트랜잭션에서 바로 지갑을 만들고, outbox에는 PENDING으로 남아 릴레이가 Kafka에도 보낸다")
     void publishSameTransactionEvent() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             eventPublisher.publish(new MemberSignedUpEvent(testId));
@@ -120,8 +120,8 @@ class EventPublisherTest {
                 .filter(outbox -> outbox.getAggregateType().equals("MEMBER") && outbox.getAggregateId().equals(testId)))
                 .singleElement()
                 .satisfies(outbox -> {
-                    assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
-                    assertThat(outbox.getPublishedAt()).isNotNull();
+                    assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+                    assertThat(outbox.getPublishedAt()).isNull();
                 });
     }
 

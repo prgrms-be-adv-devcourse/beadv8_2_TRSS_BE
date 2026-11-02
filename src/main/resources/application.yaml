@@ -34,6 +34,23 @@ spring:
         default-page-size: 20
         max-page-size: 100
 
+  # Outbox 릴레이가 이벤트 봉투를 발행하는 Kafka
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all                   # 브로커가 기록을 마친 뒤에 성공으로 본다(그때 outbox를 PUBLISHED로 바꿈)
+      properties:
+        enable.idempotence: true  # 프로듀서 재시도로 같은 메시지가 두 번 기록되지 않게
+        max.block.ms: 5000        # 브로커가 없을 때 send가 오래 막히지 않게(기본 60초)
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record            # 메시지 하나를 처리(커밋)한 뒤에 offset을 커밋한다
+
   # 인증 메일 발송(Gmail SMTP). 계정 정보는 환경변수로 주입하고, 없으면 발송할 때만 실패한다.
   mail:
     host: smtp.gmail.com
@@ -127,6 +144,14 @@ custom:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
     relayBatchSize: 100         # 릴레이가 한 번에 발행하는 최대 이벤트 수
-    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다
+    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다(Kafka가 내려가 있는 건 세지 않음)
+    sendTimeoutMillis: 10000    # Kafka 브로커의 기록 확인(ack)을 기다리는 최대 시간(밀리초)
+    topicPartitions: 3          # 이벤트 토픽(<대상>.events) 파티션 수. 같은 aggregateId는 같은 파티션으로 가서 순서가 지켜진다
+  kafka:
+    consumer:
+      # 컨슈머가 실패한 메시지를 다시 처리하는 방식. 기본값이면 1·2·4·8초 간격으로 4번 더 처리하고(총 5번), 그래도 실패하면 <토픽>-dlt로 보낸다
+      maxRetries: 4                     # 처음 처리 뒤 다시 처리하는 횟수
+      retryInitialIntervalMillis: 1000  # 첫 재시도 전 대기(밀리초)
+      retryMultiplier: 2.0              # 재시도마다 대기 시간에 곱하는 값
   scheduling:
     enabled: true        # false면 모든 스케줄러가 멈춘다(통합 테스트용)
