@@ -32,6 +32,7 @@ import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
+import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -65,6 +66,9 @@ class MemberWithdrawUseCaseTest {
     @Mock
     private SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
+    @Mock
+    private MemberSocialAccountRepository memberSocialAccountRepository;
+
     @InjectMocks
     private MemberWithdrawUseCase memberWithdrawUseCase;
 
@@ -78,7 +82,7 @@ class MemberWithdrawUseCaseTest {
     }
 
     @Test
-    @DisplayName("비밀번호가 맞고 조건을 충족하면 회원을 비식별화하고 실패 횟수를 지운다")
+    @DisplayName("비밀번호가 맞고 조건을 충족하면 회원을 비식별화하고 실패 횟수와 소셜 연결 정보를 지운다")
     void withdraw_success() {
         given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
         given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(false, false, 0, 0, false, false));
@@ -89,6 +93,7 @@ class MemberWithdrawUseCaseTest {
         assertThat(member.getStatus()).isEqualTo(MemberStatus.DELETED);
         assertThat(member.getEmail()).isEqualTo("deleted-3@deleted.palette");
         verify(loginAttemptStore).deleteAttempts(EMAIL);
+        verify(memberSocialAccountRepository).deleteAllByMemberId(MEMBER_ID);
     }
 
     @Test
@@ -126,6 +131,7 @@ class MemberWithdrawUseCaseTest {
                             .containsExactly(WithdrawalBlockReason.ACTIVE_ORDERS, WithdrawalBlockReason.BALANCE_REMAINING);
                 });
         assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        verify(memberSocialAccountRepository, never()).deleteAllByMemberId(anyLong());   // 탈퇴가 거절되면 연결도 그대로
     }
 
     @Test

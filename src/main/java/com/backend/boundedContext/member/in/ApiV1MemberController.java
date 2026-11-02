@@ -3,6 +3,7 @@ package com.backend.boundedContext.member.in;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.backend.boundedContext.member.app.MemberFacade;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
+import com.backend.boundedContext.member.in.dto.KakaoCodeRequest;
 import com.backend.boundedContext.member.in.dto.WithdrawalRequest;
 import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
@@ -20,7 +22,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-@Tag(name = "회원", description = "내 정보, 탈퇴")
+@Tag(name = "회원", description = "내 정보, 탈퇴, 소셜 계정 연결")
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -51,5 +53,28 @@ public class ApiV1MemberController {
         memberFacade.withdraw(authMember.memberId(), request.password());
         refreshTokenCookie.clear(response);
         return RsData.of("200-1", "탈퇴했습니다.");
+    }
+
+    @Operation(summary = "카카오 계정 연결", description = """
+            프론트가 카카오 인가 화면에서 받은 code로 로그인한 회원에게 카카오 계정을 연결한다. 연결하면 카카오로 로그인할 수 있다.
+            같은 계정을 다시 연결하면 성공. 다른 회원에 연결된 계정이면 409 SOCIAL_ACCOUNT_LINKED_TO_OTHER,
+            이미 다른 카카오 계정이 연결돼 있으면 409 SOCIAL_PROVIDER_ALREADY_LINKED, code가 만료·재사용됐으면 400 KAKAO_AUTH_FAILED
+            """)
+    @PostMapping("/me/social/kakao")
+    public RsData<Void> linkKakao(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Valid @RequestBody KakaoCodeRequest request
+    ) {
+        memberFacade.linkKakao(authMember.memberId(), request.code());
+        return RsData.of("200-1", "카카오 계정을 연결했습니다.");
+    }
+
+    @Operation(summary = "카카오 계정 연결 해제", description = "연결돼 있지 않아도 성공한다. 카카오 쪽 연결은 끊지 않고 우리 서비스의 연결 정보만 지운다")
+    @DeleteMapping("/me/social/kakao")
+    public RsData<Void> unlinkKakao(
+            @AuthenticationPrincipal AuthMember authMember
+    ) {
+        memberFacade.unlinkKakao(authMember.memberId());
+        return RsData.of("200-1", "카카오 계정 연결을 해제했습니다.");
     }
 }

@@ -109,8 +109,8 @@ class EventPublisherTest {
     }
 
     @Test
-    @DisplayName("가입 이벤트는 outbox에 PENDING으로 저장만 되고, 릴레이가 전달하기 전까지 지갑은 생기지 않는다")
-    void publishSignUpEvent_waitsForRelay() {
+    @DisplayName("가입 이벤트는 outbox에 PENDING으로 저장만 되고, Kafka 컨슈머가 받기 전까지 지갑은 생기지 않는다")
+    void publishSignUpEvent_waitsForConsumer() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 eventPublisher.publish(new MemberSignedUpEvent(testId)));
 

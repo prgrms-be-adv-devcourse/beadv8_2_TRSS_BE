@@ -28,7 +28,7 @@
 
 | 기능 | 사용자 | 핵심 내용 | 세미 프로젝트 개발 범위 |
 | --- | --- | --- | --- |
-| 회원/인증 | 비회원, 회원 | 이메일 인증 가입, 지갑 자동 생성, JWT 로그인, 회원 탈퇴 | 포함 |
+| 회원/인증 | 비회원, 회원 | 이메일 인증 가입, 지갑 자동 생성, JWT 로그인, 카카오 계정 연결·로그인, 회원 탈퇴 | 포함 |
 | 판매자 | 회원, 관리자 | 판매자 입점 신청, 관리자 승인(판매자 상태 APPROVED), 철회 요청·관리자 제재, 계좌/상품 관리 | 포함 |
 | 관리자 | 관리자 | 판매자 심사·제재, 상품 판매 중지·중지 요청 심사, 결제·실패 거래 조회, 반품 승인, 수동 정산 | 포함 |
 | 상품·카테고리·재고 | 판매자, 관리자 | 상품 등록·수정·삭제, 판매 중지(해제 없음), 2단계 카테고리, 재고 조정 및 변경 이력 관리 | 포함 |
@@ -43,6 +43,7 @@
 - 가입 순서는 이메일 중복 확인 → 6자리 인증코드(5분 유효) → 가입이며, 회원과 예치금 지갑을 한 트랜잭션으로 만든다
 - 휴대폰 번호는 판매자에게만 받고, 휴대폰 본인인증 절차는 진행하지 않는다
 - 로그인은 Access Token 30분, Refresh Token 14일(재발급 시 회전)이다
+- 카카오 로그인은 연결 전용이다. 이메일로 가입한 회원이 마이페이지에서 카카오 계정을 연결해 로그인 수단으로 쓰고, 카카오로 가입하지는 않는다
 - 역할은 USER·ADMIN이며 인증 실패는 401, 권한 부족은 403으로 구분한다. 판매자는 역할이 아니라 판매자 상태로 구분한다
 - 탈퇴는 진행 중인 주문·판매, 미정산 금액, 예치금 잔액, 결과 확인 중인 충전 건이 모두 없을 때만 가능하고, 탈퇴 시 개인정보를 비식별화한다
     - 판매자 정보가 있으면 판매자 상태와 무관하게 진행 중인 판매(판매자 상품이 든 진행 중 주문)를 확인한다
@@ -254,9 +255,12 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 | /auth/email/verify | POST | 비회원 | 인증코드 확인 | 400 CODE_INVALID, 400 CODE_EXPIRED |
 | /auth/signup | POST | 비회원 | 회원가입 + 지갑 생성 | 400 EMAIL_NOT_VERIFIED, 409 EMAIL_DUPLICATED |
 | /auth/login | POST | 비회원 | 로그인 → Access·Refresh | 401 LOGIN_FAILED, 429 LOGIN_LOCKED |
+| /auth/kakao | POST | 비회원 | 카카오 로그인(프론트가 받은 인가 `code`로, 응답은 이메일 로그인과 같음). 카카오 계정이 연결된 회원만 | 400 KAKAO_AUTH_FAILED, 401 SOCIAL_NOT_LINKED, 401 LOGIN_FAILED(탈퇴 회원), 502 |
 | /auth/refresh | POST | 비회원(Refresh 쿠키) | 토큰 재발급(회전) | 401 AUTH_TOKEN_EXPIRED |
 | /auth/logout | POST | 회원 | 로그아웃 | 401 |
-| /users/me | GET | 회원 | 내 정보 조회 | 401 |
+| /users/me | GET | 회원 | 내 정보 조회(카카오 연결 여부 `kakaoLinked` 포함) | 401 |
+| /users/me/social/kakao | POST | 회원 | 카카오 계정 연결(인가 `code`). 같은 계정 재연결은 성공 | 400 KAKAO_AUTH_FAILED, 409 SOCIAL_ACCOUNT_LINKED_TO_OTHER, 409 SOCIAL_PROVIDER_ALREADY_LINKED, 502 |
+| /users/me/social/kakao | DELETE | 회원 | 카카오 계정 연결 해제(연결돼 있지 않아도 성공) | 401 |
 | /users/me/withdrawal | GET | USER | 탈퇴 조건 조회(진행 중 주문·판매 여부, 미정산 금액, 잔액, 결과 확인 중인 충전 건 여부) | 401, 403 |
 | /users/me | DELETE | USER | 회원 탈퇴(비밀번호 재확인, 진행 중 주문·판매, 미정산, 잔액, 결과 확인 중인 충전 건이 없을 때만. 관리자는 불가) | 400 PASSWORD_MISMATCH, 403, 409 WITHDRAWAL_NOT_ALLOWED, 429 LOGIN_LOCKED |
 
@@ -382,11 +386,11 @@ REST API를 모듈별로 나눠 정의한다(외부 77개, 모듈 간 내부 6�
 
 ## 4. 데이터 모델
 
-PostgreSQL 기준 테이블 23개로 설계했다. 상세 ERD와 정책을 테이블 제약으로 담은 방식은 `docs/erd/erd.md`에 둔다.
+PostgreSQL 기준 테이블 24개로 설계했다. 상세 ERD와 정책을 테이블 제약으로 담은 방식은 `docs/erd/erd.md`에 둔다.
 
 | 모듈 | 테이블 |
 | --- | --- |
-| member | member, seller, seller_status_history |
+| member | member, seller, seller_status_history, member_social_account |
 | product | category, product, product_image, product_stop_request, stock_history |
 | order | cart, cart_item, market_order, market_order_item, order_status_history |
 | payment | wallet, wallet_transaction, topup, topup_usage, payment, wallet_holding, payment_refund(미구현) |
