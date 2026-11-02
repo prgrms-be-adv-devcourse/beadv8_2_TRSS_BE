@@ -1,5 +1,7 @@
 package com.backend.boundedContext.member.app;
 
+import java.util.Optional;
+
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +39,7 @@ public class MemberSocialAccountLinker {
     public void link(Long memberId, SocialProvider provider, String providerUserId) {
         Member member = memberSupport.getLoginMember(memberId);   // 탈퇴 직후 남은 Access Token이면 401
 
-        var linked = memberSocialAccountRepository.findByProviderAndProviderUserId(provider, providerUserId);
+        Optional<MemberSocialAccount> linked = memberSocialAccountRepository.findByProviderAndProviderUserId(provider, providerUserId);
         if (linked.isPresent()) {
             if (linked.get().getMember().getId().equals(memberId)) return;
             throw new DomainException(MemberErrorCode.SOCIAL_ACCOUNT_LINKED_TO_OTHER);
