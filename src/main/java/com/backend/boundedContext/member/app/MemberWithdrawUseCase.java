@@ -10,6 +10,7 @@ import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.MemberPolicy;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
+import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -27,8 +28,9 @@ public class MemberWithdrawUseCase {
     private final MemberPolicy memberPolicy;
     private final SellerRepository sellerRepository;
     private final SellerStatusHistoryRepository sellerStatusHistoryRepository;
+    private final MemberSocialAccountRepository memberSocialAccountRepository;
 
-    // 비밀번호로 본인 확인 → 탈퇴 조건 재확인 → 회원·판매자 비식별화
+    // 비밀번호로 본인 확인 → 탈퇴 조건 재확인 → 회원·판매자 비식별화, 소셜 연결 정보 삭제
     public void withdraw(Long memberId, String password) {
         Member member = memberSupport.getLoginMember(memberId);
         checkPassword(member, password);
@@ -43,6 +45,9 @@ public class MemberWithdrawUseCase {
             seller.anonymize();
             sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()).forEach(SellerStatusHistory::anonymize);
         });
+        // 탈퇴한 회원의 카카오 계정으로는 로그인할 수 없게 하고, 같은 카카오 계정을 새 회원에게 다시 연결할 수 있게 지움
+        // (카카오 쪽 연결은 끊지 않음. unlink API 연동은 이번 범위 밖)
+        memberSocialAccountRepository.deleteAllByMemberId(memberId);
         member.withdraw();
     }
 

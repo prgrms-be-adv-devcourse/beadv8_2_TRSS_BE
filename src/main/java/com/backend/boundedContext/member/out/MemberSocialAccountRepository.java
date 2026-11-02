@@ -17,4 +17,7 @@ public interface MemberSocialAccountRepository extends JpaRepository<MemberSocia
 
     // 내 정보의 연결 여부 표시
     boolean existsByMemberIdAndProvider(Long memberId, SocialProvider provider);
+
+    // 탈퇴 시 회원의 소셜 연결 정보 전체 삭제
+    void deleteAllByMemberId(Long memberId);
 }
