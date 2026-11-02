@@ -41,6 +41,7 @@ public class PaymentGetPaymentAttemptsUseCase {
         return switch (status) {
             case PAID -> PaymentAttemptStatus.PAID;
             case REFUNDED -> PaymentAttemptStatus.REFUNDED;
+            case CANCELED -> PaymentAttemptStatus.CANCELED;
             case FAILED_INSUFFICIENT_BALANCE -> PaymentAttemptStatus.FAILED_INSUFFICIENT_BALANCE;
             case FAILED_ORDER_EXPIRED -> PaymentAttemptStatus.FAILED_ORDER_EXPIRED;
             case FAILED_SYSTEM_ERROR -> PaymentAttemptStatus.FAILED_SYSTEM_ERROR;

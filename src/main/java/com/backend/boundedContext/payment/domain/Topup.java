@@ -106,6 +106,16 @@ public class Topup extends BaseIdAndTime {
         this.remainingAmount -= usedAmount;
     }
 
+    // 결제 취소로 차감했던 금액을 되돌림 (차감 내역 TopupUsage는 이력으로 남김)
+    public void restore(long restoredAmount) {
+        if (restoredAmount <= 0) throw new IllegalArgumentException("복원 금액은 0보다 커야 합니다: " + restoredAmount);
+        if (remainingAmount + restoredAmount > amount) {
+            throw new IllegalStateException("충전 금액보다 많이 복원할 수 없습니다. remaining=" + remainingAmount
+                    + ", restore=" + restoredAmount + ", amount=" + amount);
+        }
+        this.remainingAmount += restoredAmount;
+    }
+
     // 승인 완료됐고 한 번도 쓰지 않은 충전 건만 토스 취소 가능
     public boolean isCancelable() {
         return status == TopupStatus.DONE && remainingAmount == amount;

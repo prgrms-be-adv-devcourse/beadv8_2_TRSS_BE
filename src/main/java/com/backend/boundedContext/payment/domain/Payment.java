@@ -60,6 +60,8 @@ public class Payment extends BaseIdAndTime {
 
     private LocalDateTime refundedAt;
 
+    private LocalDateTime canceledAt;
+
     // 결제 성공 건 (지갑 차감·홀딩 생성은 호출한 쪽에서 같은 트랜잭션으로 처리)
     public static Payment paid(Long orderId, String orderNumber, Wallet wallet, long amount, String idempotencyKey,
                                LocalDateTime paidAt) {
@@ -113,5 +115,17 @@ public class Payment extends BaseIdAndTime {
     // 결제 원장(PAYMENT)의 멱등 키
     public String paymentIdempotencyKey() {
         return "PAYMENT-" + getId();
+    }
+
+    // 결제 취소 (홀딩 해제·지갑 환급은 호출한 쪽에서 같은 트랜잭션으로 처리)
+    public void cancel(LocalDateTime now) {
+        if (!isPaid()) throw new IllegalStateException("결제 완료 건만 취소할 수 있습니다: " + status);
+        this.status = PaymentStatus.CANCELED;
+        this.canceledAt = now;
+    }
+
+    // 결제 취소 원장(PAYMENT_CANCEL)의 멱등 키
+    public String cancelIdempotencyKey() {
+        return "PAYMENT-" + getId() + "-CANCEL";
     }
 }

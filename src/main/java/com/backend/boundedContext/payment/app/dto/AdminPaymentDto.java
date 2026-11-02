@@ -33,6 +33,7 @@ public record AdminPaymentDto(
                 결제 상태
                 - PAID: 결제 완료
                 - REFUNDED: 환불
+                - CANCELED: 결제 취소 (결제 후 주문 처리 실패)
                 - FAILED_INSUFFICIENT_BALANCE: 잔액 부족
                 - FAILED_ORDER_EXPIRED: 주문 만료
                 - FAILED_SYSTEM_ERROR: 시스템 오류""", example = "PAID")
@@ -44,7 +45,7 @@ public record AdminPaymentDto(
         @Schema(description = """
                 보관 금액 상태. 결제 완료 건만 값이 있고 실패 건은 null
                 - HELD: 보관 중
-                - RELEASED: 환불 완료
+                - RELEASED: 환불·결제 취소로 해제
                 - SETTLED: 정산됨""", example = "HELD")
         WalletHoldingStatus holdingStatus,
 

@@ -2,6 +2,7 @@ package com.backend.boundedContext.payment.out;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -29,7 +30,18 @@ public interface WalletHoldingRepository extends JpaRepository<WalletHolding, Lo
     long sumRemainingAmount(@Param("walletId") Long walletId, @Param("status") WalletHoldingStatus status);
 
     // 정산 지급 전에 주문들의 홀딩을 잠금. 데드락을 막기 위해 주문 ID 오름차순으로 잠근다
+    // 결제 취소로 해제된(RELEASED) 홀딩은 빼서, 주문마다 진행 중인 홀딩 1개만 돌려준다
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select h from WalletHolding h where h.orderId in :orderIds order by h.orderId")
+    @Query("""
+            select h from WalletHolding h
+            where h.orderId in :orderIds
+                and h.status <> com.backend.boundedContext.payment.domain.WalletHoldingStatus.RELEASED
+            order by h.orderId
+            """)
     List<WalletHolding> findAllByOrderIdInForUpdate(@Param("orderIds") Collection<Long> orderIds);
+
+    // 결제 취소 전에 그 결제의 홀딩을 잠금 (정산 지급과 동시에 바꾸지 않게)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select h from WalletHolding h where h.payment.id = :paymentId")
+    Optional<WalletHolding> findByPaymentIdForUpdate(@Param("paymentId") Long paymentId);
 }

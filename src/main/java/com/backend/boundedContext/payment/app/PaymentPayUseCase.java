@@ -172,6 +172,7 @@ public class PaymentPayUseCase {
                         paymentPolicy.recommendedChargeAmount(shortage)
                 );
             }
+            case CANCELED -> throw new DomainException(PaymentErrorCode.PAYMENT_CANCELED);
             default -> throw new IllegalStateException("결제 결과로 돌려줄 수 없는 상태입니다: " + payment.getStatus());
         };
     }

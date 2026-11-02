@@ -26,8 +26,9 @@ import lombok.NoArgsConstructor;
 @Table(name = "wallet_holding", indexes = @Index(name = "idx_wallet_holding_wallet", columnList = "wallet_id, status"))
 public class WalletHolding extends BaseIdAndTime {
 
-    // 주문당 홀딩 1개. 같은 주문의 PAID 결제가 두 번 생기는 것도 이 유니크로 막힘
-    @Column(nullable = false, unique = true)
+    // 주문당 해제되지 않은 홀딩 1개 (부분 유니크 인덱스 uk_wallet_holding_order_active, V16).
+    // 같은 주문의 PAID 결제가 두 번 생기는 것도 이 유니크로 막힘. 결제 취소로 해제된 홀딩은 제외해 다시 결제할 수 있다
+    @Column(nullable = false)
     private Long orderId;
 
     @OneToOne(fetch = FetchType.LAZY)
@@ -69,6 +70,15 @@ public class WalletHolding extends BaseIdAndTime {
         holding.status = WalletHoldingStatus.HELD;
         holding.heldAt = heldAt;
         return holding;
+    }
+
+    // 결제 취소로 홀딩 해제. 정산 지급이 시작된 홀딩은 해제할 수 없다
+    public void release(LocalDateTime now) {
+        if (status != WalletHoldingStatus.HELD || settledAmount > 0) {
+            throw new DomainException(PaymentErrorCode.PAYMENT_NOT_CANCELABLE);
+        }
+        this.status = WalletHoldingStatus.RELEASED;
+        this.releasedAt = now;
     }
 
     // 아직 지급하지 않은 금액

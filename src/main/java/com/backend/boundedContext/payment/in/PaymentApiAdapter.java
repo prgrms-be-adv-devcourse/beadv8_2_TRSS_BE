@@ -43,6 +43,11 @@ public class PaymentApiAdapter implements PaymentApi {
     }
 
     @Override
+    public void cancelPayment(String idempotencyKey) {
+        paymentFacade.cancelPayment(idempotencyKey);
+    }
+
+    @Override
     public List<PaymentAttemptDto> getPaymentAttempts(Long orderId) {
         return paymentFacade.getPaymentAttempts(orderId);
     }

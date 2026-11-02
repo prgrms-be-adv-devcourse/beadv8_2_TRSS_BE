@@ -19,6 +19,7 @@ public record WalletTransactionDto(
                 - CHARGE: 충전
                 - CHARGE_CANCEL: 미사용 충전 취소
                 - PAYMENT: 주문 결제
+                - PAYMENT_CANCEL: 결제 취소 (결제 후 주문 처리 실패)
                 - REFUND: 반품 환불
                 - SETTLEMENT: 정산 지급 (판매자)
                 - FEE: 정산 수수료 (관리자)""", example = "PAYMENT")
@@ -33,7 +34,7 @@ public record WalletTransactionDto(
         @Schema(description = """
                 referenceId가 가리키는 대상의 종류 (거래 유형에 따라 정해짐)
                 - TOPUP: 충전 건 (CHARGE·CHARGE_CANCEL)
-                - PAYMENT: 결제 건 (PAYMENT)
+                - PAYMENT: 결제 건 (PAYMENT·PAYMENT_CANCEL)
                 - REFUND: 환불 건 (REFUND)
                 - SETTLEMENT: 정산서 (SETTLEMENT·FEE)""", example = "PAYMENT")
         WalletTransactionReferenceType referenceType,
