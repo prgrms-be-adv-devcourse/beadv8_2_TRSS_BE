@@ -25,9 +25,9 @@ import java.util.List;
  * 개발용 정산 후보 시드(@Order(5))
  * 후보가 하나라도 있으면 아무것도 하지 않는다(멱등)
  * 주문 흐름이 아직 없으므로 더미 OrderConfirmedEvent를 직접 발행해,
- * 실제와 같은 이벤트 → outbox → 릴레이 → SettlementEventListener → 후보 생성 경로로 지난달 확정분 3건을 만든다.
- * 릴레이가 1초 간격으로 전달하므로 후보는 앱이 뜬 뒤 약 1초 안에 생긴다.
- * 그 전에 앱이 다시 시작되면 이벤트가 한 번 더 저장될 수 있지만, 후보는 주문 항목 ID로 중복을 거르므로 3건만 생긴다.
+ * 실제와 같은 이벤트 → outbox → 릴레이 → Kafka(order.events) → SettlementEventListener → 후보 생성 경로로
+ * 지난달 확정분 3건을 만든다. 로컬 Kafka(docker compose의 palette-kafka)가 떠 있어야 후보가 생긴다.
+ * Kafka가 없으면 이벤트는 outbox에 PENDING으로 남고, Kafka를 띄우면 릴레이가 그때 보낸다.
  *
  * 결제 시드(PaymentDataInit, @Order(3))가 같은 주문 -1(25,000원)·-2(9,999원)로 HELD 홀딩을 만들어 두므로,
  * 월 정산을 실행하면 지급까지 PAID로 끝난다. 주문 ID나 금액을 바꾸면 PaymentDataInit도 함께 바꿔야 한다.
@@ -80,7 +80,7 @@ public class SettlementDataInit implements ApplicationRunner {
 
     /**
      * EventPublisher.publish()는 쓰기 트랜잭션 안에서만 부를 수 있다(outbox에 함께 저장).
-     * 커밋되면 outbox에 PENDING으로 남고, 릴레이가 전달한다.
+     * 커밋되면 outbox에 PENDING으로 남고, 릴레이가 Kafka로 발행한다.
      */
     @Transactional
     public void publishOrderConfirmed(Long orderId, LocalDateTime confirmedAt, List<ConfirmedOrderItemDto> items) {

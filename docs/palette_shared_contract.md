@@ -48,7 +48,7 @@ public record EventEnvelope<T extends DomainEvent>(UUID eventId, String eventTyp
 | 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
 | 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) (미구현) | 이벤트 |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
-| 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신 → 주문 항목별 후보(READY) | 이벤트 |
+| 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `ProductApi.stopAllBySeller(sellerId, reason)` (판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원) | 동기, 같은 Tx |
@@ -372,9 +372,12 @@ public interface SettlementApi {
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `settlement_candidate.order_item_id` 유니크 |
+| `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `processed_event`(eventId, `settlement`)로 재전달을 거르고, `settlement_candidate.order_item_id` 유니크로 한 번 더 막음 |
 
-- 지금은 구매 확정 커밋 뒤(`AFTER_COMMIT`) 처리한다. Kafka 컨슈머 전환 예정(settlement 담당): 토픽 `order.events`를 `@KafkaListener`로 받으면 실패 시 다시 전달된다.
+- Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다.
+- 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
+- 실패하면 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `order.events-dlt`로 보내고 ERROR 로그로 Slack에 알린다. 원인을 고친 뒤 `order.events`로 다시 보낸다 → [개발 가이드 6.5](palette_development_guide.md#65-outbox)
+- 구매 확정 후 후보가 생기기까지 릴레이 간격(최대 약 1초)과 Kafka 전달 시간만큼 늦어진다.
 
 ## 7. 구현 주의사항
 

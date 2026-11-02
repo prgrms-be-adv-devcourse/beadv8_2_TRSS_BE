@@ -104,7 +104,7 @@ com.backend
 | 방식 | 언제 쓰나 | 구현 |
 | --- | --- | --- |
 | **동기 Api** | 결과가 바로 필요하거나 같은 트랜잭션이어야 할 때 | `shared/<ctx>/out/<Ctx>Api` 인터페이스 → 제공 컨텍스트의 `<Ctx>ApiAdapter`가 구현 |
-| **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 Kafka로 발행 → 받는 쪽 `@KafkaListener` (지금 있는 이벤트는 기존 스프링 리스너에도 바로 발행, [6.5](#65-outbox)) |
+| **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 Kafka로 발행 → 받는 쪽 `@KafkaListener` (`MemberSignedUpEvent`는 아직 기존 스프링 리스너에도 바로 발행, [6.5](#65-outbox)) |
 
 기획서가 같은 트랜잭션을 요구하므로(주문 생성 + 재고 차감, 결제 + 주문 PAID) 동기 호출은 Java 인터페이스로 합니다. MSA로 나눌 때는 `<Ctx>Api` 구현체만 `RestClient` 기반으로 바꾸면 됩니다.
 
@@ -161,7 +161,7 @@ flowchart LR
     member -. MemberSignedUpEvent .-> payment
 ```
 
-실선은 동기 Api, 점선은 이벤트입니다(outbox에 기록하지만 아직 릴레이로 옮기지 않아 바로 발행, `MemberSignedUpEvent`는 같은 트랜잭션에서 처리. [6.5](#65-outbox)). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
+실선은 동기 Api, 점선은 이벤트입니다(outbox에 기록하고 릴레이가 Kafka로 발행. `OrderConfirmedEvent`는 정산이 Kafka 컨슈머로 받고, `MemberSignedUpEvent`는 아직 바로 발행해 같은 트랜잭션에서 처리. [6.5](#65-outbox)). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
 
 ### 6.4 이벤트 규칙
 
@@ -173,26 +173,15 @@ public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime conf
     @Override public Long aggregateId() { return orderId; }
 }
 
-// boundedContext/settlement/in/SettlementEventListener.java
-@Component
-@RequiredArgsConstructor
-public class SettlementEventListener {
-    private final SettlementFacade settlementFacade;
-
-    @TransactionalEventListener(phase = AFTER_COMMIT)
-    @Transactional(propagation = REQUIRES_NEW)
-    public void handle(OrderConfirmedEvent event) {
-        settlementFacade.createCandidates(event);
-    }
-}
+// 받는 쪽(정산)은 Kafka 컨슈머로 받는다 → 6.5 "받는 쪽(컨슈머)"의 SettlementEventListener 예시
 ```
 
 - 이벤트는 불변 record로 만들고, 받는 쪽이 다시 조회하지 않아도 되도록 필요한 값을 모두 담습니다.
 - 다른 컨텍스트에 알리는 이벤트는 `shared.event.DomainEvent`를 구현합니다. `aggregateType()`은 이벤트가 생긴 대상 종류(대문자 단수형, 예: `ORDER`, `MEMBER`), `aggregateId()`는 그 대상의 ID입니다. record 필드에는 넣지 않습니다.
-- 리스너는 Facade 한 줄만 호출합니다. 지금은 `AFTER_COMMIT` + `REQUIRES_NEW`를 씁니다.
-  - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
-  - Kafka 컨슈머로 옮긴 이벤트는 `@KafkaListener` + `@Transactional`로 받고, 같은 트랜잭션 안에서 `ProcessedEvents.markProcessed(eventId, 컨슈머 이름)`로 중복을 거른 뒤 Facade를 호출합니다([6.5](#65-outbox)).
-- **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, 환불 구현 시 `payment_refund.payment_id`)으로 중복을 막습니다.
+- 받는 쪽은 Facade 한 줄만 호출합니다.
+  - Kafka 컨슈머로 옮긴 이벤트(`OrderConfirmedEvent`)는 `@KafkaListener` + `@Transactional`로 받고, 같은 트랜잭션 안에서 `ProcessedEvents.markProcessed(eventId, 컨슈머 이름)`로 중복을 거른 뒤 Facade를 호출합니다. 실패하면 재시도 후 DLT로 보냅니다([6.5](#65-outbox)).
+  - 아직 옮기지 않은 `MemberSignedUpEvent`는 정책상 발행한 쪽과 같은 트랜잭션이어야 하므로 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
+- **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** Kafka 컨슈머는 `processed_event`(eventId, 컨슈머 이름)로 재전달을 거르고, 유니크 제약(`settlement_candidate.order_item_id`, 환불 구현 시 `payment_refund.payment_id`)으로 한 번 더 막습니다.
 - 발행은 UseCase에서 `EventPublisher.publish(...)`로 합니다. 엔티티에서 스프링 빈을 꺼내 쓰지 않습니다.
 - `publish()`는 **쓰기 트랜잭션 안에서만** 부릅니다. 이벤트를 호출한 쪽 트랜잭션에서 `outbox_event`에 저장하므로, 트랜잭션이 없거나 읽기 전용이면 `IllegalStateException`이 납니다.
 
@@ -202,7 +191,8 @@ public class SettlementEventListener {
 
 - 릴레이가 커밋된 이벤트를 Kafka로 발행합니다(TRSS-133). 받는 쪽은 `@KafkaListener`로 받습니다.
 - 받는 쪽의 Kafka 컨슈머 전환은 각 담당자가 합니다. 전환 전 이벤트는 `EventPublisher.DIRECT_PUBLISH_EVENTS`에 두어, 기존 스프링 리스너에도 Outbox 도입 전처럼 바로 발행합니다(리스너 동작은 도입 전과 같음). outbox 행은 PENDING으로 저장되어 Kafka에도 발행되므로, 전환할 때 메시지가 이미 쌓여 있습니다.
-- 지금은 `MemberSignedUpEvent`, `OrderConfirmedEvent` 둘 다 이 목록에 있습니다. **컨슈머를 추가하는 PR에서 기존 리스너를 지우고 목록에서 빼야 합니다.** 둘 다 두면 같은 이벤트가 두 번 처리됩니다.
+- 지금 이 목록에는 `MemberSignedUpEvent`만 있습니다. `OrderConfirmedEvent`는 정산이 Kafka 컨슈머(`SettlementEventListener`, 토픽 `order.events`)로 받습니다(TRSS-139). 구매 확정 후 후보가 생기기까지 릴레이 간격(최대 약 1초)과 Kafka 전달 시간만큼 늦어집니다.
+- **컨슈머를 추가하는 PR에서 기존 리스너를 지우고 목록에서 빼야 합니다.** 둘 다 두면 같은 이벤트가 두 번 처리됩니다.
 
 | 단계 | 내용 | 상태 |
 | --- | --- | --- |
@@ -211,7 +201,7 @@ public class SettlementEventListener {
 | 3 | `EventPublisher.publish()`가 호출한 쪽 트랜잭션 안에서 outbox에 저장 (트랜잭션 밖 호출은 예외) | 완료 |
 | 4 | 릴레이 (`OutboxRelay`, `OutboxRelayScheduler`) | 완료 |
 | 5 | Kafka 발행(`OutboxKafkaSender`), 받는 쪽 중복 처리(`processed_event` `V14`, `ProcessedEvents`, `EventMessages`) | 완료 (TRSS-133) |
-| 5-1 | `OrderConfirmedEvent` 컨슈머 전환: `SettlementEventListener`를 `@KafkaListener(topics = "order.events")`로 바꾸고 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | settlement 담당 |
+| 5-1 | `OrderConfirmedEvent` 컨슈머 전환: `SettlementEventListener`를 `@KafkaListener(topics = "order.events")`로 바꾸고 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | 완료 (TRSS-139) |
 | 5-2 | `MemberSignedUpEvent` 컨슈머 전환: 결제가 지갑이 아직 없는 구간을 처리(조회는 0, 쓰기는 지갑을 먼저 생성)하고, `PaymentEventListener`를 `@KafkaListener(topics = "member.events")`로 바꾼 뒤 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | payment 담당 |
 
 `EventEnvelope`는 모든 이벤트에 붙는 공통 봉투입니다. outbox 한 행, Kafka 메시지 하나와 1:1로 대응합니다.
@@ -277,6 +267,34 @@ public void handle(String message) {
 
 - `groupId`는 컨슈머(받는 쪽 컨텍스트)마다 다르게 둡니다. 같은 이벤트를 정산과 결제가 각자 받습니다.
 - 로컬에서 앱을 띄울 때는 `docker compose up -d`로 Kafka도 함께 띄웁니다(`localhost:9092`). Kafka 없이 띄워도 앱은 뜨고, 릴레이만 경고 로그를 남기며 이벤트를 PENDING으로 둡니다.
+
+받는 쪽 실패 처리 (재시도·DLT)
+
+모든 `@KafkaListener`에 `global.kafka.KafkaConsumerConfig`의 `DefaultErrorHandler`가 붙습니다. 리스너마다 따로 설정하지 않습니다.
+
+- 리스너가 예외를 던지면 같은 메시지를 간격을 늘려 가며 다시 처리합니다. 기본값은 1초, 2초, 4초, 8초 간격으로 4번 더 처리합니다(총 5번, 대기 합 15초). 값은 `custom.kafka.consumer.*`(`maxRetries`, `retryInitialIntervalMillis`, `retryMultiplier`)에서 바꿉니다.
+- 재시도하는 동안 같은 파티션의 뒤 메시지는 기다립니다. 그래서 같은 대상의 이벤트 순서는 지켜지지만, 그 파티션은 최대 대기 합만큼 멈춥니다.
+- 그래도 실패하면 메시지를 버리지 않고 **dead-letter 토픽(`<원래 토픽>-dlt`, 예: `order.events-dlt`)** 으로 보냅니다. DLT 파티션은 메시지 키로 정하므로 같은 대상의 메시지는 DLT에서도 같은 파티션에 모이고, 원래 토픽의 파티션 수가 달라져도 보내기에 실패하지 않습니다. DLT는 처음 보낼 때 이벤트 토픽과 같은 파티션 수(`custom.outbox.topicPartitions`)로 만들어집니다(브로커의 토픽 자동 생성은 꺼져 있음). 실패 원인은 메시지 헤더(`kafka_dlt-exception-message`, `kafka_dlt-exception-stacktrace`, 원래 토픽·파티션·offset)에 남습니다.
+- 다시 해도 안 되는 오류(JSON 파싱 실패 `JacksonException`, 봉투 필드 누락·모르는 이벤트 타입 등 `IllegalArgumentException`, 날짜 형식 오류 `DateTimeException`)는 재시도 없이 바로 DLT로 보냅니다. 리스너에서 일시적인 실패를 이 예외들로 던지지 않습니다.
+- DLT로 보낼 때 `KafkaConsumerConfig`가 ERROR 로그를 남겨 Slack으로 알립니다. 재시도 중에는 INFO 로그만 남으므로, 재시도 끝에 성공하면 알림이 가지 않습니다.
+- DLT로 보내는 것 자체가 실패하면(브로커 장애 등) offset을 넘기지 않으므로 메시지를 다시 받습니다.
+
+DLT 메시지는 자동으로 다시 처리하지 않습니다. 원인을 고친 뒤 원래 토픽으로 다시 보냅니다. 컨슈머가 `processed_event`로 이미 처리한 이벤트를 거르므로, 다시 보내도 두 번 처리되지 않습니다.
+
+```bash
+# 1. DLT 메시지 확인 (키|값, 실패 원인 헤더 포함)
+docker exec palette-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic order.events-dlt --from-beginning --timeout-ms 10000 \
+  --property print.key=true --property key.separator='|' --property print.headers=true
+
+# 2. 다시 보낼 메시지를 "키|값" 한 줄로 원래 토픽에 보낸다 (같은 키라 같은 파티션으로 간다)
+docker exec -i palette-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 \
+  --topic order.events --property parse.key=true --property key.separator='|'
+```
+
+- 1에서 `print.headers=true`를 빼면 "키|값"만 나오므로 그 줄을 그대로 2에 붙여 넣으면 됩니다.
+- 운영에서는 서버에 접속해 같은 명령을 실행합니다. Kafka는 외부에 열려 있지 않습니다.
+- DLT는 consumer group 없이 `--from-beginning`으로 읽으므로 이미 다시 보낸 메시지도 계속 보입니다. 다시 보낼 때는 `eventId`로 이미 처리됐는지(`processed_event`) 확인합니다.
 
 - 구매 확정과 `OrderConfirmedEvent` 발행은 주문 컨텍스트의 메서드 하나로 묶고, 확정 경로 3개(수동·7일 자동·반품 거절)가 모두 그 메서드를 호출합니다 → [공유 계약 7.3](palette_shared_contract.md)
 
@@ -418,7 +436,7 @@ custom:
 | 2 | `ProductDataInit` | 2번 판매자의 샘플 상품 (`local` 프로필에서만) |
 | 3 | `PaymentDataInit` | 3번 구매자의 결제 완료 건·HELD 홀딩(정산 시드 주문 -1·-2용, 잔액·원장 변화 없음, `MEMBER_SEED_PASSWORD`가 있을 때만) |
 | 4 | `OrderDataInit` | (필요하면) 테스트 주문 |
-| 5 | `SettlementDataInit` | (필요하면) 정산 후보 |
+| 5 | `SettlementDataInit` | (필요하면) 정산 후보. 이벤트 → outbox → Kafka 경로로 만들므로 로컬 Kafka가 떠 있어야 생김(없으면 PENDING으로 남았다가 Kafka를 띄우면 생김) |
 
 ## 12. 테스트
 
@@ -445,7 +463,7 @@ custom:
 - [x] Adapter `@Lazy` 주입: `lombok.config`에 한 줄 추가
 - [x] 시드 계정: 1 관리자, 2 판매자, 3 구매자
 - [x] Facade는 DTO를 반환
-- [x] Outbox: 도입함(TRSS-121, 6.5). 리스너 전환은 받는 쪽 담당자가 함(정산: `OrderConfirmedEvent` 완료(TRSS-134), 결제: `MemberSignedUpEvent`). `MemberSignedUpEvent`도 옮기기로 함(2026-10-23 결정), 지갑이 아직 없는 구간 처리는 payment 담당
+- [x] Outbox: 도입함(TRSS-121, 6.5). 리스너 전환은 받는 쪽 담당자가 함(정산: `OrderConfirmedEvent` Kafka 컨슈머 전환 완료(TRSS-139), 결제: `MemberSignedUpEvent`). `MemberSignedUpEvent`도 옮기기로 함(2026-10-23 결정), 지갑이 아직 없는 구간 처리는 payment 담당
 - [x] 미정산 금액: 구매 확정된 금액만 (확정 전 주문은 포함하지 않음)
 - [x] 목록 조회 형식: 10장
 - [x] 결제 `PROCESSING`: 쓰지 않아 제거 (결제 건은 PAID·FAILED_*로만 저장)

@@ -1,34 +1,45 @@
 package com.backend.boundedContext.settlement.in.eventListener;
 
 import com.backend.boundedContext.settlement.app.SettlementFacade;
+import com.backend.global.eventConsumer.ProcessedEvents;
+import com.backend.global.outbox.EventMessages;
+import com.backend.shared.event.DomainEvent;
+import com.backend.shared.event.EventEnvelope;
 import com.backend.shared.order.event.OrderConfirmedEvent;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.event.EventListener;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 주문 컨텍스트의 구매 확정 이벤트를 받아 정산 후보를 만든다.
+ * 주문 컨텍스트의 구매 확정 이벤트를 Kafka(order.events)로 받아 정산 후보를 만든다(TRSS-133 5-1 단계).
  *
- * Outbox 릴레이가 전달한다(개발 가이드 6.5, TRSS-121 4-1단계).
- * 릴레이는 이벤트 하나마다 트랜잭션을 열고 그 안에서 이 리스너를 부른 뒤 outbox 행을 PUBLISHED로 바꾼다.
- * 이 리스너는 @Transactional(REQUIRED)로 그 트랜잭션에 참여하므로
- *   후보 생성이 성공하면: 후보 저장과 PUBLISHED 표시가 함께 커밋된다
- *   후보 생성이 실패하면(DB 오류 등): 둘 다 롤백되고 outbox는 PENDING으로 남아 릴레이가 다시 전달한다
- *     (최대 custom.outbox.maxRetryCount번, 그래도 실패하면 FAILED + ERROR 로그 → Slack 알림)
- *
- * 예전처럼 AFTER_COMMIT + REQUIRES_NEW로 두면 실패해도 PUBLISHED가 커밋돼 이벤트가 다시 오지 않는다(유실).
- * 같은 이벤트가 두 번 와도 주문 항목(order_item_id)으로 이미 있는 후보는 건너뛰므로 결과가 같다(멱등).
+ * 흐름: 주문 확정 → outbox 저장 → 릴레이가 Kafka 발행 → 이 컨슈머(groupId = settlement)
+ * 한 메시지를 하나의 트랜잭션에서 처리한다(@Transactional).
+ *   1. 봉투를 읽고, order.events에 함께 오는 다른 주문 이벤트는 무시한다
+ *   2. 같은 트랜잭션 안에서 eventId를 processed_event에 기록한다. 이미 있으면(재전달) 아무것도 하지 않는다
+ *   3. 정산 후보를 만든다
+ * 3이 실패하면 2의 기록도 함께 롤백되므로, 같은 메시지를 다시 받으면 처음부터 다시 처리한다.
+ * 실패한 메시지는 1·2·4·8초 간격으로 다시 받고(총 5번), 그래도 실패하면 order.events-dlt로 간다(KafkaConsumerConfig).
+ * order_item_id 유니크로 후보 중복을 한 번 더 막는다(이중 안전망).
  */
 @Component
 @RequiredArgsConstructor
 public class SettlementEventListener {
 
-    private final SettlementFacade settlementFacade;
+    /** processed_event.consumer 값이자 Kafka groupId. 같은 이벤트를 다른 컨텍스트와 따로 처리한다 */
+    static final String CONSUMER = "settlement";
 
-    @EventListener
+    private final SettlementFacade settlementFacade;
+    private final EventMessages eventMessages;
+    private final ProcessedEvents processedEvents;
+
+    @KafkaListener(topics = "order.events", groupId = CONSUMER)
     @Transactional
-    public void handle(OrderConfirmedEvent event) {
+    public void handle(String message) {
+        EventEnvelope<DomainEvent> envelope = eventMessages.read(message);
+        if (!(envelope.payload() instanceof OrderConfirmedEvent event)) return;           // 다른 주문 이벤트는 무시
+        if (!processedEvents.markProcessed(envelope.eventId(), CONSUMER)) return;       // 이미 처리한 이벤트
         settlementFacade.createCandidates(event.orderId(), event.confirmedAt(), event.items());
     }
 }
