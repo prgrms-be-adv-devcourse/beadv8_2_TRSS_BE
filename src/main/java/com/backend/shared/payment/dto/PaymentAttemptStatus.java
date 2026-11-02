@@ -4,6 +4,7 @@ package com.backend.shared.payment.dto;
 public enum PaymentAttemptStatus {
     PAID,                         // 결제 완료
     REFUNDED,                     // 반품 승인으로 환불됨
+    CANCELED,                     // 결제 후 주문 처리가 실패해 취소됨
     FAILED_INSUFFICIENT_BALANCE,  // 잔액 부족
     FAILED_ORDER_EXPIRED,         // 결제 시점에 주문 15분 만료
     FAILED_SYSTEM_ERROR           // 그 외 내부 오류

@@ -11,4 +11,8 @@ public record PayCommand(
         LocalDateTime orderExpiresAt,
         String idempotencyKey
 ) {
+    // 주문 결제 가능 시간(15분)이 지났는지
+    public boolean isExpiredAt(LocalDateTime now) {
+        return !now.isBefore(orderExpiresAt);
+    }
 }

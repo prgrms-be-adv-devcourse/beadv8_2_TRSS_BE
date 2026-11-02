@@ -42,6 +42,7 @@ public class PaymentFacade {
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
     private final PaymentPayUseCase paymentPayUseCase;
+    private final PaymentCancelPaymentUseCase paymentCancelPaymentUseCase;
     private final PaymentGetPaymentAttemptsUseCase paymentGetPaymentAttemptsUseCase;
     private final PaymentFailTopupUseCase paymentFailTopupUseCase;
     private final PaymentGetTopupsUseCase paymentGetTopupsUseCase;
@@ -103,6 +104,12 @@ public class PaymentFacade {
     @Transactional
     public PayResultDto pay(PayCommand command) {
         return paymentPayUseCase.pay(command);
+    }
+
+    // 결제 취소 (결제 후 주문 처리가 실패했을 때 주문 쪽 보상). 결제할 때 쓴 멱등 키로 찾는다
+    @Transactional
+    public void cancelPayment(String idempotencyKey) {
+        paymentCancelPaymentUseCase.cancel(idempotencyKey);
     }
 
     // 주문의 결제 시도 목록 (주문 상세의 결제 내역)

@@ -31,6 +31,14 @@ public interface PaymentApi {
     PayResultDto pay(PayCommand command);
 
     /**
+     * 결제 취소: 결제는 됐는데 주문 쪽 처리가 실패했을 때 홀딩 금액을 구매자 지갑으로 되돌린다 (주문 쪽 보상).
+     * 결제할 때 쓴 idempotencyKey로 찾으므로, 결제 결과를 받지 못한 경우(응답 시간 초과 등)에도 부를 수 있다.
+     * 이 키의 결제가 없거나, 실패 건이거나, 이미 취소됐으면 아무것도 하지 않는다. 여러 번 불러도 한 번만 취소된다.
+     * 정산 지급이 시작된 결제는 취소할 수 없다: 409-PAYMENT_NOT_CANCELABLE
+     */
+    void cancelPayment(String idempotencyKey);
+
+    /**
      * 주문의 결제 시도 목록 (주문 상세의 결제 내역). 오래된 순, 실패 시도 포함.
      * 내 주문인지는 주문 쪽에서 확인하고 호출한다. 결제 시도가 없으면 빈 목록을 반환한다.
      * 실패 사유는 상태(FAILED_*)로만 알려 주고, 부족 금액은 담지 않는다.

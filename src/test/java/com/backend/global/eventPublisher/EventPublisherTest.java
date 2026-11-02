@@ -109,13 +109,12 @@ class EventPublisherTest {
     }
 
     @Test
-    @DisplayName("Kafka 컨슈머로 옮기기 전 이벤트(가입)는 기존 리스너가 같은 트랜잭션에서 바로 지갑을 만들고, outbox에는 PENDING으로 남아 릴레이가 Kafka에도 보낸다")
-    void publishSameTransactionEvent() {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            eventPublisher.publish(new MemberSignedUpEvent(testId));
-            assertThat(walletRepository.findByMemberId(testId)).isPresent();   // 커밋 전, 같은 트랜잭션 안에서 이미 생성
-        });
+    @DisplayName("가입 이벤트는 outbox에 PENDING으로 저장만 되고, Kafka 컨슈머가 받기 전까지 지갑은 생기지 않는다")
+    void publishSignUpEvent_waitsForConsumer() {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                eventPublisher.publish(new MemberSignedUpEvent(testId)));
 
+        assertThat(walletRepository.findByMemberId(testId)).isEmpty();
         assertThat(outboxEventRepository.findAll().stream()
                 .filter(outbox -> outbox.getAggregateType().equals("MEMBER") && outbox.getAggregateId().equals(testId)))
                 .singleElement()
