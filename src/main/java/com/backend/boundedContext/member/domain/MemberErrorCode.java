@@ -41,7 +41,8 @@ public enum MemberErrorCode implements ErrorCode {
     // 소셜 로그인
     KAKAO_AUTH_FAILED(400, "카카오 인증에 실패했습니다. 다시 시도해 주세요."),   // 인가 코드가 만료·재사용됐거나 redirect_uri가 다름
     SOCIAL_ACCOUNT_LINKED_TO_OTHER(409, "다른 회원에 이미 연결된 카카오 계정입니다."),
-    SOCIAL_PROVIDER_ALREADY_LINKED(409, "이미 다른 카카오 계정이 연결돼 있습니다. 연결을 해제한 뒤 다시 연결해 주세요.");   // 같은 제공자 계정은 회원당 하나
+    SOCIAL_PROVIDER_ALREADY_LINKED(409, "이미 다른 카카오 계정이 연결돼 있습니다. 연결을 해제한 뒤 다시 연결해 주세요."),   // 같은 제공자 계정은 회원당 하나
+    SOCIAL_NOT_LINKED(401, "연결된 계정이 없습니다. 이메일로 로그인한 뒤 마이페이지에서 카카오를 연결해 주세요.");   // 카카오로는 가입하지 않음(연결 전용)
 
     private final int status;
     private final String msg;

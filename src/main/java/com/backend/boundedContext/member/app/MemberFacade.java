@@ -44,6 +44,7 @@ public class MemberFacade {
     private final MemberGetWithdrawalCheckUseCase memberGetWithdrawalCheckUseCase;
     private final MemberWithdrawUseCase memberWithdrawUseCase;
     private final MemberLinkKakaoUseCase memberLinkKakaoUseCase;
+    private final MemberKakaoLoginUseCase memberKakaoLoginUseCase;
     private final MemberSocialAccountLinker memberSocialAccountLinker;
     private final MemberSupport memberSupport;
 
@@ -97,6 +98,11 @@ public class MemberFacade {
     @Transactional(readOnly = true)
     public AuthTokens login(String email, String password) {
         return memberLoginUseCase.login(email, password);
+    }
+
+    // 카카오 로그인 (연결된 회원만). 카카오 API를 DB 트랜잭션 밖에서 부르려고 @Transactional을 두지 않음 (조회는 각 리포지토리 호출이 짧게 처리)
+    public AuthTokens kakaoLogin(String authorizationCode) {
+        return memberKakaoLoginUseCase.login(authorizationCode);
     }
 
     // Access·Refresh Token 재발급 (Refresh Token 회전)
