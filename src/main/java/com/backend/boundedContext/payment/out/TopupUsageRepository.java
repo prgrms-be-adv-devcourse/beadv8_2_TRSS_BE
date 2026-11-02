@@ -8,5 +8,5 @@ import com.backend.boundedContext.payment.domain.TopupUsage;
 
 public interface TopupUsageRepository extends JpaRepository<TopupUsage, Long> {
 
-    List<TopupUsage> findAllByPayment_Id(Long paymentId);
+    List<TopupUsage> findAllByPaymentId(Long paymentId);
 }

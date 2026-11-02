@@ -87,7 +87,7 @@ class PaymentPayIntegrationTest {
     @AfterEach
     void cleanUp() {
         for (Long paymentId : paymentIds) {
-            topupUsageRepository.deleteAll(topupUsageRepository.findAllByPayment_Id(paymentId));
+            topupUsageRepository.deleteAll(topupUsageRepository.findAllByPaymentId(paymentId));
             walletHoldingRepository.findAll().stream()
                     .filter(h -> h.getPayment().getId().equals(paymentId))
                     .forEach(walletHoldingRepository::delete);
@@ -115,7 +115,7 @@ class PaymentPayIntegrationTest {
         assertThat(olderAfter.isCancelable()).isFalse();
         assertThat(newerAfter.isCancelable()).isFalse();
 
-        assertThat(topupUsageRepository.findAllByPayment_Id(result.paymentId()))
+        assertThat(topupUsageRepository.findAllByPaymentId(result.paymentId()))
                 .extracting(TopupUsage::getAmount)
                 .containsExactlyInAnyOrder(10_000L, 15_000L);
     }
@@ -129,7 +129,7 @@ class PaymentPayIntegrationTest {
 
         assertThat(result.isPaid()).isTrue();
         assertThat(topupRepository.findById(only.getId()).orElseThrow().getRemainingAmount()).isZero();
-        assertThat(topupUsageRepository.findAllByPayment_Id(result.paymentId()))
+        assertThat(topupUsageRepository.findAllByPaymentId(result.paymentId()))
                 .extracting(TopupUsage::getAmount)
                 .containsExactly(10_000L);
     }
@@ -143,7 +143,7 @@ class PaymentPayIntegrationTest {
 
         assertThat(result.isPaid()).isFalse();
         assertThat(topupRepository.findById(topup.getId()).orElseThrow().getRemainingAmount()).isEqualTo(10_000);
-        assertThat(topupUsageRepository.findAllByPayment_Id(result.paymentId())).isEmpty();
+        assertThat(topupUsageRepository.findAllByPaymentId(result.paymentId())).isEmpty();
     }
 
     // 승인 완료(DONE)된 충전 건 (지갑 잔액은 setUp에서 따로 넣었으므로 여기서는 충전 건 기록만 만든다)

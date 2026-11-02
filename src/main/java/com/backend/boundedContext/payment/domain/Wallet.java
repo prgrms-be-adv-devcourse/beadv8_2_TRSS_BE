@@ -38,6 +38,11 @@ public class Wallet extends BaseIdAndTime {
         this.balance += amount;
     }
 
+    // 이 금액을 결제할 잔액이 있는지
+    public boolean canPay(long amount) {
+        return balance >= amount;
+    }
+
     // 잔액 차감 (결제·충전 취소). 잔액 부족은 사용자가 만들 수 있는 실패라 402 INSUFFICIENT_BALANCE로 막음
     public void withdraw(long amount) {
         validatePositive(amount);

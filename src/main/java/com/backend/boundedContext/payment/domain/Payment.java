@@ -2,6 +2,7 @@ package com.backend.boundedContext.payment.domain;
 
 import java.time.LocalDateTime;
 
+import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 
 import jakarta.persistence.Column;
@@ -112,6 +113,15 @@ public class Payment extends BaseIdAndTime {
         return status == PaymentStatus.PAID;
     }
 
+    public boolean isCanceled() {
+        return status == PaymentStatus.CANCELED;
+    }
+
+    // 실패 건(FAILED_*): 돈이 움직이지 않은 결제 시도
+    public boolean isFailed() {
+        return status.isFailure();
+    }
+
     // 결제 원장(PAYMENT)의 멱등 키
     public String paymentIdempotencyKey() {
         return "PAYMENT-" + getId();
@@ -119,7 +129,7 @@ public class Payment extends BaseIdAndTime {
 
     // 결제 취소 (홀딩 해제·지갑 환급은 호출한 쪽에서 같은 트랜잭션으로 처리)
     public void cancel(LocalDateTime now) {
-        if (!isPaid()) throw new IllegalStateException("결제 완료 건만 취소할 수 있습니다: " + status);
+        if (!isPaid()) throw new DomainException(PaymentErrorCode.PAYMENT_NOT_CANCELABLE);
         this.status = PaymentStatus.CANCELED;
         this.canceledAt = now;
     }

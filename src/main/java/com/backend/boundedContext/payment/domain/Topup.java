@@ -96,6 +96,11 @@ public class Topup extends BaseIdAndTime {
         this.status = failStatus;
     }
 
+    // 결제에 필요한 금액 중 이 충전 건에서 쓸 수 있는 금액. 남은 금액이 모자라면 남은 만큼만 쓴다
+    public long usableFromRemaining(long neededAmount) {
+        return Math.min(neededAmount, remainingAmount);
+    }
+
     // 결제에 쓰인 만큼 남은 금액 차감 (차감 내역은 TopupUsage로 남김)
     public void use(long usedAmount) {
         if (usedAmount <= 0) throw new IllegalArgumentException("차감 금액은 0보다 커야 합니다: " + usedAmount);

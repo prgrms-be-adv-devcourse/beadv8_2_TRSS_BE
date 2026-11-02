@@ -93,7 +93,7 @@ class PaymentCancelPaymentIntegrationTest {
     @AfterEach
     void cleanUp() {
         for (Long paymentId : paymentIds) {
-            topupUsageRepository.deleteAll(topupUsageRepository.findAllByPayment_Id(paymentId));
+            topupUsageRepository.deleteAll(topupUsageRepository.findAllByPaymentId(paymentId));
             walletHoldingRepository.findAll().stream()
                     .filter(h -> h.getPayment().getId().equals(paymentId))
                     .forEach(walletHoldingRepository::delete);
