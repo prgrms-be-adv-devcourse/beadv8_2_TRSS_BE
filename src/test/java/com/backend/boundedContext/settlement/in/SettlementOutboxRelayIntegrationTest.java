@@ -17,6 +17,7 @@ import com.backend.shared.order.dto.ConfirmedOrderItemDto;
 import com.backend.shared.order.event.OrderConfirmedEvent;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.AfterEach;
@@ -200,6 +201,22 @@ class SettlementOutboxRelayIntegrationTest {
         ConsumerRecord<String, String> dead = findDeadLetter(broken);
         assertThat(dead.value()).isEqualTo(broken);
         verify(eventMessages, times(1)).read(broken);
+        verify(settlementCreateCandidatesUseCase, never()).createCandidates(eq(orderId), any(), anyList());
+    }
+
+    @Test
+    @DisplayName("eventType 헤더가 다른 주문 이벤트면 payload를 읽지 않고 넘어간다(이 앱이 모르는 새 이벤트여도 DLT로 보내지 않음)")
+    void otherEventTypeIsSkippedByHeader() {
+        String unknown = "{\"eventType\":\"OrderShippedEvent\",\"orderId\":" + orderId + "}";   // 이 앱이 모르는 이벤트(읽으면 예외)
+        ProducerRecord<String, String> record = new ProducerRecord<>("order.events", String.valueOf(orderId), unknown);
+        record.headers().add("eventType", "OrderShippedEvent".getBytes(StandardCharsets.UTF_8));
+
+        kafkaTemplate.send(record).join();
+        // 같은 키(같은 파티션)로 구매 확정 이벤트를 뒤에 보낸다. 이게 처리되면 앞의 메시지도 이미 받은 것이다
+        kafkaTemplate.send("order.events", String.valueOf(orderId), eventMessages.toJson(markerOutbox())).join();
+        await().atMost(WAIT).until(() -> findCandidates(markerOrderId).size() == 2);
+
+        verify(eventMessages, never()).read(unknown);
         verify(settlementCreateCandidatesUseCase, never()).createCandidates(eq(orderId), any(), anyList());
     }
 

@@ -252,14 +252,18 @@ Kafka 메시지(`global.outbox.EventMessages`)
 
 - Kafka·Outbox는 **최소 한 번** 전달입니다. 릴레이가 보낸 뒤 PUBLISHED로 커밋하기 전에 죽거나, 컨슈머가 처리 뒤 offset 커밋 전에 죽으면 같은 메시지가 다시 옵니다.
 - 그래서 컨슈머는 처리할 일과 **같은 트랜잭션 안에서** `ProcessedEvents.markProcessed(eventId, 컨슈머 이름)`을 먼저 부르고, `false`면(이미 처리함) 아무것도 하지 않습니다. 처리하다 실패하면 기록도 롤백되어 다시 받습니다.
-- 한 토픽에 여러 이벤트가 섞여 오므로 `EventMessages.read(message)`로 봉투를 읽고 payload 타입으로 거릅니다.
+- 한 토픽에 여러 이벤트가 섞여 오므로, 다루지 않는 이벤트는 **payload를 읽기 전에 `eventType` 헤더로 거릅니다.** 먼저 읽으면 이 앱이 모르는 새 이벤트(순차 배포 중 새 버전이 발행한 이벤트 등)에서 예외가 나 DLT로 가고 Slack 알림까지 갑니다.
+- 헤더가 없는 메시지(콘솔로 다시 보낸 DLT 메시지 등)는 `EventMessages.read()`로 봉투를 읽고 payload 타입으로 거릅니다.
 
 ```java
 @KafkaListener(topics = "order.events", groupId = "settlement")
 @Transactional
-public void handle(String message) {
-    EventEnvelope<DomainEvent> envelope = eventMessages.read(message);
-    if (!(envelope.payload() instanceof OrderConfirmedEvent event)) return;           // 다루지 않는 이벤트
+public void handle(ConsumerRecord<String, String> record) {
+    Header eventType = record.headers().lastHeader("eventType");                     // OutboxKafkaSender가 붙임
+    if (eventType != null && !"OrderConfirmedEvent".equals(new String(eventType.value(), UTF_8))) return;   // 다루지 않는 이벤트
+
+    EventEnvelope<DomainEvent> envelope = eventMessages.read(record.value());
+    if (!(envelope.payload() instanceof OrderConfirmedEvent event)) return;           // 헤더 없이 온 다른 이벤트
     if (!processedEvents.markProcessed(envelope.eventId(), "settlement")) return;   // 이미 처리함
     settlementFacade.createCandidates(event.orderId(), event.confirmedAt(), event.items());
 }
