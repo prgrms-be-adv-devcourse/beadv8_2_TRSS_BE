@@ -11,9 +11,10 @@ public record MyInfoDto(
         String email,
         String name,
         MemberRole role,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        boolean kakaoLinked   // 카카오 계정 연결 여부 (연결하면 카카오로 로그인할 수 있음)
 ) {
-    public static MyInfoDto from(Member member) {
-        return new MyInfoDto(member.getId(), member.getEmail(), member.getName(), member.getRole(), member.getCreatedAt());
+    public static MyInfoDto of(Member member, boolean kakaoLinked) {
+        return new MyInfoDto(member.getId(), member.getEmail(), member.getName(), member.getRole(), member.getCreatedAt(), kakaoLinked);
     }
 }

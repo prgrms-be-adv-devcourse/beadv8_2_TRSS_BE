@@ -14,4 +14,7 @@ public interface MemberSocialAccountRepository extends JpaRepository<MemberSocia
 
     // 회원에게 연결된 제공자 계정 조회 (연결·해제, 내 정보 표시)
     Optional<MemberSocialAccount> findByMemberIdAndProvider(Long memberId, SocialProvider provider);
+
+    // 내 정보의 연결 여부 표시
+    boolean existsByMemberIdAndProvider(Long memberId, SocialProvider provider);
 }
