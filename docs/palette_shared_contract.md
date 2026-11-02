@@ -122,7 +122,7 @@ public record MemberSignedUpEvent(Long memberId) implements DomainEvent { }
 ```
 
 - 지금은 `EventPublisher`가 가입 트랜잭션 안에서 바로 리스너에 전달해, 지갑 생성이 실패하면 가입도 롤백된다(outbox에는 PUBLISHED로 기록).
-- 릴레이 전환 예정(2026-10-23 결정, payment 담당): 지갑 생성이 가입과 별도 트랜잭션이 된다. 그 전에 결제가 가입 직후 지갑이 아직 없는 구간을 처리해야 한다.
+- Kafka 컨슈머 전환 예정(2026-10-23 결정, payment 담당): 지갑 생성이 가입과 별도 트랜잭션이 된다. 그 전에 결제가 가입 직후 지갑이 아직 없는 구간을 처리해야 한다. 토픽 `member.events`
 
 ## 3. product
 
@@ -374,8 +374,7 @@ public interface SettlementApi {
 | --- | --- | --- |
 | `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `settlement_candidate.order_item_id` 유니크 |
 
-- Outbox 릴레이가 전달한다(`@EventListener` + `@Transactional`, 릴레이 트랜잭션에 참여). 구매 확정 후 후보가 생기기까지 최대 약 1초(릴레이 간격) 걸린다.
-- 후보 생성이 실패하면 후보와 PUBLISHED 표시가 함께 롤백되고, 다음 릴레이에서 다시 전달된다. 5번 실패하면 FAILED로 남으며, 원인 수정 후 outbox 상태를 PENDING으로 되돌려 재전달한다.
+- 지금은 구매 확정 커밋 뒤(`AFTER_COMMIT`) 처리한다. Kafka 컨슈머 전환 예정(settlement 담당): 토픽 `order.events`를 `@KafkaListener`로 받으면 실패 시 다시 전달된다.
 
 ## 7. 구현 주의사항
 

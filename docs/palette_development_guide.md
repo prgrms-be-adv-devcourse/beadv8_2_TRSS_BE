@@ -104,7 +104,7 @@ com.backend
 | 방식 | 언제 쓰나 | 구현 |
 | --- | --- | --- |
 | **동기 Api** | 결과가 바로 필요하거나 같은 트랜잭션이어야 할 때 | `shared/<ctx>/out/<Ctx>Api` 인터페이스 → 제공 컨텍스트의 `<Ctx>ApiAdapter`가 구현 |
-| **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 전달 (`MemberSignedUpEvent`는 아직 바로 발행, [6.5](#65-outbox)) |
+| **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 Kafka로 발행 → 받는 쪽 `@KafkaListener` (지금 있는 이벤트는 기존 스프링 리스너에도 바로 발행, [6.5](#65-outbox)) |
 
 기획서가 같은 트랜잭션을 요구하므로(주문 생성 + 재고 차감, 결제 + 주문 PAID) 동기 호출은 Java 인터페이스로 합니다. MSA로 나눌 때는 `<Ctx>Api` 구현체만 `RestClient` 기반으로 바꾸면 됩니다.
 
@@ -161,7 +161,7 @@ flowchart LR
     member -. MemberSignedUpEvent .-> payment
 ```
 
-실선은 동기 Api, 점선은 이벤트입니다(outbox에 기록. `OrderConfirmedEvent`는 릴레이가 전달하고, `MemberSignedUpEvent`는 아직 릴레이로 옮기지 않아 바로 발행해 같은 트랜잭션에서 처리. [6.5](#65-outbox)). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
+실선은 동기 Api, 점선은 이벤트입니다(outbox에 기록하지만 아직 릴레이로 옮기지 않아 바로 발행, `MemberSignedUpEvent`는 같은 트랜잭션에서 처리. [6.5](#65-outbox)). 결제(payment)는 관리자 결제·충전 조회의 회원 이메일 검색·표시를 위해 `MemberApi`만 호출합니다.
 
 ### 6.4 이벤트 규칙
 
@@ -179,8 +179,8 @@ public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime conf
 public class SettlementEventListener {
     private final SettlementFacade settlementFacade;
 
-    @EventListener
-    @Transactional   // 릴레이가 이벤트마다 연 트랜잭션에 참여
+    @TransactionalEventListener(phase = AFTER_COMMIT)
+    @Transactional(propagation = REQUIRES_NEW)
     public void handle(OrderConfirmedEvent event) {
         settlementFacade.createCandidates(event);
     }
@@ -189,9 +189,9 @@ public class SettlementEventListener {
 
 - 이벤트는 불변 record로 만들고, 받는 쪽이 다시 조회하지 않아도 되도록 필요한 값을 모두 담습니다.
 - 다른 컨텍스트에 알리는 이벤트는 `shared.event.DomainEvent`를 구현합니다. `aggregateType()`은 이벤트가 생긴 대상 종류(대문자 단수형, 예: `ORDER`, `MEMBER`), `aggregateId()`는 그 대상의 ID입니다. record 필드에는 넣지 않습니다.
-- 리스너는 Facade 한 줄만 호출합니다.
-  - 릴레이로 옮긴 이벤트(`OrderConfirmedEvent`)의 리스너는 `@EventListener` + `@Transactional`을 씁니다. 릴레이가 이벤트마다 연 트랜잭션에 참여하므로, 리스너가 실패하면 리스너의 변경과 PUBLISHED 표시가 함께 롤백되고 이벤트가 다시 전달됩니다. `AFTER_COMMIT` + `REQUIRES_NEW`로 두면 실패한 이벤트가 재시도되지 않고 유실됩니다([6.5](#65-outbox)).
-  - 아직 릴레이로 옮기지 않은 `MemberSignedUpEvent`는 정책상 발행한 쪽과 같은 트랜잭션이어야 하므로 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
+- 리스너는 Facade 한 줄만 호출합니다. 지금은 `AFTER_COMMIT` + `REQUIRES_NEW`를 씁니다.
+  - 예외: 정책상 발행한 쪽과 같은 트랜잭션이어야 하는 이벤트(`MemberSignedUpEvent`)는 `@EventListener`로 받고, 트랜잭션은 Facade의 `@Transactional`에 맡깁니다.
+  - Kafka 컨슈머로 옮긴 이벤트는 `@KafkaListener` + `@Transactional`로 받고, 같은 트랜잭션 안에서 `ProcessedEvents.markProcessed(eventId, 컨슈머 이름)`로 중복을 거른 뒤 Facade를 호출합니다([6.5](#65-outbox)).
 - **같은 이벤트를 두 번 받아도 결과가 같아야 합니다(멱등).** 유니크 제약(`settlement_candidate.order_item_id`, 환불 구현 시 `payment_refund.payment_id`)으로 중복을 막습니다.
 - 발행은 UseCase에서 `EventPublisher.publish(...)`로 합니다. 엔티티에서 스프링 빈을 꺼내 쓰지 않습니다.
 - `publish()`는 **쓰기 트랜잭션 안에서만** 부릅니다. 이벤트를 호출한 쪽 트랜잭션에서 `outbox_event`에 저장하므로, 트랜잭션이 없거나 읽기 전용이면 `IllegalStateException`이 납니다.
@@ -200,19 +200,19 @@ public class SettlementEventListener {
 
 이벤트는 Transactional Outbox로 발행합니다(TRSS-121). 비즈니스 변경과 이벤트 저장을 한 트랜잭션으로 묶어, 커밋된 변경의 이벤트가 유실되지 않게 합니다.
 
-- 리스너 전환은 받는 쪽 담당자가 합니다. 전환 전 이벤트는 `EventPublisher.DIRECT_PUBLISH_EVENTS`에 두어, outbox에 PUBLISHED로 기록만 하고 Outbox 도입 전처럼 바로 스프링 이벤트로 발행합니다(리스너 동작은 도입 전과 같음).
-- 지금 이 목록에는 `MemberSignedUpEvent`만 있습니다. `OrderConfirmedEvent`는 릴레이가 전달하므로, 구매 확정 후 정산 후보가 생기기까지 최대 약 1초(릴레이 간격) 걸립니다.
-- 5번 실패해 FAILED가 된 이벤트는 자동으로 다시 전달되지 않습니다. 원인을 고친 뒤 outbox 행의 상태를 PENDING으로 되돌리면 릴레이가 다시 전달합니다.
+- 릴레이가 커밋된 이벤트를 Kafka로 발행합니다(TRSS-133). 받는 쪽은 `@KafkaListener`로 받습니다.
+- 받는 쪽의 Kafka 컨슈머 전환은 각 담당자가 합니다. 전환 전 이벤트는 `EventPublisher.DIRECT_PUBLISH_EVENTS`에 두어, 기존 스프링 리스너에도 Outbox 도입 전처럼 바로 발행합니다(리스너 동작은 도입 전과 같음). outbox 행은 PENDING으로 저장되어 Kafka에도 발행되므로, 전환할 때 메시지가 이미 쌓여 있습니다.
+- 지금은 `MemberSignedUpEvent`, `OrderConfirmedEvent` 둘 다 이 목록에 있습니다. **컨슈머를 추가하는 PR에서 기존 리스너를 지우고 목록에서 빼야 합니다.** 둘 다 두면 같은 이벤트가 두 번 처리됩니다.
 
 | 단계 | 내용 | 상태 |
 | --- | --- | --- |
 | 1 | 이벤트 봉투 규격: `shared.event.DomainEvent`, `shared.event.EventEnvelope` | 완료 |
 | 2 | `outbox_event` 테이블 (`V12`), 엔티티 `global.outbox.OutboxEvent` | 완료 |
 | 3 | `EventPublisher.publish()`가 호출한 쪽 트랜잭션 안에서 outbox에 저장 (트랜잭션 밖 호출은 예외) | 완료 |
-| 4 | 릴레이: 미발행 이벤트를 스프링 이벤트로 발행 (`OutboxRelay`, `OutboxRelayScheduler`) | 완료 |
-| 4-1 | `OrderConfirmedEvent` 릴레이 전환: `SettlementEventListener`를 `@EventListener` + `@Transactional`로 바꾸고 `EventPublisher.DIRECT_PUBLISH_EVENTS`에서 뺀다 | 완료 |
-| 4-2 | `MemberSignedUpEvent` 릴레이 전환: 결제가 지갑이 아직 없는 구간을 처리(조회는 0, 쓰기는 지갑을 먼저 생성)하고, `PaymentEventListener`에 `@Transactional`을 붙인 뒤 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | payment 담당 |
-| 5 | Kafka 발행 | 도입 승인 후 |
+| 4 | 릴레이 (`OutboxRelay`, `OutboxRelayScheduler`) | 완료 |
+| 5 | Kafka 발행(`OutboxKafkaSender`), 받는 쪽 중복 처리(`processed_event` `V14`, `ProcessedEvents`, `EventMessages`) | 완료 (TRSS-133) |
+| 5-1 | `OrderConfirmedEvent` 컨슈머 전환: `SettlementEventListener`를 `@KafkaListener(topics = "order.events")`로 바꾸고 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | settlement 담당 |
+| 5-2 | `MemberSignedUpEvent` 컨슈머 전환: 결제가 지갑이 아직 없는 구간을 처리(조회는 0, 쓰기는 지갑을 먼저 생성)하고, `PaymentEventListener`를 `@KafkaListener(topics = "member.events")`로 바꾼 뒤 `DIRECT_PUBLISH_EVENTS`에서 뺀다 | payment 담당 |
 
 `EventEnvelope`는 모든 이벤트에 붙는 공통 봉투입니다. outbox 한 행, Kafka 메시지 하나와 1:1로 대응합니다.
 
@@ -222,7 +222,7 @@ public class SettlementEventListener {
 | `eventType` | `String` | payload record의 클래스 단순 이름(예: `OrderConfirmedEvent`) |
 | `occurredAt` | `LocalDateTime` | 발행 시각(KST) |
 | `aggregateType` | `String` | `DomainEvent.aggregateType()` |
-| `aggregateId` | `Long` | `DomainEvent.aggregateId()`. Kafka 도입 시 메시지 키 |
+| `aggregateId` | `Long` | `DomainEvent.aggregateId()`. Kafka 메시지 키 |
 | `payload` | `DomainEvent` | 기존 이벤트 record 그대로 |
 
 - 봉투는 `EventEnvelope.wrap(event)`로 만듭니다. 새 `eventId`와 현재 시각이 채워집니다.
@@ -241,12 +241,42 @@ public class SettlementEventListener {
 
 릴레이(`global.outbox.OutboxRelay`, 스케줄러 `OutboxRelayScheduler`)
 
-- `custom.outbox.relayIntervalMillis`(1초)마다 PENDING 이벤트를 최대 `relayBatchSize`(100)개 발행합니다. 이벤트가 리스너에 닿기까지 최대 이 간격만큼 늦어집니다.
-- 이벤트 하나마다 트랜잭션을 열고 `SELECT ... FOR UPDATE SKIP LOCKED`로 한 행을 잠근 뒤, payload를 `eventType`의 클래스로 되돌려 스프링 이벤트로 발행하고 PUBLISHED로 바꿉니다. 서버가 여러 대여도 같은 이벤트를 동시에 두 번 발행하지 않습니다.
-- 리스너가 실패하면 그 트랜잭션은 롤백되고, 별도 트랜잭션에서 행을 잠근 뒤 아직 PENDING일 때만 `retry_count`를 올립니다(그사이 다른 서버가 발행했으면 그대로 둠). 이번 실행에서는 다음 이벤트로 넘어가고 다음 실행에서 다시 시도합니다. `maxRetryCount`(5)번 실패하면 FAILED로 두고 에러 로그를 남깁니다(FAILED는 사람이 확인).
+- `custom.outbox.relayIntervalMillis`(1초)마다 PENDING 이벤트를 최대 `relayBatchSize`(100)개 발행합니다. 이벤트가 Kafka에 닿기까지 최대 이 간격만큼 늦어집니다.
+- 이벤트 하나마다 트랜잭션을 열고 `SELECT ... FOR UPDATE SKIP LOCKED`로 한 행을 잠근 뒤 Kafka로 보내고, 브로커가 기록을 마치면(ack, `acks=all`) PUBLISHED로 바꿉니다. 서버가 여러 대여도 같은 이벤트를 동시에 두 번 보내지 않습니다.
+- **Kafka에 닿지 못하면**(브로커 다운·시간 초과) 재시도 횟수를 쓰지 않고 이번 실행을 멈춥니다. 행은 PENDING으로 남고, 브로커가 살아나면 다음 실행에서 이어서 보냅니다. 그동안 비즈니스 요청은 영향을 받지 않습니다.
+- **Kafka가 메시지를 거부하면**(메시지 크기 초과 등) 별도 트랜잭션에서 행을 잠근 뒤 아직 PENDING일 때만 `retry_count`를 올립니다(그사이 다른 서버가 발행했으면 그대로 둠). 이번 실행에서는 다음 이벤트로 넘어가고 다음 실행에서 다시 시도합니다. `maxRetryCount`(5)번 실패하면 FAILED로 두고 에러 로그를 남깁니다(FAILED는 사람이 확인).
 - 같은 대상(`aggregate_type`, `aggregate_id`)에 앞선 PENDING 이벤트가 있으면 뒤 이벤트는 가져오지 않습니다. 앞 이벤트가 재시도 중이거나 다른 서버가 처리 중이어도 대상별 발행 순서가 지켜집니다. 앞 이벤트가 FAILED가 되면 뒤 이벤트가 이어서 발행됩니다.
 - 릴레이가 아는 이벤트 클래스는 `com.backend.shared` 안의 `DomainEvent` 구현체입니다. 클래스 단순 이름이 겹치면 앱이 시작하지 않고, 그 밖에 둔 이벤트를 `publish()`하면 `IllegalArgumentException`이 납니다.
-- 통합 테스트는 `custom.scheduling.enabled=false`로 스케줄러를 끄고, 필요하면 `OutboxRelay.relayPending()`을 직접 부릅니다.
+- 통합 테스트는 릴레이 스케줄러가 꺼져 있고(`src/test/resources/application.properties`의 `custom.outbox.relayEnabled=false`), 필요하면 `OutboxRelay.relayPending()`을 직접 부릅니다. Kafka가 필요한 테스트는 `@EmbeddedKafka`를 씁니다(`OutboxKafkaIntegrationTest` 참고).
+
+Kafka 메시지(`global.outbox.EventMessages`)
+
+| 항목 | 값 |
+| --- | --- |
+| 토픽 | `<aggregateType 소문자>.events` (예: `order.events`, `member.events`). 처음 보낼 때 릴레이가 만든다(파티션 `custom.outbox.topicPartitions` 3개) |
+| 키 | `aggregateId`. 같은 대상의 이벤트는 같은 파티션으로 가서 보낸 순서대로 받는다 |
+| 값 | 봉투 JSON `{"eventId", "eventType", "occurredAt", "aggregateType", "aggregateId", "payload": {...}}` |
+| 헤더 | `eventId`, `eventType` |
+
+받는 쪽(컨슈머)
+
+- Kafka·Outbox는 **최소 한 번** 전달입니다. 릴레이가 보낸 뒤 PUBLISHED로 커밋하기 전에 죽거나, 컨슈머가 처리 뒤 offset 커밋 전에 죽으면 같은 메시지가 다시 옵니다.
+- 그래서 컨슈머는 처리할 일과 **같은 트랜잭션 안에서** `ProcessedEvents.markProcessed(eventId, 컨슈머 이름)`을 먼저 부르고, `false`면(이미 처리함) 아무것도 하지 않습니다. 처리하다 실패하면 기록도 롤백되어 다시 받습니다.
+- 한 토픽에 여러 이벤트가 섞여 오므로 `EventMessages.read(message)`로 봉투를 읽고 payload 타입으로 거릅니다.
+
+```java
+@KafkaListener(topics = "order.events", groupId = "settlement")
+@Transactional
+public void handle(String message) {
+    EventEnvelope<DomainEvent> envelope = eventMessages.read(message);
+    if (!(envelope.payload() instanceof OrderConfirmedEvent event)) return;           // 다루지 않는 이벤트
+    if (!processedEvents.markProcessed(envelope.eventId(), "settlement")) return;   // 이미 처리함
+    settlementFacade.createCandidates(event.orderId(), event.confirmedAt(), event.items());
+}
+```
+
+- `groupId`는 컨슈머(받는 쪽 컨텍스트)마다 다르게 둡니다. 같은 이벤트를 정산과 결제가 각자 받습니다.
+- 로컬에서 앱을 띄울 때는 `docker compose up -d`로 Kafka도 함께 띄웁니다(`localhost:9092`). Kafka 없이 띄워도 앱은 뜨고, 릴레이만 경고 로그를 남기며 이벤트를 PENDING으로 둡니다.
 
 - 구매 확정과 `OrderConfirmedEvent` 발행은 주문 컨텍스트의 메서드 하나로 묶고, 확정 경로 3개(수동·7일 자동·반품 거절)가 모두 그 메서드를 호출합니다 → [공유 계약 7.3](palette_shared_contract.md)
 
