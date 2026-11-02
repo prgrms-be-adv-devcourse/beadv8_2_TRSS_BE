@@ -12,7 +12,7 @@ import com.backend.shared.payment.dto.WalletSummaryDto;
 
 /**
  * 결제 컨텍스트가 다른 컨텍스트에 제공하는 내부 API.
- * 구현체 {@link com.backend.boundedContext.payment.in.PaymentApiAdapter}
+ * 구현체: payment 컨텍스트의 PaymentApiAdapter (boundedContext.payment.in)
  */
 public interface PaymentApi {
 
