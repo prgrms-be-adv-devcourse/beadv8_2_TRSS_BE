@@ -63,4 +63,18 @@ class EventMessagesTest {
 
         assertThatThrownBy(() -> eventMessages.read(json)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("JSON은 맞지만 봉투 필드가 없으면 NullPointerException이 아니라 IllegalArgumentException(컨슈머가 재시도 없이 DLT로 보냄)")
+    void missingField() {
+        String noEventId = """
+                {"eventType":"OutboxTestEvent","occurredAt":"2026-10-30T10:00:00","aggregateType":"TEST","aggregateId":1,
+                 "payload":{"testId":1}}
+                """;
+
+        assertThatThrownBy(() -> eventMessages.read("{}"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("eventType");
+        assertThatThrownBy(() -> eventMessages.read(noEventId))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("eventId");
+    }
 }

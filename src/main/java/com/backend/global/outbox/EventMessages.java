@@ -44,21 +44,30 @@ public class EventMessages {
     /**
      * Kafka 메시지 값(봉투 JSON)을 봉투로 읽는다. payload는 eventType의 이벤트 record로 되돌린다.
      *
-     * @throws IllegalArgumentException 이 앱이 모르는 eventType인 경우
+     * @throws IllegalArgumentException 봉투에 필요한 필드가 없거나, 이 앱이 모르는 eventType인 경우
      */
     public EventEnvelope<DomainEvent> read(String json) {
         JsonNode envelope = objectMapper.readTree(json);
-        String eventType = envelope.get("eventType").asString();
+        String eventType = required(envelope, "eventType").asString();
         Class<? extends DomainEvent> type = outboxEventTypes.find(eventType)
                 .orElseThrow(() -> new IllegalArgumentException("알 수 없는 이벤트 타입: " + eventType));
 
         return new EventEnvelope<>(
-                UUID.fromString(envelope.get("eventId").asString()),
+                UUID.fromString(required(envelope, "eventId").asString()),
                 eventType,
-                LocalDateTime.parse(envelope.get("occurredAt").asString()),
-                envelope.get("aggregateType").asString(),
-                envelope.get("aggregateId").asLong(),
-                objectMapper.treeToValue(envelope.get("payload"), type)
+                LocalDateTime.parse(required(envelope, "occurredAt").asString()),
+                required(envelope, "aggregateType").asString(),
+                required(envelope, "aggregateId").asLong(),
+                objectMapper.treeToValue(required(envelope, "payload"), type)
         );
+    }
+
+    // 필드가 없으면 NullPointerException 대신 메시지가 잘못됐다는 예외를 던진다(컨슈머는 재시도 없이 DLT로 보낸다)
+    private static JsonNode required(JsonNode envelope, String field) {
+        JsonNode value = envelope.get(field);
+        if (value == null || value.isNull()) {
+            throw new IllegalArgumentException("이벤트 봉투에 " + field + "가 없습니다");
+        }
+        return value;
     }
 }
