@@ -1,7 +1,7 @@
 package com.backend.shared.settlement.out;
 
 /**
- * 구현체 {@link com.backend.boundedContext.settlement.in.SettlementApiAdapter}
+ * 구현체: settlement 컨텍스트의 SettlementApiAdapter (boundedContext.settlement.in)
  */
 public interface SettlementApi {
 
