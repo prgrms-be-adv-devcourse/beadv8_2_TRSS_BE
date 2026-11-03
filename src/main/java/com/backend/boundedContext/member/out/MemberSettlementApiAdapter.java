@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Component
 @RequiredArgsConstructor
-public class SettlementApiMemberSettlementAdapter implements MemberSettlementPort {
+public class MemberSettlementApiAdapter implements MemberSettlementPort {
 
     private final SettlementApi settlementApi;
 

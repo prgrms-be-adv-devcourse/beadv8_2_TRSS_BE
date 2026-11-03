@@ -151,18 +151,18 @@ public interface MemberPaymentPort {
     boolean hasPendingTopups(Long memberId);
 }
 
-// boundedContext/member/out/PaymentApiMemberPaymentAdapter.java — 한 앱 안에서는 PaymentApi에 위임
+// boundedContext/member/out/MemberPaymentApiAdapter.java — 한 앱 안에서는 PaymentApi에 위임
 @Component
 @RequiredArgsConstructor
-public class PaymentApiMemberPaymentAdapter implements MemberPaymentPort {
+public class MemberPaymentApiAdapter implements MemberPaymentPort {
     private final PaymentApi paymentApi;
     ...
 }
 ```
 
-- Port와 구현은 부르는 쪽 `out/`에 둡니다. 이름은 `<부르는 Ctx><대상 Ctx>Port`, 한 앱 안의 구현은 `<대상 Ctx>Api<부르는 Ctx><대상 Ctx>Adapter`입니다.
+- Port와 구현은 부르는 쪽 `out/`에 둡니다. 이름은 `<부르는 Ctx><대상 Ctx>Port`, 한 앱 안의 구현은 `<부르는 Ctx><대상 Ctx>ApiAdapter`, HTTP 클라이언트 구현은 `<부르는 Ctx><대상 Ctx>HttpAdapter`입니다. 앞부분이 같아서 `out/`에서 Port와 구현이 함께 모여 보입니다.
 - 다른 컨텍스트의 `<Ctx>Api`를 import하는 곳은 이 구현 하나뿐이어야 합니다. 단위 테스트는 Port를 mock하고, 통합 테스트는 지금처럼 `<Ctx>Api` 빈을 `@MockitoBean`으로 바꿔도 됩니다.
-- 회원은 결제·주문·정산·상품 Port를 적용했습니다(`MemberPaymentPort`, `MemberOrderPort`, `MemberSettlementPort`, `MemberProductPort`).
+- 회원은 결제·주문·정산·상품 Port를 적용했습니다(`MemberPaymentPort`, `MemberOrderPort`, `MemberSettlementPort`, `MemberProductPort`). 결제는 `PaymentMemberPort`로 맞춥니다.
 
 ### 6.3 호출 방향
 

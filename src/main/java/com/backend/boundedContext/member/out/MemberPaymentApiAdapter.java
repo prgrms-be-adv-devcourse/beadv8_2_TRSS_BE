@@ -12,7 +12,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Component
 @RequiredArgsConstructor
-public class PaymentApiMemberPaymentAdapter implements MemberPaymentPort {
+public class MemberPaymentApiAdapter implements MemberPaymentPort {
 
     private final PaymentApi paymentApi;
 

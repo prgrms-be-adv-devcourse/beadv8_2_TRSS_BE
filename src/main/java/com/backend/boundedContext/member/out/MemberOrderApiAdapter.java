@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Component
 @RequiredArgsConstructor
-public class OrderApiMemberOrderAdapter implements MemberOrderPort {
+public class MemberOrderApiAdapter implements MemberOrderPort {
 
     private final OrderApi orderApi;
 

@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Component
 @RequiredArgsConstructor
-public class ProductApiMemberProductAdapter implements MemberProductPort {
+public class MemberProductApiAdapter implements MemberProductPort {
 
     private final ProductApi productApi;
 
