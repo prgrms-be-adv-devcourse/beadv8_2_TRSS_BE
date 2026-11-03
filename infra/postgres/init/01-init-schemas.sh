@@ -41,3 +41,40 @@ create_service_schema market     "${MARKET_DB_PASSWORD:?MARKET_DB_PASSWORD가 �
 create_service_schema payment    "${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD가 없습니다}"
 create_service_schema settlement "${SETTLEMENT_DB_PASSWORD:?SETTLEMENT_DB_PASSWORD가 없습니다}"
 create_service_schema ai         "${AI_DB_PASSWORD:?AI_DB_PASSWORD가 없습니다}"
+
+# 모든 스키마를 읽기만 하는 계정. 팀원이 개발 서버 데이터를 확인할 때 쓴다(서버는 dbtunnel 터널로 접속).
+# 스키마마다 지금 있는 테이블 + 앞으로 그 주인이 만들 테이블(DEFAULT PRIVILEGES)에 읽기 권한을 준다.
+create_readonly_user() {
+    local password="$1"
+    # "스키마:주인" — public은 앱 계정(POSTGRES_USER)이, 나머지는 서비스 계정이 테이블을 만든다
+    local schema_owners=(
+        "public:${POSTGRES_USER}"
+        "member:member_user"
+        "market:market_user"
+        "payment:payment_user"
+        "settlement:settlement_user"
+        "ai:ai_user"
+    )
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+         -v password="$password" <<'SQL'
+SELECT format('CREATE ROLE readonly_user LOGIN PASSWORD %L', :'password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_user')\gexec
+SQL
+
+    local pair schema owner
+    for pair in "${schema_owners[@]}"; do
+        schema="${pair%%:*}"
+        owner="${pair#*:}"
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+             -v schema="$schema" -v owner="$owner" <<'SQL'
+SELECT format('GRANT USAGE ON SCHEMA %I TO readonly_user', :'schema')\gexec
+SELECT format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO readonly_user', :'schema')\gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON TABLES TO readonly_user', :'owner', :'schema')\gexec
+SQL
+    done
+
+    echo "✔ readonly_user 계정 (모든 스키마 읽기만)"
+}
+
+create_readonly_user "${READONLY_DB_PASSWORD:?READONLY_DB_PASSWORD가 없습니다}"
