@@ -2,10 +2,10 @@
 # 개발 서버(EC2)에서 앱을 다시 빌드·실행하고 정상 기동을 확인한다.
 #
 # 자동 배포: CI가 통과하면 GitHub Actions가 배포 전용 키로 SSH 접속한다. 서버의 authorized_keys에 고정한
-#   scripts/deploy-remote.sh가 그 커밋 SHA를 검증·체크아웃한 뒤 이 스크립트를 실행한다.
-# 수동 배포: cd ~/palette && git pull && bash scripts/deploy.sh
+#   infra/scripts/deploy-remote.sh가 그 커밋 SHA를 검증·체크아웃한 뒤 이 스크립트를 실행한다.
+# 수동 배포: cd ~/palette && git pull && bash infra/scripts/deploy.sh
 #
-# 서버의 .env는 Git이 관리하지 않으므로 배포해도 그대로 남는다.
+# 서버의 .env(infra/.env)는 Git이 관리하지 않으므로 배포해도 그대로 남는다.
 
 set -euo pipefail
 
@@ -13,7 +13,7 @@ set -euo pipefail
 main() {
     local app_dir="${APP_DIR:-$HOME/palette}"
     local health_url="http://localhost/v3/api-docs"   # nginx(80)를 거쳐 앱이 응답하는지 본다
-    local compose=(docker compose -f compose.prod.yaml)
+    local compose=(docker compose -f infra/compose.prod.yaml)
 
     cd "$app_dir"
 
@@ -26,7 +26,7 @@ main() {
     echo "▶ 빌드·재시작"
     "${compose[@]}" up -d --build --remove-orphans
 
-    # nginx/default.conf는 파일 하나를 bind mount해서, git pull로 파일이 바뀌어도 실행 중인 nginx는 예전 파일을 본다.
+    # infra/nginx/default.conf는 파일 하나를 bind mount해서, git pull로 파일이 바뀌어도 실행 중인 nginx는 예전 파일을 본다.
     # 재시작해야 새 설정을 읽는다(재시작하는 1~2초 동안 요청이 끊긴다).
     echo "▶ nginx 설정 다시 읽기"
     "${compose[@]}" restart nginx

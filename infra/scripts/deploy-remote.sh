@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # 자동 배포 진입점. 서버의 authorized_keys가 배포 전용 키로 접속하면 이 스크립트만 실행하도록 고정한다.
-#   command="bash ~/palette/scripts/deploy-remote.sh",no-pty,... ssh-ed25519 AAAA...
+#   command="bash ~/palette/infra/scripts/deploy-remote.sh",no-pty,... ssh-ed25519 AAAA...
 #
 # GitHub Actions(deploy.yml)는 CI가 통과한 커밋을 "deploy <40자리 SHA>"로 넘기고, 그 값은 $SSH_ORIGINAL_COMMAND로 들어온다.
 # 키가 유출돼도 develop에 있는 커밋 배포 말고는 할 수 없도록 입력을 엄격히 검사한 뒤
-# 그 커밋으로 체크아웃하고 scripts/deploy.sh를 실행한다.
+# 그 커밋으로 체크아웃하고 infra/scripts/deploy.sh를 실행한다.
 #
 # 배포 순서는 deploy.yml의 concurrency가 한 번에 하나씩 보장한다.
 
@@ -41,7 +41,7 @@ main() {
     # 로컬 develop을 요청한 커밋에 맞춘다. 서버에서 수동으로 git pull 해도 계속 동작한다.
     git checkout --quiet --force -B develop "$sha"
 
-    bash scripts/deploy.sh
+    bash infra/scripts/deploy.sh
 }
 
 main "$@"
