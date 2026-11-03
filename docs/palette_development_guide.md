@@ -106,7 +106,7 @@ com.backend
 | **동기 Api** | 결과가 바로 필요하거나 같은 트랜잭션이어야 할 때 | `shared/<ctx>/out/<Ctx>Api` 인터페이스 → 제공 컨텍스트의 `<Ctx>ApiAdapter`가 구현 |
 | **이벤트** | 끝난 일을 알리고, 후속 처리가 실패해도 원래 요청은 성공이어야 할 때 | `shared/<ctx>/event` record → Outbox 저장 → 릴레이가 커밋 뒤 Kafka로 발행 → 받는 쪽 `@KafkaListener` (`MemberSignedUpEvent`는 아직 기존 스프링 리스너에도 바로 발행, [6.5](#65-outbox)) |
 
-기획서가 같은 트랜잭션을 요구하므로(주문 생성 + 재고 차감, 결제 + 주문 PAID) 동기 호출은 Java 인터페이스로 합니다. MSA로 나눌 때는 `<Ctx>Api` 구현체만 `RestClient` 기반으로 바꾸면 됩니다.
+기획서가 같은 트랜잭션을 요구하므로(주문 생성 + 재고 차감, 결제 + 주문 PAID) 동기 호출은 Java 인터페이스로 합니다. MSA로 나눌 때는 제공하는 쪽이 `<Ctx>Api`를 내부 API(`/internal/v1/**`)로 열고, 부르는 쪽은 자기 Port의 구현을 HTTP 클라이언트로 바꿉니다([6.2](#62-동기-api-규칙)의 부르는 쪽 Port).
 
 ### 6.2 동기 Api 규칙
 
@@ -139,6 +139,30 @@ public class ProductApiAdapter implements ProductApi {
 - 실패는 `DomainException`으로 던집니다. 단, 호출한 쪽이 결과를 보고 판단해야 하는 실패(잔액 부족 등)는 결과 DTO로 반환합니다. 어느 쪽인지는 인터페이스 Javadoc에 적습니다.
 - 파라미터와 반환값은 `shared` DTO와 기본 타입만 씁니다. 엔티티를 넘기지 않습니다.
 - 구현이 아직 없으면 제공하는 쪽이 Adapter에 임시 구현(고정값 반환 또는 `UnsupportedOperationException`)을 먼저 넣어 둡니다. 다른 사람이 Fake 빈을 따로 만들면 빈이 두 개가 됩니다.
+
+**부르는 쪽 Port (모듈 분리 준비)**
+
+모듈을 앱으로 나누기 전에, 부르는 쪽은 다른 컨텍스트의 `<Ctx>Api`를 UseCase에 직접 주입하지 않고 **자기에게 필요한 메서드만 담은 Port**를 거칩니다. 앱이 나뉘면 Port 구현만 HTTP 클라이언트(`@HttpExchange` + `RestClient`)로 바꾸고 UseCase는 그대로 둡니다.
+
+```java
+// boundedContext/member/out/MemberPaymentPort.java — 회원이 쓰는 결제 기능만
+public interface MemberPaymentPort {
+    WalletSummaryDto getWallet(Long memberId);
+    boolean hasPendingTopups(Long memberId);
+}
+
+// boundedContext/member/out/PaymentApiMemberPaymentAdapter.java — 한 앱 안에서는 PaymentApi에 위임
+@Component
+@RequiredArgsConstructor
+public class PaymentApiMemberPaymentAdapter implements MemberPaymentPort {
+    private final PaymentApi paymentApi;
+    ...
+}
+```
+
+- Port와 구현은 부르는 쪽 `out/`에 둡니다. 이름은 `<부르는 Ctx><대상 Ctx>Port`, 한 앱 안의 구현은 `<대상 Ctx>Api<부르는 Ctx><대상 Ctx>Adapter`입니다.
+- 다른 컨텍스트의 `<Ctx>Api`를 import하는 곳은 이 구현 하나뿐이어야 합니다. 단위 테스트는 Port를 mock하고, 통합 테스트는 지금처럼 `<Ctx>Api` 빈을 `@MockitoBean`으로 바꿔도 됩니다.
+- 회원은 결제·주문·정산·상품 Port를 적용했습니다(`MemberPaymentPort`, `MemberOrderPort`, `MemberSettlementPort`, `MemberProductPort`).
 
 ### 6.3 호출 방향
 
