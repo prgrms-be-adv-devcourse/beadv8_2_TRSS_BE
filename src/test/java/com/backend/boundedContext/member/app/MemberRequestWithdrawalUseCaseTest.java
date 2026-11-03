@@ -21,12 +21,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberProductPort;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.product.out.ProductApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberRequestWithdrawalUseCaseTest {
@@ -44,7 +44,7 @@ class MemberRequestWithdrawalUseCaseTest {
     private MemberSettlementPort memberSettlementPort;
 
     @Mock
-    private ProductApi productApi;
+    private MemberProductPort memberProductPort;
 
     @InjectMocks
     private MemberRequestWithdrawalUseCase memberRequestWithdrawalUseCase;
@@ -61,7 +61,7 @@ class MemberRequestWithdrawalUseCaseTest {
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
         verify(sellerStatusHistoryRepository).save(any());
-        verify(productApi).stopAllBySeller(SELLER_ID, "폐업 예정");
+        verify(memberProductPort).stopAllBySeller(SELLER_ID, "폐업 예정");
     }
 
     @Test
@@ -75,7 +75,7 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
-        verifyNoInteractions(productApi);
+        verifyNoInteractions(memberProductPort);
     }
 
     @Test
@@ -87,7 +87,7 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
         verify(sellerStatusHistoryRepository, never()).save(any());
-        verifyNoInteractions(productApi);
+        verifyNoInteractions(memberProductPort);
     }
 
     private void assertError(MemberErrorCode errorCode) {

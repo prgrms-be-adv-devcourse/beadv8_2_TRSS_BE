@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
-import com.backend.shared.product.out.ProductApi;
+import com.backend.boundedContext.member.out.MemberProductPort;
 
 import lombok.RequiredArgsConstructor;
 
@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 public class MemberRejectWithdrawalUseCase {
 
     private final SellerSupport sellerSupport;
-    private final ProductApi productApi;
+    private final MemberProductPort memberProductPort;
 
     public AdminSellerDetailDto rejectWithdrawal(Long sellerId, String reason) {
         Seller seller = sellerSupport.getSeller(sellerId);
@@ -27,7 +27,7 @@ public class MemberRejectWithdrawalUseCase {
         SellerStatusHistory history = seller.rejectWithdrawal(reason.strip());
 
         // stoppedBy = SELLER_WITHDRAWN인 상품만 ON_SALE로 되돌린다. 관리자·판매 중지 요청으로 중지된 상품은 그대로
-        productApi.resumeAllBySeller(sellerId);
+        memberProductPort.resumeAllBySeller(sellerId);
 
         return sellerSupport.saveHistory(seller, history);
     }

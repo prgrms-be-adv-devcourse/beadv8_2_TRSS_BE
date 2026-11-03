@@ -5,8 +5,8 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
+import com.backend.boundedContext.member.out.MemberProductPort;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
-import com.backend.shared.product.out.ProductApi;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 public class MemberSanctionSellerUseCase {
 
     private final SellerSupport sellerSupport;
-    private final ProductApi productApi;
+    private final MemberProductPort memberProductPort;
     private final MemberSettlementPort memberSettlementPort;
 
     public AdminSellerDetailDto sanction(Long sellerId, String reason) {
@@ -33,7 +33,7 @@ public class MemberSanctionSellerUseCase {
 
         // 판매 중 상품을 모두 중지하고 그 상품이 든 결제 대기 주문을 취소·재고 복원한다 (상품 담당, 내부에서 OrderApi.cancelPendingOrders 호출).
         // 철회 요청 때 이미 중지된 상품은 건드리지 않는다
-        productApi.stopAllBySeller(sellerId, strippedReason);
+        memberProductPort.stopAllBySeller(sellerId, strippedReason);
 
         // 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾸고, 이후 정산서도 HOLD로 만든다 (정산 담당)
         memberSettlementPort.holdSeller(sellerId, strippedReason);
