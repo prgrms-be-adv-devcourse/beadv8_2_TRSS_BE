@@ -73,11 +73,19 @@ services:
       POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME이 .env에 없습니다}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD가 .env에 없습니다}
       TZ: UTC   # 로컬 compose.yaml과 같게 둔다. 앱은 JVM 시간대(KST)로 LocalDateTime을 저장한다.
+      # 서비스별 DB 계정 비밀번호(postgres/init/01-init-schemas.sh가 계정을 만들 때 쓴다)
+      MEMBER_DB_PASSWORD: ${MEMBER_DB_PASSWORD:?MEMBER_DB_PASSWORD가 .env에 없습니다}
+      MARKET_DB_PASSWORD: ${MARKET_DB_PASSWORD:?MARKET_DB_PASSWORD가 .env에 없습니다}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD가 .env에 없습니다}
+      SETTLEMENT_DB_PASSWORD: ${SETTLEMENT_DB_PASSWORD:?SETTLEMENT_DB_PASSWORD가 .env에 없습니다}
+      AI_DB_PASSWORD: ${AI_DB_PASSWORD:?AI_DB_PASSWORD가 .env에 없습니다}
     # 서버 안(127.0.0.1)에서만 접속된다. 외부에서 보려면 SSH 터널을 쓴다.
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # DB가 비어 있을 때만 자동 실행된다. 이미 데이터가 있는 운영 DB에는 스크립트 안내대로 한 번 직접 실행한다
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
