@@ -2,6 +2,9 @@
 # develop에 push(머지)된 커밋도 다시 검증한다. 이 실행이 성공하면 Deploy가 그 커밋을 배포한다.
 # (PR 실행은 가상 머지 커밋을 테스트해서, 실제 develop 커밋과 SHA가 다르다.)
 # 통합 테스트(@SpringBootTest)는 실제 Postgres·Redis가 필요해서 서비스 컨테이너로 띄운다.
+# develop push 실행이 실패하면 팀 Slack 채널에 알린다. PR 실행 실패는 PR 화면의 ❌로 확인한다.
+#
+# 필요한 Secrets: SLACK_BOT_TOKEN(Grafana 알림과 같은 Slack 봇 토큰. 없으면 알림만 건너뛴다)
 name: CI
 
 on:
@@ -82,3 +85,35 @@ jobs:
             build/reports/tests/test
             */build/reports/tests/test
           retention-days: 7
+
+      # 커밋 메시지 같은 값은 run에 직접 넣지 않고 env로 넘긴다 (셸 명령으로 해석되지 않게).
+      # Slack 전송이 실패해도 CI 결과는 바꾸지 않고 경고만 남긴다.
+      - name: Notify Slack on develop failure
+        if: failure() && github.event_name == 'push'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: C0C3CMPUP2B   # 팀 알림 채널 (infra/monitoring/grafana/provisioning/alerting/slack.yaml과 같은 채널)
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_BOT_TOKEN" ]; then
+            echo "::warning::SLACK_BOT_TOKEN이 없어 Slack 알림을 건너뜁니다"
+            exit 0
+          fi
+          PAYLOAD=$(jq -n \
+            --arg channel "$SLACK_CHANNEL" \
+            --arg sha "${COMMIT_SHA:0:7}" \
+            --arg msg "${COMMIT_MESSAGE%%$'\n'*}" \
+            --arg author "$COMMIT_AUTHOR" \
+            --arg url "$RUN_URL" \
+            '{channel: $channel,
+              text: ("❌ *[CI] develop 빌드 실패*\n• 커밋: `" + $sha + "` " + $msg + " (" + $author + ")\n• <" + $url + "|Actions 로그 보기>")}')
+          RESPONSE=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            --data "$PAYLOAD")
+          if [ "$(jq -r '.ok' <<< "$RESPONSE")" != "true" ]; then
+            echo "::warning::Slack 알림 전송 실패: $(jq -r '.error' <<< "$RESPONSE")"
+          fi
