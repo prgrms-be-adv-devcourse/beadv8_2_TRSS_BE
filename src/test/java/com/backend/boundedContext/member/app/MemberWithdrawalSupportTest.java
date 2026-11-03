@@ -22,10 +22,10 @@ import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
 import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberPaymentPort;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.payment.dto.WalletSummaryDto;
-import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberWithdrawalSupportTest {
@@ -40,7 +40,7 @@ class MemberWithdrawalSupportTest {
     private MemberOrderPort memberOrderPort;
 
     @Mock
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @Mock
     private MemberPaymentPort memberPaymentPort;
@@ -58,7 +58,7 @@ class MemberWithdrawalSupportTest {
         assertThat(check.withdrawable()).isTrue();
         assertThat(check.reasons()).isEmpty();
         assertThat(check.unsettledAmount()).isZero();
-        verify(settlementApi, never()).getUnsettledAmount(anyLong());
+        verify(memberSettlementPort, never()).getUnsettledAmount(anyLong());
     }
 
     @Test
@@ -132,7 +132,7 @@ class MemberWithdrawalSupportTest {
 
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
         given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
         given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
     }
 }

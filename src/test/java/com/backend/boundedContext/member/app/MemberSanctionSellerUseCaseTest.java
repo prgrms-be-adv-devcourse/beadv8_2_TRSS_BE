@@ -20,10 +20,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.product.out.ProductApi;
-import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberSanctionSellerUseCaseTest {
@@ -37,7 +37,7 @@ class MemberSanctionSellerUseCaseTest {
     private ProductApi productApi;
 
     @Mock
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @InjectMocks
     private MemberSanctionSellerUseCase memberSanctionSellerUseCase;
@@ -52,9 +52,9 @@ class MemberSanctionSellerUseCaseTest {
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.SANCTIONED);
         assertThat(seller.getBusinessNumber()).isEqualTo("1234567890");
-        InOrder inOrder = inOrder(productApi, settlementApi);
+        InOrder inOrder = inOrder(productApi, memberSettlementPort);
         inOrder.verify(productApi).stopAllBySeller(SELLER_ID, "위조 상품 판매");
-        inOrder.verify(settlementApi).holdSeller(SELLER_ID, "위조 상품 판매");
+        inOrder.verify(memberSettlementPort).holdSeller(SELLER_ID, "위조 상품 판매");
         verify(sellerSupport).saveHistory(any(), any());
     }
 
@@ -69,7 +69,7 @@ class MemberSanctionSellerUseCaseTest {
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.SANCTIONED);
         verify(productApi).stopAllBySeller(SELLER_ID, "위조 상품 판매");
-        verify(settlementApi).holdSeller(SELLER_ID, "위조 상품 판매");
+        verify(memberSettlementPort).holdSeller(SELLER_ID, "위조 상품 판매");
     }
 
     @Test
@@ -81,7 +81,7 @@ class MemberSanctionSellerUseCaseTest {
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_STATE_INVALID.resultCode()));
 
-        verifyNoInteractions(productApi, settlementApi);
+        verifyNoInteractions(productApi, memberSettlementPort);
         verify(sellerSupport, never()).saveHistory(any(), any());
     }
 

@@ -19,9 +19,9 @@ import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberApproveWithdrawalUseCaseTest {
@@ -35,7 +35,7 @@ class MemberApproveWithdrawalUseCaseTest {
     private MemberOrderPort memberOrderPort;
 
     @Mock
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @InjectMocks
     private MemberApproveWithdrawalUseCase memberApproveWithdrawalUseCase;
@@ -46,7 +46,7 @@ class MemberApproveWithdrawalUseCaseTest {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
         given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(0L);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(0L);
 
         memberApproveWithdrawalUseCase.approveWithdrawal(SELLER_ID);
 
@@ -74,7 +74,7 @@ class MemberApproveWithdrawalUseCaseTest {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
         given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
 
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
@@ -91,7 +91,7 @@ class MemberApproveWithdrawalUseCaseTest {
 
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
-        verifyNoInteractions(memberOrderPort, settlementApi);
+        verifyNoInteractions(memberOrderPort, memberSettlementPort);
     }
 
     private void assertError(MemberErrorCode errorCode) {

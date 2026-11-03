@@ -21,12 +21,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.product.out.ProductApi;
-import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberRequestWithdrawalUseCaseTest {
@@ -41,7 +41,7 @@ class MemberRequestWithdrawalUseCaseTest {
     private SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
     @Mock
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @Mock
     private ProductApi productApi;
@@ -55,7 +55,7 @@ class MemberRequestWithdrawalUseCaseTest {
         Seller seller = seller();
         seller.approve();
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(0L);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(0L);
 
         memberRequestWithdrawalUseCase.requestWithdrawal(MEMBER_ID, " 폐업 예정 ");
 
@@ -70,7 +70,7 @@ class MemberRequestWithdrawalUseCaseTest {
         Seller seller = seller();
         seller.approve();
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
 
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
@@ -82,7 +82,7 @@ class MemberRequestWithdrawalUseCaseTest {
     @DisplayName("판매 중이 아니면 409 SELLER_STATE_INVALID이고 상품 판매 중지를 요청하지 않는다")
     void requestWithdrawal_notApproved() {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller()));   // PENDING
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(0L);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(0L);
 
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 

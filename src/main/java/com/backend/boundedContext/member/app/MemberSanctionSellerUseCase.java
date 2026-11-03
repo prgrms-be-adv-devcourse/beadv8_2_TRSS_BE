@@ -5,8 +5,8 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.shared.product.out.ProductApi;
-import com.backend.shared.settlement.out.SettlementApi;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,7 +22,7 @@ public class MemberSanctionSellerUseCase {
 
     private final SellerSupport sellerSupport;
     private final ProductApi productApi;
-    private final SettlementApi settlementApi;
+    private final MemberSettlementPort memberSettlementPort;
 
     public AdminSellerDetailDto sanction(Long sellerId, String reason) {
         Seller seller = sellerSupport.getSeller(sellerId);
@@ -36,7 +36,7 @@ public class MemberSanctionSellerUseCase {
         productApi.stopAllBySeller(sellerId, strippedReason);
 
         // 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾸고, 이후 정산서도 HOLD로 만든다 (정산 담당)
-        settlementApi.holdSeller(sellerId, strippedReason);
+        memberSettlementPort.holdSeller(sellerId, strippedReason);
 
         return sellerSupport.saveHistory(seller, history);
     }
