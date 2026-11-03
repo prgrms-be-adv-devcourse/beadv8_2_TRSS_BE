@@ -132,6 +132,12 @@ custom:
     memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}   # http일 때 회원 서비스 주소
     memberConnectTimeoutSeconds: 2   # 회원 서비스 접속 제한 시간(초)
     memberReadTimeoutSeconds: 5      # 요청 후 회원 서비스 응답 대기 제한 시간(초)
+  # 루트 앱(회원·주문·정산)이 결제 기능을 부르는 방식: local(같은 앱의 PaymentApiAdapter) | http(결제 내부 API). 결제 서비스를 분리하면 http
+  paymentService:
+    client: ${PAYMENT_CLIENT:local}
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}   # http일 때 결제 서비스 주소
+    connectTimeoutSeconds: 2   # 결제 서비스 접속 제한 시간(초)
+    readTimeoutSeconds: 10     # 요청 후 결제 서비스 응답 대기 제한 시간(초). 결제는 지갑 잠금을 기다릴 수 있어 회원 조회보다 길게
   # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
   toss:
     baseUrl: https://api.tosspayments.com
