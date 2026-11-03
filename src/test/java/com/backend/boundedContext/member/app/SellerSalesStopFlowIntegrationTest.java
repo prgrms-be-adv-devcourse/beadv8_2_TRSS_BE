@@ -1,6 +1,7 @@
 package com.backend.boundedContext.member.app;
 
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
@@ -17,6 +18,8 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
+import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -33,6 +36,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 판매자 제재·철회가 상품 판매 중지 → 결제 대기 주문 취소 → 재고 복원까지 이어지는지 목 없이 확인한다.
@@ -152,6 +156,21 @@ class SellerSalesStopFlowIntegrationTest {
         memberSellerFacade.rejectWithdrawal(sellerId, "진행 중인 판매 확인 필요");
 
         assertThat(productRepository.findById(productId).orElseThrow().getStatus()).isEqualTo(ProductSaleStatus.ON_SALE);
+    }
+
+    @Test
+    @DisplayName("철회 요청으로 상품이 중지된 뒤 제재되면, 철회 반려는 409 SELLER_STATE_INVALID이고 상품은 다시 판매되지 않는다")
+    void withdrawalRequested_thenSanctioned_rejectIsBlocked() {
+        memberSellerFacade.requestWithdrawal(sellerMemberId, "폐업 예정");
+        memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매");
+
+        // 반려는 WITHDRAW_REQUESTED일 때만 됨. 상태 확인이 resumeAllBySeller보다 먼저라 상품 재개까지 가지 않음
+        assertThatThrownBy(() -> memberSellerFacade.rejectWithdrawal(sellerId, "진행 중인 판매 확인 필요"))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_STATE_INVALID.resultCode()));
+
+        assertThat(productRepository.findById(productId).orElseThrow().getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
+        assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.SANCTIONED);
     }
 
     private Long createPendingOrder() {
