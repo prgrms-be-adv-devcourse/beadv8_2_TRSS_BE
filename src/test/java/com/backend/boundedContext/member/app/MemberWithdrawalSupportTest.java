@@ -20,12 +20,12 @@ import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
+import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberPaymentPort;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.payment.dto.WalletSummaryDto;
-import com.backend.shared.payment.out.PaymentApi;
-import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberWithdrawalSupportTest {
@@ -37,13 +37,13 @@ class MemberWithdrawalSupportTest {
     private SellerRepository sellerRepository;
 
     @Mock
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     @Mock
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @Mock
-    private PaymentApi paymentApi;
+    private MemberPaymentPort memberPaymentPort;
 
     @InjectMocks
     private MemberWithdrawalSupport memberWithdrawalSupport;
@@ -58,7 +58,7 @@ class MemberWithdrawalSupportTest {
         assertThat(check.withdrawable()).isTrue();
         assertThat(check.reasons()).isEmpty();
         assertThat(check.unsettledAmount()).isZero();
-        verify(settlementApi, never()).getUnsettledAmount(anyLong());
+        verify(memberSettlementPort, never()).getUnsettledAmount(anyLong());
     }
 
     @Test
@@ -89,7 +89,7 @@ class MemberWithdrawalSupportTest {
     @DisplayName("제재된 판매자라도 판매자 상품이 든 진행 중인 주문이 있으면 탈퇴할 수 없다 (판매자 상태와 무관하게 확인)")
     void sanctionedSeller_activeSales_blocked() {
         givenSeller(SellerStatus.SANCTIONED, 0);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(true);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(true);
 
         WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
 
@@ -101,13 +101,13 @@ class MemberWithdrawalSupportTest {
     @DisplayName("결과가 정해지지 않은 충전 건이 있으면 잔액이 0이어도 탈퇴할 수 없다 (판매자가 아니면 판매는 조회하지 않음)")
     void buyer_pendingTopups_blocked() {
         givenBuyer(false, 0);
-        given(paymentApi.hasPendingTopups(MEMBER_ID)).willReturn(true);
+        given(memberPaymentPort.hasPendingTopups(MEMBER_ID)).willReturn(true);
 
         WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
 
         assertThat(check.hasPendingTopups()).isTrue();
         assertThat(check.reasons()).containsExactly(WithdrawalBlockReason.PENDING_TOPUPS);
-        verify(orderApi, never()).hasActiveSales(anyLong());
+        verify(memberOrderPort, never()).hasActiveSales(anyLong());
     }
 
     @Test
@@ -120,8 +120,8 @@ class MemberWithdrawalSupportTest {
 
     private void givenBuyer(boolean hasActiveOrders, long balance) {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
-        given(orderApi.hasActiveOrders(MEMBER_ID)).willReturn(hasActiveOrders);
-        given(paymentApi.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, balance, 0));
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(hasActiveOrders);
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, balance, 0));
     }
 
     private void givenSeller(SellerStatus status, long unsettledAmount) {
@@ -131,8 +131,8 @@ class MemberWithdrawalSupportTest {
         ReflectionTestUtils.setField(seller, "status", status);
 
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
-        given(orderApi.hasActiveOrders(MEMBER_ID)).willReturn(false);
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
-        given(paymentApi.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
     }
 }

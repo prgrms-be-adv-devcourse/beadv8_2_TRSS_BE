@@ -95,6 +95,27 @@ public interface MemberApi {
 }
 ```
 
+### 내부 API (HTTP)
+
+회원 모듈을 분리하면 다른 모듈은 `MemberApi` 대신 아래 내부 API를 HTTP로 부릅니다. 지금도 같은 앱 안에서 동작하며, 부르는 쪽 클라이언트는 각 모듈이 필요한 메서드만 담아 만듭니다([개발 가이드 6.2](palette_development_guide.md)).
+
+| MemberApi | 요청 | 없을 때·실패 |
+| --- | --- | --- |
+| `getMember` | `GET /internal/v1/members/{memberId}` | 404-MEMBER_NOT_FOUND |
+| `checkActiveMember` | `GET /internal/v1/members/{memberId}/active` | 401-UNAUTHORIZED (없거나 탈퇴) |
+| `getMembers` | `GET /internal/v1/members?ids=1,2,3` | 없는 ID는 빠짐, `ids`가 없으면 빈 목록 |
+| `findMemberByEmail` | `POST /internal/v1/members/search-by-email` 본문 `{"email": "..."}` | 200 + `data: null` |
+| `getSeller` | `GET /internal/v1/sellers/{sellerId}` | 404-SELLER_NOT_FOUND |
+| `getSellers` | `GET /internal/v1/sellers?ids=1,2,3` | 없는 ID는 빠짐, `ids`가 없으면 빈 목록 |
+| `findSellerByMemberId` | `GET /internal/v1/sellers/by-member/{memberId}` | 200 + `data: null` (신청 이력 없음) |
+| `getApprovedSellerByMemberId` | `GET /internal/v1/sellers/by-member/{memberId}/approved` | 403-SELLER_NOT_APPROVED |
+
+- 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 `MemberDto`·`SellerDto`(또는 목록)를 담습니다.
+- 실패는 `MemberApi`와 같은 `resultCode`와 HTTP 상태로 돌려줍니다. 부르는 쪽은 `resultCode`로 같은 `DomainException`을 다시 만들 수 있습니다.
+- 결과가 없을 수 있는 조회(`Optional`)는 404가 아니라 200 + `data: null`입니다.
+- 이메일은 URL·접근 로그에 남지 않도록 본문으로 받습니다. 형식 검증은 하지 않고, 형식이 맞지 않으면 없는 것으로 응답합니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). `/internal/**` 접근 제한(내부 전용 키, 외부 차단)은 보안 설정 작업에서 함께 정합니다.
+
 ### DTO
 
 ```java
