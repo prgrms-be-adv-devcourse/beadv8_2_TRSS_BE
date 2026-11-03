@@ -20,11 +20,11 @@ import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
+import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.payment.dto.WalletSummaryDto;
-import com.backend.shared.payment.out.PaymentApi;
 import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,7 +43,7 @@ class MemberWithdrawalSupportTest {
     private SettlementApi settlementApi;
 
     @Mock
-    private PaymentApi paymentApi;
+    private MemberPaymentPort memberPaymentPort;
 
     @InjectMocks
     private MemberWithdrawalSupport memberWithdrawalSupport;
@@ -101,7 +101,7 @@ class MemberWithdrawalSupportTest {
     @DisplayName("결과가 정해지지 않은 충전 건이 있으면 잔액이 0이어도 탈퇴할 수 없다 (판매자가 아니면 판매는 조회하지 않음)")
     void buyer_pendingTopups_blocked() {
         givenBuyer(false, 0);
-        given(paymentApi.hasPendingTopups(MEMBER_ID)).willReturn(true);
+        given(memberPaymentPort.hasPendingTopups(MEMBER_ID)).willReturn(true);
 
         WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
 
@@ -121,7 +121,7 @@ class MemberWithdrawalSupportTest {
     private void givenBuyer(boolean hasActiveOrders, long balance) {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
         given(orderApi.hasActiveOrders(MEMBER_ID)).willReturn(hasActiveOrders);
-        given(paymentApi.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, balance, 0));
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, balance, 0));
     }
 
     private void givenSeller(SellerStatus status, long unsettledAmount) {
@@ -133,6 +133,6 @@ class MemberWithdrawalSupportTest {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
         given(orderApi.hasActiveOrders(MEMBER_ID)).willReturn(false);
         given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
-        given(paymentApi.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
     }
 }
