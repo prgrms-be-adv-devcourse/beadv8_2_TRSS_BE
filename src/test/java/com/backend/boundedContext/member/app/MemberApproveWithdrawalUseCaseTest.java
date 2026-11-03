@@ -18,9 +18,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,7 +32,7 @@ class MemberApproveWithdrawalUseCaseTest {
     private SellerSupport sellerSupport;
 
     @Mock
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     @Mock
     private SettlementApi settlementApi;
@@ -45,7 +45,7 @@ class MemberApproveWithdrawalUseCaseTest {
     void approveWithdrawal_success() {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(false);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
         given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(0L);
 
         memberApproveWithdrawalUseCase.approveWithdrawal(SELLER_ID);
@@ -60,7 +60,7 @@ class MemberApproveWithdrawalUseCaseTest {
     void approveWithdrawal_activeSales() {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(true);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(true);
 
         assertError(MemberErrorCode.ACTIVE_SALES_EXIST);
 
@@ -73,7 +73,7 @@ class MemberApproveWithdrawalUseCaseTest {
     void approveWithdrawal_unsettledAmount() {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(false);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
         given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
 
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
@@ -91,7 +91,7 @@ class MemberApproveWithdrawalUseCaseTest {
 
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
-        verifyNoInteractions(orderApi, settlementApi);
+        verifyNoInteractions(memberOrderPort, settlementApi);
     }
 
     private void assertError(MemberErrorCode errorCode) {

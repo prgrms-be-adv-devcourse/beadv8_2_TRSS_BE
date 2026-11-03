@@ -8,10 +8,10 @@ import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.settlement.out.SettlementApi;
 
 import lombok.RequiredArgsConstructor;
@@ -28,7 +28,7 @@ public class MemberWithdrawalSupport {
             EnumSet.of(SellerStatus.PENDING, SellerStatus.APPROVED, SellerStatus.WITHDRAW_REQUESTED);
 
     private final SellerRepository sellerRepository;
-    private final OrderApi orderApi;
+    private final MemberOrderPort memberOrderPort;
     private final SettlementApi settlementApi;
     private final MemberPaymentPort memberPaymentPort;
 
@@ -36,8 +36,8 @@ public class MemberWithdrawalSupport {
     public WithdrawalCheckDto check(Long memberId) {
         Optional<Seller> seller = sellerRepository.findByMemberId(memberId);
 
-        boolean hasActiveOrders = orderApi.hasActiveOrders(memberId);
-        boolean hasActiveSales = seller.map(s -> orderApi.hasActiveSales(s.getId())).orElse(false);  // 판매자 정보가 있으면 상태와 무관하게 확인 (제재된 판매자도 구매확정 전 판매가 남아 있으면, 탈퇴 뒤 정산 후보가 생김)
+        boolean hasActiveOrders = memberOrderPort.hasActiveOrders(memberId);
+        boolean hasActiveSales = seller.map(s -> memberOrderPort.hasActiveSales(s.getId())).orElse(false);  // 판매자 정보가 있으면 상태와 무관하게 확인 (제재된 판매자도 구매확정 전 판매가 남아 있으면, 탈퇴 뒤 정산 후보가 생김)
         long unsettledAmount = seller.map(s -> settlementApi.getUnsettledAmount(s.getId())).orElse(0L);
         long balance = memberPaymentPort.getWallet(memberId).balance();
 

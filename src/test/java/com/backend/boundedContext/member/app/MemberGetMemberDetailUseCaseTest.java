@@ -23,6 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.MemberRole;
@@ -30,7 +31,6 @@ import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.order.dto.OrderSummaryDto;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.payment.dto.WalletSummaryDto;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,7 +46,7 @@ class MemberGetMemberDetailUseCaseTest {
     private MemberPaymentPort memberPaymentPort;
 
     @Mock
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     @InjectMocks
     private MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
@@ -65,7 +65,7 @@ class MemberGetMemberDetailUseCaseTest {
         given(memberGetSellerUseCase.findSellerByMemberId(3L))
                 .willReturn(Optional.of(new SellerDto(10L, 3L, "팔레트상점", SellerStatus.PENDING)));
         given(memberPaymentPort.getWallet(3L)).willReturn(new WalletSummaryDto(3L, 50_000L, 0L));
-        given(orderApi.getRecentOrders(3L, 5)).willReturn(List.of(
+        given(memberOrderPort.getRecentOrders(3L, 5)).willReturn(List.of(
                 new OrderSummaryDto(101L, OrderStatus.PAID, 25_000L, LocalDateTime.of(2026, 10, 12, 10, 0))));
 
         AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
@@ -88,7 +88,7 @@ class MemberGetMemberDetailUseCaseTest {
         given(memberSupport.getMember(3L)).willReturn(member);
         given(memberGetSellerUseCase.findSellerByMemberId(3L)).willReturn(Optional.empty());
         given(memberPaymentPort.getWallet(3L)).willReturn(new WalletSummaryDto(3L, 0L, 0L));
-        given(orderApi.getRecentOrders(3L, 5)).willReturn(List.of());
+        given(memberOrderPort.getRecentOrders(3L, 5)).willReturn(List.of());
 
         AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
         assertThat(detail.sellerStatus()).isNull();
