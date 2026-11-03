@@ -127,6 +127,11 @@ custom:
     topupReconcileDelayMinutes: 5       # PROCESSING이 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
     topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
+    # 결제가 회원 기능을 부르는 방식: local(같은 앱의 MemberApi) | http(회원 내부 API). 결제 서비스를 분리하면 http
+    memberClient: ${PAYMENT_MEMBER_CLIENT:local}
+    memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}   # http일 때 회원 서비스 주소
+    memberConnectTimeoutSeconds: 2   # 회원 서비스 접속 제한 시간(초)
+    memberReadTimeoutSeconds: 5      # 요청 후 회원 서비스 응답 대기 제한 시간(초)
   # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
   toss:
     baseUrl: https://api.tosspayments.com

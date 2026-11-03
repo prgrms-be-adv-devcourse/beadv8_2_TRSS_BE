@@ -13,10 +13,10 @@ import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.payment.app.dto.AdminTopupDto;
 import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
-import com.backend.shared.member.out.MemberApi;
 
 import lombok.RequiredArgsConstructor;
 
@@ -29,7 +29,7 @@ public class PaymentGetAdminTopupsUseCase {
 
     private final TopupAdminSearchResolver searchResolver;
     private final TopupRepository topupRepository;
-    private final MemberApi memberApi;
+    private final PaymentMemberPort memberPort;
 
     /**
      * 관리자 결제 조회 충전 탭
@@ -49,7 +49,7 @@ public class PaymentGetAdminTopupsUseCase {
         List<Long> memberIds = topups.stream().map(Topup::getMemberId).distinct().toList();
         if (memberIds.isEmpty()) return Map.of();
 
-        return memberApi.getMembers(memberIds).stream()
+        return memberPort.getMembers(memberIds).stream()
                 .collect(Collectors.toMap(MemberDto::id, MemberDto::email));
     }
 }

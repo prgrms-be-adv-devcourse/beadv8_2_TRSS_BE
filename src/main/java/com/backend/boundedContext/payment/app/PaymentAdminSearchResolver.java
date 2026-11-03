@@ -5,9 +5,9 @@ import java.time.LocalDate;
 import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.MemberDto;
-import com.backend.shared.member.out.MemberApi;
 
 import lombok.RequiredArgsConstructor;
 
@@ -20,7 +20,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PaymentAdminSearchResolver {
 
-    private final MemberApi memberApi;
+    private final PaymentMemberPort memberPort;
 
     public AdminPaymentSearch resolve(String keyword, LocalDate from, LocalDate to) {
         if (from != null && to != null && from.isAfter(to)) {
@@ -33,7 +33,7 @@ public class PaymentAdminSearchResolver {
 
         String trimmed = keyword.trim();
         if (trimmed.contains("@")) {
-            return memberApi.findMemberByEmail(trimmed)
+            return memberPort.findMemberByEmail(trimmed)
                     .map(MemberDto::id)
                     .map(memberId -> AdminPaymentSearch.ofMember(memberId, from, to))
                     .orElseGet(() -> AdminPaymentSearch.none(from, to));

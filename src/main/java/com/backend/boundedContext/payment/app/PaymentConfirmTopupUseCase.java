@@ -9,12 +9,12 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.TopupStatus;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.toss.TossPaymentException;
 import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
 import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
 import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
 import com.backend.global.exception.DomainException;
-import com.backend.shared.member.out.MemberApi;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,11 +43,11 @@ public class PaymentConfirmTopupUseCase {
 
     private final PaymentTopupConfirmProcessor paymentTopupConfirmProcessor;
     private final TossPaymentsClient tossPaymentsClient;
-    private final MemberApi memberApi;
+    private final PaymentMemberPort memberPort;
 
     public TopupConfirmDto confirmTopup(Long memberId, String paymentKey, String orderId, long amount) {
         // 탈퇴한 회원은 남은 Access Token으로 승인할 수 없게 401. 토스 승인 전이라 결제가 확정되지 않음
-        memberApi.checkActiveMember(memberId);
+        memberPort.checkActiveMember(memberId);
 
         // Tx1: 금액 검증 후 PROCESSING 선점. 금액이 다르면 실패 기록이 커밋된 뒤 여기서 400
         TopupConfirmStartResult start = paymentTopupConfirmProcessor.start(memberId, orderId, paymentKey, amount);

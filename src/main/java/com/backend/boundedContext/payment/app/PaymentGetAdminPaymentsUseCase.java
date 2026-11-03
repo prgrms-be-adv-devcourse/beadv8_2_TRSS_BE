@@ -15,11 +15,11 @@ import com.backend.boundedContext.payment.app.dto.AdminPaymentDto;
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.WalletHolding;
 import com.backend.boundedContext.payment.domain.WalletHoldingStatus;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.PaymentRepository;
 import com.backend.boundedContext.payment.out.WalletHoldingRepository;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
-import com.backend.shared.member.out.MemberApi;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,7 +33,7 @@ public class PaymentGetAdminPaymentsUseCase {
     private final PaymentAdminSearchResolver searchResolver;
     private final PaymentRepository paymentRepository;
     private final WalletHoldingRepository walletHoldingRepository;
-    private final MemberApi memberApi;
+    private final PaymentMemberPort memberPort;
 
     /**
      * 관리자 결제 조회 결제 탭
@@ -62,7 +62,7 @@ public class PaymentGetAdminPaymentsUseCase {
     private Map<Long, String> getEmails(List<Payment> payments) {
         List<Long> memberIds = payments.stream().map(Payment::getMemberId).distinct().toList();
         if (memberIds.isEmpty()) return Map.of();
-        return memberApi.getMembers(memberIds).stream()
+        return memberPort.getMembers(memberIds).stream()
                 .collect(Collectors.toMap(MemberDto::id, MemberDto::email));
     }
 

@@ -19,13 +19,13 @@ import org.junit.jupiter.api.Test;
 
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.domain.TopupStatus;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.toss.TossPaymentException;
 import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
 import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
 import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
-import com.backend.shared.member.out.MemberApi;
 
 class PaymentConfirmTopupUseCaseTest {
 
@@ -37,8 +37,8 @@ class PaymentConfirmTopupUseCaseTest {
 
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
     private final TossPaymentsClient tossPaymentsClient = mock(TossPaymentsClient.class);
-    private final MemberApi memberApi = mock(MemberApi.class);
-    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, tossPaymentsClient, memberApi);
+    private final PaymentMemberPort memberPort = mock(PaymentMemberPort.class);
+    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, tossPaymentsClient, memberPort);
 
     private final TossPaymentResponse tossDone =
             new TossPaymentResponse(PAYMENT_KEY, ORDER_ID, "DONE", AMOUNT, "카드", null);
@@ -59,7 +59,7 @@ class PaymentConfirmTopupUseCaseTest {
     @Test
     @DisplayName("탈퇴한 회원: 충전 건을 선점하지 않고 토스도 호출하지 않으며 401 UNAUTHORIZED (탈퇴 후 남은 Access Token)")
     void confirm_withdrawnMember() {
-        willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberApi).checkActiveMember(MEMBER_ID);
+        willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberPort).checkActiveMember(MEMBER_ID);
 
         assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
                 .isInstanceOf(DomainException.class)

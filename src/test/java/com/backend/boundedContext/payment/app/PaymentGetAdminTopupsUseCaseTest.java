@@ -24,12 +24,12 @@ import org.springframework.data.jpa.domain.Specification;
 import com.backend.boundedContext.payment.app.dto.AdminTopupDto;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.Wallet;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
-import com.backend.shared.member.out.MemberApi;
 
 class PaymentGetAdminTopupsUseCaseTest {
 
@@ -38,9 +38,9 @@ class PaymentGetAdminTopupsUseCaseTest {
 
     private final TopupAdminSearchResolver searchResolver = mock(TopupAdminSearchResolver.class);
     private final TopupRepository topupRepository = mock(TopupRepository.class);
-    private final MemberApi memberApi = mock(MemberApi.class);
+    private final PaymentMemberPort memberPort = mock(PaymentMemberPort.class);
     private final PaymentGetAdminTopupsUseCase useCase =
-            new PaymentGetAdminTopupsUseCase(searchResolver, topupRepository, memberApi);
+            new PaymentGetAdminTopupsUseCase(searchResolver, topupRepository, memberPort);
 
     @Test
     @DisplayName("검색 조건으로 최신순 조회하고, 페이지에 나온 회원 이메일을 한 번에 모아 붙인다")
@@ -51,7 +51,7 @@ class PaymentGetAdminTopupsUseCaseTest {
         Topup second = Topup.create(3L, Wallet.create(3L), 10_000);
         given(topupRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .willAnswer(invocation -> new PageImpl<>(List.of(first, second), invocation.getArgument(1), 2));
-        given(memberApi.getMembers(List.of(3L))).willReturn(List.of(
+        given(memberPort.getMembers(List.of(3L))).willReturn(List.of(
                 new MemberDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, MemberStatus.ACTIVE)));
 
         PageResponse<AdminTopupDto> result = useCase.getTopups("buyer@palette.test", FROM, TO, PageRequest.of(1, 10, Sort.by("amount")));
@@ -61,7 +61,7 @@ class PaymentGetAdminTopupsUseCaseTest {
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(1);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(10);
         assertThat(pageable.getValue().getSort()).isEqualTo(Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
-        verify(memberApi).getMembers(List.of(3L));   // 같은 회원은 한 번만
+        verify(memberPort).getMembers(List.of(3L));   // 같은 회원은 한 번만
         assertThat(result.items()).extracting(AdminTopupDto::memberEmail).containsOnly("buyer@palette.test");
         assertThat(result.items()).extracting(AdminTopupDto::amount).containsExactly(20_000L, 10_000L);
     }
@@ -77,7 +77,7 @@ class PaymentGetAdminTopupsUseCaseTest {
         assertThat(result.items()).isEmpty();
         assertThat(result.totalElements()).isZero();
         verify(topupRepository, never()).findAll(any(Specification.class), any(Pageable.class));
-        verifyNoInteractions(memberApi);
+        verifyNoInteractions(memberPort);
     }
 
     @Test
@@ -90,6 +90,6 @@ class PaymentGetAdminTopupsUseCaseTest {
 
         useCase.getTopups(null, null, null, PageRequest.of(0, 20));
 
-        verify(memberApi, never()).getMembers(anyCollection());
+        verify(memberPort, never()).getMembers(anyCollection());
     }
 }
