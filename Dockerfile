@@ -5,13 +5,23 @@ FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace
 
 # 빌드 설정만 먼저 복사해 의존성을 받아 둔다. 소스만 바뀌면 이 레이어는 캐시를 재사용한다.
+# settings에 등록한 모듈 폴더가 없으면 Gradle이 실패하므로 모듈마다 build.gradle.kts를 복사한다.
 COPY gradlew settings.gradle.kts build.gradle.kts lombok.config ./
 COPY gradle gradle
+COPY common/build.gradle.kts common/
+COPY gateway/build.gradle.kts gateway/
+COPY member-service/build.gradle.kts member-service/
+COPY market-service/build.gradle.kts market-service/
+COPY payment-service/build.gradle.kts payment-service/
+COPY settlement-service/build.gradle.kts settlement-service/
+COPY ai-service/build.gradle.kts ai-service/
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon > /dev/null
 
 # 테스트는 CI에서 돌리므로 이미지 빌드에서는 생략한다.
+# 루트 모놀리스의 실행 jar만 만든다(common jar는 그 안의 BOOT-INF/lib에 들어간다).
+COPY common/src common/src
 COPY src src
-RUN ./gradlew bootJar -x test --no-daemon && cp build/libs/*.jar app.jar
+RUN ./gradlew :bootJar -x test --no-daemon && cp build/libs/*.jar app.jar
 
 # 2단계: 실행
 FROM eclipse-temurin:21-jre

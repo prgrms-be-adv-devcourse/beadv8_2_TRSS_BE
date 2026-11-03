@@ -410,7 +410,7 @@ docker exec -i palette-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstra
 - 비밀값(키, 비밀번호)은 `application.yaml`·`application-local.yaml`에 기본값으로도 쓰지 않습니다. 저장소가 공개 상태입니다.
 - `.env` 필수 항목: `JWT_SECRET`, `ACCOUNT_ENCRYPTION_PASSWORD`, `ACCOUNT_ENCRYPTION_SALT`. 로컬 값은 팀에 따로 공유된 값을 쓰고, 없으면 `Could not resolve placeholder '...'` 오류로 앱과 테스트가 시작되지 않습니다.
 - 카카오 로그인 항목(`KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`)은 선택입니다. 없으면 앱은 뜨고 카카오 로그인·연결만 실패합니다. `KAKAO_REDIRECT_URI`는 로컬 기본값(`http://localhost:5173/oauth/kakao/callback`)이 있어 배포 서버에서만 넣고, 빈 값(`KAKAO_REDIRECT_URI=`)으로 두면 기본값 대신 빈 주소가 들어가니 줄 자체를 두지 않습니다. 이 주소는 카카오 개발자 콘솔에 등록한 Redirect URI·프론트가 인가 요청에 쓰는 주소와 같아야 합니다.
-- 로컬 실행은 공유된 IntelliJ 실행 구성 `Application (local)`(`.run/Application.run.xml`, Active profiles: `local`)을 씁니다. Spring Boot 실행 구성이라 IntelliJ Ultimate가 필요하고, 직접 만들 때도 Active profiles에 `local`을 넣습니다. 터미널에서는 실행할 때마다 `SPRING_PROFILES_ACTIVE=local ./gradlew bootRun`으로 실행합니다.
+- 로컬 실행은 공유된 IntelliJ 실행 구성 `Application (local)`(`.run/Application.run.xml`, Active profiles: `local`)을 씁니다. Spring Boot 실행 구성이라 IntelliJ Ultimate가 필요하고, 직접 만들 때도 Active profiles에 `local`을 넣습니다. 터미널에서는 실행할 때마다 `SPRING_PROFILES_ACTIVE=local ./gradlew :bootRun`으로 실행합니다(멀티모듈이라 루트 모듈을 지정합니다).
 
 ### 9.2 정책 값
 
