@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * 관리자 정산서 목록 (정산월·상태·판매자 필터, 최신순) + 판매자 상호명
- * 한 페이지에 나온 판매자들의 상호명을 MemberApi.getSellers로 한 번에 붙인다(판매자마다 조회하지 않음).
+ * 한 페이지에 나온 판매자들의 상호명을 SettlementMemberPort.getSellers로 한 번에 붙인다(판매자마다 조회하지 않음).
  * 회원 컨텍스트에 없는 판매자는 businessName이 null이다(미리보기와 같은 규칙)
  */
 @Component

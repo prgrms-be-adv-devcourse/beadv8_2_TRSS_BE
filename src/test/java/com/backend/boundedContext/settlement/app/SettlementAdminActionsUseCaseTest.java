@@ -13,12 +13,12 @@ import com.backend.boundedContext.settlement.in.dto.SellerSettlementDetailRespon
 import com.backend.boundedContext.settlement.in.dto.SettlementCandidateResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
+import com.backend.boundedContext.settlement.out.SettlementMemberPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.member.out.MemberApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 보류·해제·제재 보류·후보 제외·판매자 상세·미정산 금액을 DB 없이 검증한다.
- * Repository·MemberApi는 SettlementPayoutUseCaseTest와 같은 방식(동적 프록시 메모리 가짜)으로 흉내 낸다.
+ * Repository·SettlementMemberPort는 SettlementPayoutUseCaseTest와 같은 방식(동적 프록시 메모리 가짜)으로 흉내 낸다.
  */
 class SettlementAdminActionsUseCaseTest {
 
@@ -83,7 +83,7 @@ class SettlementAdminActionsUseCaseTest {
                     histories.add((SettlementProcessHistory) args[0]);
                     return args[0];
                 }));
-        MemberApi memberApi = fake(MemberApi.class, Map.of(
+        SettlementMemberPort settlementMemberPort = fake(SettlementMemberPort.class, Map.of(
                 "findSellerByMemberId", args -> {
                     if (SELLER_MEMBER_ID.equals(args[0])) {
                         return Optional.of(new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.APPROVED));
@@ -97,7 +97,7 @@ class SettlementAdminActionsUseCaseTest {
                         .filter(SELLER_ID::equals)
                         .map(id -> new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.APPROVED))
                         .toList()));
-        support = new SettlementSupport(settlementRepository, candidateRepository, historyRepository, memberApi);
+        support = new SettlementSupport(settlementRepository, candidateRepository, historyRepository, settlementMemberPort);
         holdUseCase = new SettlementHoldUseCase(support, historyRepository);
         releaseUseCase = new SettlementReleaseUseCase(support, historyRepository);
         holdSellerUseCase = new SettlementHoldSellerUseCase(settlementRepository, historyRepository);

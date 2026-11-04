@@ -163,6 +163,7 @@ public class MemberPaymentApiAdapter implements MemberPaymentPort {
 - Port와 구현은 부르는 쪽 `out/`에 둡니다. 이름은 `<부르는 Ctx><대상 Ctx>Port`, 한 앱 안의 구현은 `<부르는 Ctx><대상 Ctx>ApiAdapter`, HTTP 클라이언트 구현은 `<부르는 Ctx><대상 Ctx>HttpAdapter`입니다. 앞부분이 같아서 `out/`에서 Port와 구현이 함께 모여 보입니다.
 - 다른 컨텍스트의 `<Ctx>Api`를 import하는 곳은 이 구현 하나뿐이어야 합니다. 단위 테스트는 Port를 mock하고, 통합 테스트는 지금처럼 `<Ctx>Api` 빈을 `@MockitoBean`으로 바꿔도 됩니다.
 - 회원은 결제·주문·정산·상품 Port를 적용했습니다(`MemberPaymentPort`, `MemberOrderPort`, `MemberSettlementPort`, `MemberProductPort`). 결제는 `PaymentMemberPort`로 맞춥니다.
+- 정산은 회원·결제 Port를 적용했습니다(`SettlementMemberPort`, `SettlementPaymentPort`). 정산이 제공하는 `SettlementApi` 중 `getUnsettledAmount`는 내부 API `/internal/v1/settlements`로도 열려 있고, `holdSeller`는 이벤트(`SellerSanctionedEvent`)로 바뀝니다([shared 계약 6장](palette_shared_contract.md#6-settlement)).
 
 ### 6.3 호출 방향
 
@@ -178,7 +179,7 @@ flowchart LR
     order -->|pay| payment
     order -->|getSellers, findSellerByMemberId, checkActiveMember| member
     settlement -->|transfer| payment
-    settlement -->|getSeller| member
+    settlement -->|getSeller, getSellers, findSellerByMemberId| member
     payment -->|findMemberByEmail, getMembers, checkActiveMember| member
     order -. OrderReturnedEvent .-> payment
     order -. OrderConfirmedEvent .-> settlement
