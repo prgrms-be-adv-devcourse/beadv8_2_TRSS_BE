@@ -1,0 +1,8 @@
+# 로컬 개발 전용 설정. 공유된 실행 구성(.run/)이 SPRING_PROFILES_ACTIVE=local로 켠다.
+# 프로필 없이 실행(테스트, 배포)하면 적용되지 않는다.
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
