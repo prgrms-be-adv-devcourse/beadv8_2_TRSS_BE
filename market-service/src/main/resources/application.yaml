@@ -12,8 +12,8 @@ spring:
   # market 스키마만 쓴다. 운영에서는 market_user(자기 스키마 권한만 가진 계정)로 접속한다
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}?currentSchema=market
-    username: ${MARKET_DB_USERNAME:${DB_USERNAME:palette}}
-    password: ${MARKET_DB_PASSWORD:${DB_PASSWORD:palette}}
+    username: ${MARKET_DB_USERNAME:${DB_USERNAME:market_user}}
+    password: ${MARKET_DB_PASSWORD:${DB_PASSWORD:market_user}}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
