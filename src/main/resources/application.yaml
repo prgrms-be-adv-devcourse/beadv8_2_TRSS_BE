@@ -76,6 +76,9 @@ custom:
     # 서명 키: 무작위 32바이트를 Base64로 인코딩한 값. 기본값 없이 환경변수(.env)로만 주입한다.
     secret: ${JWT_SECRET}
     accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  internal:
+    # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 기본값 없이 환경변수(.env)로만 주입한다.
+    apiKey: ${INTERNAL_API_KEY}
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
