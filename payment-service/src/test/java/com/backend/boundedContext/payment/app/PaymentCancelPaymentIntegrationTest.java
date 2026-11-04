@@ -44,7 +44,7 @@ import com.backend.shared.payment.dto.PayResultStatus;
 
 /**
  * 결제 취소(cancelPayment)를 실제 DB로 확인한다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest
 class PaymentCancelPaymentIntegrationTest {

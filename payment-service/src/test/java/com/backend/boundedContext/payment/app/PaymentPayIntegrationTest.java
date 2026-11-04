@@ -40,7 +40,7 @@ import com.backend.shared.payment.dto.PayResultStatus;
 
 /**
  * 주문 결제(pay)를 실제 DB로 확인한다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest
 class PaymentPayIntegrationTest {

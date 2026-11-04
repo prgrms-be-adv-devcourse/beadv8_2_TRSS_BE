@@ -1,6 +1,8 @@
 package com.backend.boundedContext.member.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.domain.Member;
@@ -25,13 +28,16 @@ import com.backend.boundedContext.member.domain.SocialProvider;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
-import com.backend.boundedContext.payment.app.PaymentFacade;
-import com.backend.boundedContext.payment.out.WalletRepository;
+import com.backend.global.exception.DomainException;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.shared.member.dto.MemberStatus;
+import com.backend.shared.member.out.MemberApi;
+import com.backend.shared.payment.dto.WalletSummaryDto;
+import com.backend.shared.payment.out.PaymentApi;
 
 /**
  * 탈퇴 조건 조회 → 탈퇴 → 로그인 불가를 실제 DB·Redis로 확인한다. 로컬 Docker가 필요하다.
+ * 지갑은 payment-service에 있으므로 PaymentApi를 목으로 바꿔 "잔액 0, 결과 대기 충전 없음"(탈퇴 가능)으로 응답한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -45,11 +51,11 @@ class MemberWithdrawalIntegrationTest {
     @Autowired
     private MemberRepository memberRepository;
 
-    @Autowired
-    private WalletRepository walletRepository;
+    @MockitoBean
+    private PaymentApi paymentApi;
 
     @Autowired
-    private PaymentFacade paymentFacade;
+    private MemberApi memberApi;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -72,7 +78,8 @@ class MemberWithdrawalIntegrationTest {
     @BeforeEach
     void setUp() {
         member = memberRepository.save(Member.signUp(email, passwordEncoder.encode(PASSWORD), "홍길동"));
-        paymentFacade.createWallet(member.getId());
+        given(paymentApi.getWallet(member.getId())).willReturn(new WalletSummaryDto(member.getId(), 0, 0));
+        given(paymentApi.hasPendingTopups(member.getId())).willReturn(false);
     }
 
     @AfterEach
@@ -80,7 +87,6 @@ class MemberWithdrawalIntegrationTest {
         loginAttemptStore.deleteAttempts(email);
         memberSocialAccountRepository.findByMemberIdAndProvider(member.getId(), SocialProvider.KAKAO)
                 .ifPresent(memberSocialAccountRepository::delete);
-        walletRepository.findByMemberId(member.getId()).ifPresent(walletRepository::delete);
         memberRepository.deleteById(member.getId());
     }
 
@@ -117,12 +123,10 @@ class MemberWithdrawalIntegrationTest {
                 .andExpect(jsonPath("$.resultCode").value("401-LOGIN_FAILED"));
 
         // 탈퇴 전에 받은 Access Token은 아직 만료되지 않았지만, 돈이 들어가는 충전은 막힌다
-        mockMvc.perform(post("/api/v1/topups").header("Authorization", bearer)
-                        .contentType(MediaType.APPLICATION_JSON).content("""
-                                {"amount": 10000}
-                                """))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+        // 충전은 payment-service에 있고, 충전 전에 회원 내부 API로 이 확인(checkActiveMember)을 불러 401을 받는다
+        assertThatThrownBy(() -> memberApi.checkActiveMember(member.getId()))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo("401-UNAUTHORIZED"));
     }
 
     @Test

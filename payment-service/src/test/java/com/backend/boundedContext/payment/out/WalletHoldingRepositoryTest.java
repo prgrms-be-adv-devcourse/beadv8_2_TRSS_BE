@@ -21,7 +21,7 @@ import com.backend.boundedContext.payment.domain.WalletHoldingStatus;
 
 /**
  * 지갑의 홀딩 중 금액 합계 쿼리를 확인한다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest
 class WalletHoldingRepositoryTest {

@@ -14,15 +14,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import com.backend.boundedContext.member.out.EmailVerificationStore;
 import com.backend.boundedContext.member.out.MemberRepository;
-import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.outbox.OutboxEvent;
 import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 
 /**
  * 회원 가입 → 가입 완료 이벤트(outbox) 저장을 확인한다. 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 지갑은 가입 트랜잭션에서 만들지 않는다. 릴레이가 Kafka(member.events)로 보내면 결제 컨슈머가 만든다
- * (PaymentEventListenerKafkaIntegrationTest에서 확인).
+ * 지갑은 가입 트랜잭션에서 만들지 않는다. 릴레이가 Kafka(member.events)로 보내면 payment-service의 결제 컨슈머가 만든다
+ * (payment-service의 PaymentEventListenerKafkaIntegrationTest에서 확인).
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class MemberSignUpIntegrationTest {
@@ -32,9 +31,6 @@ class MemberSignUpIntegrationTest {
 
     @Autowired
     private MemberRepository memberRepository;
-
-    @Autowired
-    private WalletRepository walletRepository;
 
     @Autowired
     private EmailVerificationStore emailVerificationStore;
@@ -53,7 +49,7 @@ class MemberSignUpIntegrationTest {
     }
 
     @Test
-    @DisplayName("가입하면 회원이 저장되고 가입 이벤트가 outbox에 PENDING으로 남는다. 지갑은 가입 트랜잭션에서 만들지 않는다")
+    @DisplayName("가입하면 회원이 저장되고 가입 이벤트가 outbox에 PENDING으로 남는다")
     void signUp_savesSignUpEvent() {
         Long memberId = memberFacade.signUp(email, "palette123!", "홍길동", issueVerifiedToken());
 
@@ -63,7 +59,6 @@ class MemberSignUpIntegrationTest {
                     assertThat(outbox.getEventType()).isEqualTo("MemberSignedUpEvent");
                     assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
                 });
-        assertThat(walletRepository.findByMemberId(memberId)).isEmpty();
     }
 
     private String issueVerifiedToken() {

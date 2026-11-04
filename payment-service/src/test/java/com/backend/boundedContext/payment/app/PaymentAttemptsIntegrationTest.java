@@ -21,17 +21,16 @@ import com.backend.boundedContext.payment.out.PaymentRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.shared.payment.dto.PaymentAttemptDto;
 import com.backend.shared.payment.dto.PaymentAttemptStatus;
-import com.backend.shared.payment.out.PaymentApi;
 
 /**
- * 주문의 결제 시도 조회(PaymentApi.getPaymentAttempts)를 실제 DB로 확인한다 (오래된 순, 실패 포함, 다른 주문 제외).
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 주문의 결제 시도 조회(PaymentFacade.getPaymentAttempts)를 실제 DB로 확인한다 (오래된 순, 실패 포함, 다른 주문 제외).
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class PaymentAttemptsIntegrationTest {
 
     @Autowired
-    private PaymentApi paymentApi;
+    private PaymentFacade paymentFacade;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -84,7 +83,7 @@ class PaymentAttemptsIntegrationTest {
                 paidAt
         ));
 
-        List<PaymentAttemptDto> attempts = paymentApi.getPaymentAttempts(orderId);
+        List<PaymentAttemptDto> attempts = paymentFacade.getPaymentAttempts(orderId);
 
         assertThat(attempts).extracting(PaymentAttemptDto::paymentId)
                 .containsExactly(failed.getId(), paid.getId())
@@ -106,7 +105,7 @@ class PaymentAttemptsIntegrationTest {
     @Test
     @DisplayName("결제 시도가 없는 주문은 빈 목록을 돌려준다")
     void noAttempts() {
-        assertThat(paymentApi.getPaymentAttempts(orderId)).isEmpty();
+        assertThat(paymentFacade.getPaymentAttempts(orderId)).isEmpty();
     }
 
     private Wallet saveWallet() {

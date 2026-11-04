@@ -29,12 +29,11 @@ import com.backend.global.exception.DomainException;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.PayResultStatus;
-import com.backend.shared.payment.out.PaymentApi;
 
 /**
  * 같은 지갑·같은 주문으로 결제가 동시에 들어와도 잔액과 결제 건이 틀어지지 않는지 확인한다.
- * 다른 컨텍스트가 쓰는 경로 그대로 PaymentApi로 호출한다 (요청마다 각자 트랜잭션).
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 결제 내부 API(InternalPaymentController)가 쓰는 경로 그대로 PaymentFacade로 호출한다 (요청마다 각자 트랜잭션).
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest
 class PaymentPayConcurrencyTest {
@@ -42,7 +41,7 @@ class PaymentPayConcurrencyTest {
     private static final int THREADS = 10;
 
     @Autowired
-    private PaymentApi paymentApi;
+    private PaymentFacade paymentFacade;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -122,7 +121,7 @@ class PaymentPayConcurrencyTest {
     }
 
     private PayResultDto pay(long orderId, long amount) {
-        return paymentApi.pay(new PayCommand(orderId, "ORD-TEST-" + orderId, buyerMemberId, amount,
+        return paymentFacade.pay(new PayCommand(orderId, "ORD-TEST-" + orderId, buyerMemberId, amount,
                 LocalDateTime.now().plusMinutes(15), "TEST-" + UUID.randomUUID()));
     }
 

@@ -7,11 +7,11 @@ import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -23,14 +23,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
@@ -40,7 +39,7 @@ import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
 /**
  * PROCESSING 결과 확인(대사)을 실제 DB로 확인한다 (토스 호출만 mock).
  * 오래된 PROCESSING 건 반영, 승인 응답과 대사가 겹쳐도 1회 반영, 확인 대기 시간 전 건 제외를 본다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class TopupReconcileIntegrationTest {
@@ -68,17 +67,17 @@ class TopupReconcileIntegrationTest {
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    @MockitoBean   // 회원 서비스 대신 쓰는 목. checkActiveMember는 아무것도 하지 않으므로 활성 회원으로 통과한다
+    private PaymentMemberPort memberPort;
 
-    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
+    // 회원은 회원 서비스에 있어 ID만 정하고, 활성 회원 확인은 위 목(memberPort)이 통과시킨다
     private Long memberId;
 
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
-        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        memberId = randomMemberId();
         wallet = walletRepository.save(Wallet.create(memberId));
     }
 
@@ -88,7 +87,6 @@ class TopupReconcileIntegrationTest {
         topupRepository.deleteAll(topupRepository.findAll().stream()
                 .filter(topup -> topup.getMemberId().equals(memberId)).toList());
         walletRepository.deleteById(wallet.getId());
-        memberRepository.deleteById(memberId);
     }
 
     @Test
@@ -167,5 +165,10 @@ class TopupReconcileIntegrationTest {
         return walletTransactionRepository.findAll().stream()
                 .filter(transaction -> transaction.getWallet().getId().equals(wallet.getId()))
                 .toList();
+    }
+
+    // 다른 테스트·시드와 겹치지 않는 회원 ID (지갑의 member_id 유니크). 회원은 회원 서비스에 있어 ID만 정한다
+    private static Long randomMemberId() {
+        return ThreadLocalRandom.current().nextLong(5_000_000_000L, 6_000_000_000L);
     }
 }

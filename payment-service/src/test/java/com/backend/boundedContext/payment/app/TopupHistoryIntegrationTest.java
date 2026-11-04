@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,11 +14,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.domain.Wallet;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.exception.DomainException;
@@ -26,7 +26,7 @@ import com.backend.global.page.PageResponse;
 
 /**
  * 충전 내역 조회·실패 기록을 실제 DB로 확인한다 (회원별 조회, 최신순, 페이징, 남의 충전 건 404).
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class TopupHistoryIntegrationTest {
@@ -40,10 +40,10 @@ class TopupHistoryIntegrationTest {
     @Autowired
     private TopupRepository topupRepository;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    @MockitoBean   // 회원 서비스 대신 쓰는 목. checkActiveMember는 아무것도 하지 않으므로 활성 회원으로 통과한다
+    private PaymentMemberPort memberPort;
 
-    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
+    // 회원은 회원 서비스에 있어 ID만 정하고, 활성 회원 확인은 위 목(memberPort)이 통과시킨다
     private Long memberId;
     private Long otherMemberId;
 
@@ -51,8 +51,8 @@ class TopupHistoryIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
-        otherMemberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        memberId = randomMemberId();
+        otherMemberId = randomMemberId();
     }
 
     @AfterEach
@@ -61,7 +61,6 @@ class TopupHistoryIntegrationTest {
                 .filter(topup -> topup.getMemberId().equals(memberId) || topup.getMemberId().equals(otherMemberId))
                 .toList());
         walletRepository.deleteAll(wallets);
-        memberRepository.deleteAllById(List.of(memberId, otherMemberId));
     }
 
     @Test
@@ -112,5 +111,10 @@ class TopupHistoryIntegrationTest {
         assertThatThrownBy(() -> paymentFacade.failTopup(memberId, othersTopupId, "PAY_PROCESS_CANCELED", "취소"))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-TOPUP_NOT_FOUND");
+    }
+
+    // 다른 테스트·시드와 겹치지 않는 회원 ID (지갑의 member_id 유니크). 회원은 회원 서비스에 있어 ID만 정한다
+    private static Long randomMemberId() {
+        return ThreadLocalRandom.current().nextLong(5_000_000_000L, 6_000_000_000L);
     }
 }

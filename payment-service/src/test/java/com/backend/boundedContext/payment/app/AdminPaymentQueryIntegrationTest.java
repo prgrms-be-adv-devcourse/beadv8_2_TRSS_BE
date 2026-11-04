@@ -2,11 +2,14 @@ package com.backend.boundedContext.payment.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.BDDMockito.given;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -17,23 +20,27 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.AdminPaymentDto;
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletHolding;
 import com.backend.boundedContext.payment.domain.WalletHoldingStatus;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.PaymentRepository;
 import com.backend.boundedContext.payment.out.WalletHoldingRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.member.dto.MemberDto;
+import com.backend.shared.member.dto.MemberRole;
+import com.backend.shared.member.dto.MemberStatus;
 
 /**
  * 관리자 결제 조회 결제 탭을 실제 DB로 확인한다 (이메일·보관 금액 상태 채우기, 검색어·기간).
- * 다른 데이터와 섞이지 않도록 이번 테스트만의 회원 이메일로 검색한다. 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 다른 데이터와 섞이지 않도록 이번 테스트만의 회원 이메일로 검색한다. 로컬 Docker PostgreSQL이 필요하다.
+ * 회원은 회원 서비스에 있으므로 PaymentMemberPort를 목으로 바꿔 이 테스트의 회원만 돌려준다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class AdminPaymentQueryIntegrationTest {
@@ -41,8 +48,8 @@ class AdminPaymentQueryIntegrationTest {
     @Autowired
     private PaymentFacade paymentFacade;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    @MockitoBean
+    private PaymentMemberPort memberPort;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -55,15 +62,19 @@ class AdminPaymentQueryIntegrationTest {
 
     private final String email = "admin-pay-" + UUID.randomUUID().toString().substring(0, 8) + "@palette.test";
 
-    private Member member;
+    // 다른 테스트·시드와 겹치지 않는 회원 ID (지갑의 member_id 유니크)
+    private final Long memberId = ThreadLocalRandom.current().nextLong(5_000_000_000L, 6_000_000_000L);
+
     private Wallet wallet;
     private final List<Payment> payments = new ArrayList<>();
     private final List<WalletHolding> holdings = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
-        member = memberRepository.save(Member.signUp(email, "encoded", "결제조회"));
-        wallet = walletRepository.save(Wallet.create(member.getId()));
+        MemberDto member = new MemberDto(memberId, email, "결제조회", MemberRole.USER, MemberStatus.ACTIVE);
+        given(memberPort.findMemberByEmail(email)).willReturn(Optional.of(member));
+        given(memberPort.getMembers(anyCollection())).willReturn(List.of(member));
+        wallet = walletRepository.save(Wallet.create(memberId));
     }
 
     @AfterEach
@@ -71,7 +82,6 @@ class AdminPaymentQueryIntegrationTest {
         walletHoldingRepository.deleteAll(holdings);
         paymentRepository.deleteAll(payments);
         walletRepository.delete(wallet);
-        memberRepository.delete(member);
     }
 
     @Test

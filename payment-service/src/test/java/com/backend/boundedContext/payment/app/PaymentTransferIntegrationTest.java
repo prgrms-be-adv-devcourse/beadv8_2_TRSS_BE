@@ -30,12 +30,11 @@ import com.backend.global.exception.DomainException;
 import com.backend.shared.payment.dto.SettledOrderAmountDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
-import com.backend.shared.payment.out.PaymentApi;
 
 /**
  * 정산 지급(transfer)·지급 조회(findTransfer)를 실제 DB로 확인한다.
  * 관리자 회원 ID는 시드 관리자와 겹치지 않게 테스트용 값으로 바꾼다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest(properties = "custom.payment.adminMemberId=" + PaymentTransferIntegrationTest.ADMIN_MEMBER_ID)
 class PaymentTransferIntegrationTest {
@@ -43,7 +42,7 @@ class PaymentTransferIntegrationTest {
     static final long ADMIN_MEMBER_ID = 2_100_000_001L;
 
     @Autowired
-    private PaymentApi paymentApi;
+    private PaymentFacade paymentFacade;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -102,7 +101,7 @@ class PaymentTransferIntegrationTest {
     @DisplayName("홀딩에서 판매자 지갑(SETTLEMENT)·관리자 지갑(FEE)으로 입금하고, 다 정산된 홀딩은 SETTLED가 된다")
     void transfer() {
         // 판매가 34,999원(25,000 + 9,999), 수수료 3,499원, 지급액 31,500원
-        TransferResultDto result = paymentApi.transfer(command(31_500, 3_499,
+        TransferResultDto result = paymentFacade.transfer(command(31_500, 3_499,
                 new SettledOrderAmountDto(orderId1, 25_000), new SettledOrderAmountDto(orderId2, 9_999)));
 
         assertThat(balance(sellerMemberId)).isEqualTo(31_500);
@@ -132,10 +131,10 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("같은 멱등 키로 다시 호출하면 다시 지급하지 않고 처음 결과를 돌려준다")
     void transfer_idempotent() {
-        TransferResultDto first = paymentApi.transfer(command(22_500, 2_500,
+        TransferResultDto first = paymentFacade.transfer(command(22_500, 2_500,
                 new SettledOrderAmountDto(orderId1, 25_000)));
 
-        TransferResultDto second = paymentApi.transfer(command(22_500, 2_500,
+        TransferResultDto second = paymentFacade.transfer(command(22_500, 2_500,
                 new SettledOrderAmountDto(orderId1, 25_000)));
 
         assertThat(second.walletTransactionId()).isEqualTo(first.walletTransactionId());
@@ -148,7 +147,7 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("주문 금액 일부만 정산하면 정산 누적 금액만 늘고 홀딩은 HELD로 남는다")
     void transfer_partial() {
-        paymentApi.transfer(command(9_000, 1_000, new SettledOrderAmountDto(orderId1, 10_000)));
+        paymentFacade.transfer(command(9_000, 1_000, new SettledOrderAmountDto(orderId1, 10_000)));
 
         WalletHolding holding = holding(orderId1);
         assertThat(holding.getStatus()).isEqualTo(WalletHoldingStatus.HELD);
@@ -159,7 +158,7 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("수수료가 0원이면 FEE 원장을 남기지 않는다")
     void transfer_zeroFee() {
-        TransferResultDto result = paymentApi.transfer(command(9, 0, new SettledOrderAmountDto(orderId2, 9)));
+        TransferResultDto result = paymentFacade.transfer(command(9, 0, new SettledOrderAmountDto(orderId2, 9)));
 
         assertThat(result.feeAmount()).isZero();
         assertThat(walletTransactionRepository.findByIdempotencyKey(idempotencyKey + "-FEE")).isEmpty();
@@ -169,7 +168,7 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("주문별 금액 합계가 지급액 + 수수료와 다르면 409 TRANSFER_AMOUNT_MISMATCH")
     void transfer_amountMismatch() {
-        assertThatThrownBy(() -> paymentApi.transfer(command(22_500, 2_000,
+        assertThatThrownBy(() -> paymentFacade.transfer(command(22_500, 2_000,
                 new SettledOrderAmountDto(orderId1, 25_000))))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-TRANSFER_AMOUNT_MISMATCH");
@@ -183,7 +182,7 @@ class PaymentTransferIntegrationTest {
     void transfer_holdingNotFound() {
         long unknownOrderId = randomId();
 
-        assertThatThrownBy(() -> paymentApi.transfer(command(31_500, 3_500,
+        assertThatThrownBy(() -> paymentFacade.transfer(command(31_500, 3_500,
                 new SettledOrderAmountDto(orderId1, 25_000), new SettledOrderAmountDto(unknownOrderId, 10_000))))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-HOLDING_NOT_FOUND");
@@ -195,7 +194,7 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("홀딩 남은 금액보다 많이 지급하면 409 HOLDING_INSUFFICIENT이고 앞 주문의 정산도 롤백된다")
     void transfer_holdingInsufficient() {
-        assertThatThrownBy(() -> paymentApi.transfer(command(31_500, 3_500,
+        assertThatThrownBy(() -> paymentFacade.transfer(command(31_500, 3_500,
                 new SettledOrderAmountDto(orderId1, 25_000), new SettledOrderAmountDto(orderId2, 10_000))))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-HOLDING_INSUFFICIENT");
@@ -210,7 +209,7 @@ class PaymentTransferIntegrationTest {
     void transfer_walletNotFound() {
         long noWalletMemberId = randomId();
 
-        assertThatThrownBy(() -> paymentApi.transfer(new SettlementTransferCommand(idempotencyKey, settlementId,
+        assertThatThrownBy(() -> paymentFacade.transfer(new SettlementTransferCommand(idempotencyKey, settlementId,
                 noWalletMemberId, 22_500, 2_500, List.of(new SettledOrderAmountDto(orderId1, 25_000)))))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-WALLET_NOT_FOUND");
@@ -221,10 +220,10 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("지급한 정산은 findTransfer로 같은 결과를 조회할 수 있다")
     void findTransfer() {
-        TransferResultDto transferred = paymentApi.transfer(command(22_500, 2_500,
+        TransferResultDto transferred = paymentFacade.transfer(command(22_500, 2_500,
                 new SettledOrderAmountDto(orderId1, 25_000)));
 
-        TransferResultDto found = paymentApi.findTransfer(idempotencyKey).orElseThrow();
+        TransferResultDto found = paymentFacade.findTransfer(idempotencyKey).orElseThrow();
 
         assertThat(found.idempotencyKey()).isEqualTo(idempotencyKey);
         assertThat(found.walletTransactionId()).isEqualTo(transferred.walletTransactionId());
@@ -236,7 +235,7 @@ class PaymentTransferIntegrationTest {
     @Test
     @DisplayName("지급하지 않은 멱등 키는 empty")
     void findTransfer_empty() {
-        assertThat(paymentApi.findTransfer("SETTLEMENT-" + UUID.randomUUID())).isEmpty();
+        assertThat(paymentFacade.findTransfer("SETTLEMENT-" + UUID.randomUUID())).isEmpty();
     }
 
     private SettlementTransferCommand command(long payoutAmount, long feeAmount, SettledOrderAmountDto... orders) {

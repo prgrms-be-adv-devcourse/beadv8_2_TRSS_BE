@@ -27,7 +27,7 @@ import com.backend.global.page.PageResponse;
 
 /**
  * 내 예치금 거래 내역 조회를 실제 DB로 확인한다 (내 지갑만, 최신순, 페이징, 유형·기간 필터).
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 로컬 Docker PostgreSQL이 필요하다.
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class WalletTransactionHistoryIntegrationTest {
