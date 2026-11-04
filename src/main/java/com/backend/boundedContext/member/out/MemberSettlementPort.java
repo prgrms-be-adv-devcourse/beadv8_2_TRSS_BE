@@ -9,6 +9,6 @@ public interface MemberSettlementPort {
     // 판매자가 아직 정산받지 않은 판매 금액 (탈퇴 검사, 판매자 철회 요청·승인, 내 판매자 정보)
     long getUnsettledAmount(Long sellerId);
 
-    // 관리자 제재 시 판매자 정산 보류 (같은 트랜잭션에서 호출함. 이벤트 전환은 #201 3단계)
+    // 관리자 제재 시 판매자 정산 보류 (같은 트랜잭션에서 호출함. 정산이 SellerSanctionedEvent 컨슈머로 받게 되면 뺌)
     void holdSeller(Long sellerId, String reason);
 }

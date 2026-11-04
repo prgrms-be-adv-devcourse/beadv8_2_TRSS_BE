@@ -8,11 +8,11 @@ import com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
+import com.backend.boundedContext.settlement.out.SettlementMemberPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
-import com.backend.shared.member.out.MemberApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -45,7 +45,7 @@ public class SettlementSupport {
     private final SettlementRepository settlementRepository;
     private final SettlementCandidateRepository settlementCandidateRepository;
     private final SettlementProcessHistoryRepository settlementProcessHistoryRepository;
-    private final MemberApi memberApi;
+    private final SettlementMemberPort settlementMemberPort;
 
     // ---------- 정산 후보 ----------
 
@@ -65,12 +65,12 @@ public class SettlementSupport {
     }
 
     /**
-     * 판매자 ID → 상호명. MemberApi.getSellers로 한 번에 조회한다(관리자 목록 1페이지 = 쿼리 1번)
+     * 판매자 ID → 상호명. SettlementMemberPort.getSellers로 한 번에 조회한다(관리자 목록 1페이지 = 쿼리 1번)
      * 회원 컨텍스트에 없는 판매자는 맵에서 빠지므로 get(sellerId)가 null이 된다
      */
     public Map<Long, String> findBusinessNames(Collection<Long> sellerIds) {
         if (sellerIds.isEmpty()) return Map.of();
-        return memberApi.getSellers(sellerIds).stream()
+        return settlementMemberPort.getSellers(sellerIds).stream()
                 .filter(seller -> seller.businessName() != null)
                 .collect(Collectors.toMap(SellerDto::sellerId, SellerDto::businessName, (a, b) -> a));
     }
@@ -103,7 +103,7 @@ public class SettlementSupport {
      * 정산서 조회는 지난 정산 내역을 보는 기능이라 승인 상태(APPROVED)를 요구하지 않는다(제재·철회된 판매자도 자기 내역은 본다)
      */
     public Optional<Long> findSellerId(Long memberId) {
-        return memberApi.findSellerByMemberId(memberId).map(SellerDto::sellerId);
+        return settlementMemberPort.findSellerByMemberId(memberId).map(SellerDto::sellerId);
     }
 
     /** 판매자 본인 정산서. 남의 정산서·없는 정산서는 모두 404 (존재 여부를 숨긴다) */

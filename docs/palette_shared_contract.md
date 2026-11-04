@@ -8,7 +8,7 @@
 
 | 컨텍스트 | 담당 | 제공하는 Api | 발행하는 이벤트 |
 | --- | --- | --- | --- |
-| member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent` |
+| member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent`, `SellerSanctionedEvent`, `SellerWithdrawalRequestedEvent`, `SellerWithdrawalRejectedEvent` |
 | product | 유진 | `ProductApi` | - |
 | order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
@@ -33,13 +33,33 @@ public record EventEnvelope<T extends DomainEvent>(UUID eventId, String eventTyp
 - 아래 컨텍스트별 이벤트는 모두 `DomainEvent`를 구현한다. 새 이벤트를 추가할 때도 구현한다.
 - 봉투는 Outbox 도입(TRSS-121)에서 쓴다. 단계와 필드 설명은 [개발 가이드 6.5](palette_development_guide.md#65-outbox)
 
+### 내부 API 공통 규칙
+
+서비스끼리 HTTP로 부르는 내부 API(`/internal/**`)는 사용자 JWT 대신 **내부 전용 키**로 인증한다(TRSS-162).
+
+```http
+GET /internal/v1/members/1
+X-Internal-Key: <INTERNAL_API_KEY 값>
+```
+
+| 요청 | 응답 |
+| --- | --- |
+| `X-Internal-Key`가 설정값과 같음 | 통과 (JWT 없어도 됨) |
+| 키가 없거나 다름 | 401 `401-INTERNAL_API_KEY_INVALID` ("내부 API 키가 없거나 올바르지 않습니다.") |
+| 사용자 JWT(`Authorization: Bearer`)만 있음 | 401 `401-INTERNAL_API_KEY_INVALID` (사용자 토큰으로는 내부 API를 부를 수 없다) |
+
+- 키는 환경 변수 `INTERNAL_API_KEY`(설정 `custom.internal.apiKey`)로 넣고 기본값이 없다. 없으면 앱이 뜨지 않는다. 지금은 모든 서비스가 같은 값을 쓴다.
+- 부르는 쪽 HTTP 클라이언트(`RestClient`)는 모든 요청에 `X-Internal-Key` 헤더를 기본으로 붙인다.
+- 외부에는 열지 않는다. nginx는 `/api/` 등만 앱으로 넘기고 `/internal/`은 넘기지 않는다. 게이트웨이를 만들 때도 `/internal/**`은 라우팅하지 않는다.
+- 내부 API 컨트롤러는 Swagger에 나오지 않게 `@Hidden`을 붙이고, 응답은 다른 API와 같은 `RsData`로 돌려준다.
+
 ## 1. 시나리오별 호출 흐름
 
 계약이 왜 필요한지 보여 주는 표입니다. "같은 Tx"는 호출한 쪽 트랜잭션에 참여한다는 뜻입니다.
 
 | 시나리오 | 시작 | 호출 순서 | 방식 |
 | --- | --- | --- | --- |
-| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → 결제가 지갑 생성 | 이벤트, 같은 Tx (정책: 회원과 지갑을 한 트랜잭션으로. 릴레이 전환 예정) |
+| 회원 가입 | member | 회원 저장 → `MemberSignedUpEvent` → (커밋 뒤 Kafka `member.events`) 결제가 지갑 생성 | 이벤트, 별도 Tx (지갑 생성이 실패해도 가입은 성공) |
 | 장바구니 조회 | order | `ProductApi.getOptions(optionIds)` → 현재 가격·판매 가능 여부·대표 이미지로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
@@ -51,10 +71,10 @@ public record EventEnvelope<T extends DomainEvent>(UUID eventId, String eventTyp
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
-| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `ProductApi.stopAllBySeller(sellerId, reason)` (판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원) | 동기, 같은 Tx |
+| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `ProductApi.stopAllBySeller(sellerId, reason)` (판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원) → `SellerWithdrawalRequestedEvent` | 동기, 같은 Tx + 이벤트 (상품 컨슈머가 생기면 동기 호출을 뺀다) |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기, 같은 Tx |
-| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) | 동기, 같은 Tx |
-| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller(sellerId, reason)` → `SettlementApi.holdSeller(sellerId, reason)` | 동기, 같은 Tx |
+| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) → `SellerWithdrawalRejectedEvent` | 동기, 같은 Tx + 이벤트 (상품 컨슈머가 생기면 동기 호출을 뺀다) |
+| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller(sellerId, reason)` → `SettlementApi.holdSeller(sellerId, reason)` → `SellerSanctionedEvent` | 동기, 같은 Tx + 이벤트 (상품·정산 컨슈머가 생기면 동기 호출을 뺀다) |
 | 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 |
 | 충전 준비·승인, 주문 생성·결제 | payment, order | `MemberApi.checkActiveMember(memberId)`: 탈퇴한 회원이면 401 (탈퇴 후 남은 Access Token 차단) | 동기 조회 |
 | 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 |
@@ -114,7 +134,7 @@ public interface MemberApi {
 - 실패는 `MemberApi`와 같은 `resultCode`와 HTTP 상태로 돌려줍니다. 부르는 쪽은 `resultCode`로 같은 `DomainException`을 다시 만들 수 있습니다.
 - 결과가 없을 수 있는 조회(`Optional`)는 404가 아니라 200 + `data: null`입니다.
 - 이메일은 URL·접근 로그에 남지 않도록 본문으로 받습니다. 형식 검증은 하지 않고, 형식이 맞지 않으면 없는 것으로 응답합니다.
-- Swagger에는 나오지 않습니다(`@Hidden`). `/internal/**` 접근 제한(내부 전용 키, 외부 차단)은 보안 설정 작업에서 함께 정합니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
 
 ### DTO
 
@@ -140,10 +160,21 @@ package com.backend.shared.member.event;
 
 /** 회원 가입 완료. 결제가 받아 잔액 0인 지갑을 생성한다. aggregate: MEMBER / memberId */
 public record MemberSignedUpEvent(Long memberId) implements DomainEvent { }
+
+/** 관리자 제재. 상품이 받아 판매 중 상품을 중지하고, 정산이 받아 정산을 보류한다. aggregate: SELLER / sellerId */
+public record SellerSanctionedEvent(Long sellerId, String reason) implements DomainEvent { }
+
+/** 판매자 철회 요청. 상품이 받아 판매 중 상품을 중지한다. aggregate: SELLER / sellerId */
+public record SellerWithdrawalRequestedEvent(Long sellerId, String reason) implements DomainEvent { }
+
+/** 관리자 철회 거절. 상품이 받아 철회 요청 때 중지된 상품을 다시 판매 중으로 되돌린다. aggregate: SELLER / sellerId */
+public record SellerWithdrawalRejectedEvent(Long sellerId) implements DomainEvent { }
 ```
 
-- 지금은 `EventPublisher`가 가입 트랜잭션 안에서 바로 리스너에 전달해, 지갑 생성이 실패하면 가입도 롤백된다(outbox에는 PUBLISHED로 기록).
-- Kafka 컨슈머 전환 예정(2026-10-23 결정, payment 담당): 지갑 생성이 가입과 별도 트랜잭션이 된다. 그 전에 결제가 가입 직후 지갑이 아직 없는 구간을 처리해야 한다. 토픽 `member.events`
+- 가입 이벤트는 가입 트랜잭션에서 outbox에 저장되고, 릴레이가 커밋 뒤 토픽 `member.events`로 보낸다. 결제가 Kafka 컨슈머(groupId `payment`)로 받아 별도 트랜잭션에서 지갑을 만든다(TRSS-138). 지갑 생성이 실패해도 가입은 롤백되지 않는다.
+- 그래서 가입 직후 지갑이 아직 없는 구간이 있다(보통 몇 초). 이 구간의 충전·결제 처리는 결제 담당이 정한다(#194).
+- 판매자 이벤트(TRSS-144)는 토픽 `seller.events`로 나가고 키는 `sellerId`다. 같은 판매자의 이벤트는 같은 파티션으로 가서 발행 순서대로 처리된다. 사유(`reason`)는 앞뒤 공백을 뺀 값이다.
+- 판매자 이벤트는 상태 변경과 같은 트랜잭션에서 outbox에 저장한다. 받는 쪽(상품 groupId `product`, 정산 groupId `settlement`)이 컨슈머를 만들기 전까지는 위 동기 호출도 그대로 하고, 컨슈머가 생기면 동기 호출을 뺀다. 상품 중지·재개와 정산 보류는 다시 해도 결과가 같아서 둘 다 실행돼도 된다.
 
 ## 3. product
 
@@ -228,6 +259,16 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 - 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
 - 잠금 순서는 항상 **상품 → 주문(→ 옵션)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
 - 구현 상태: 모든 메서드가 `ProductApiAdapter`에 구현되어 있습니다.
+
+### 받는 이벤트
+
+| 이벤트 | 처리 | 멱등 기준 |
+| --- | --- | --- |
+| `SellerSanctionedEvent` (미구현) | `stopAllBySeller(sellerId, reason)`와 같은 처리 | `processed_event`(eventId, `product`), 판매 중 상품만 바꾸므로 다시 와도 결과가 같다 |
+| `SellerWithdrawalRequestedEvent` (미구현) | `stopAllBySeller(sellerId, reason)`와 같은 처리 | 위와 같음 |
+| `SellerWithdrawalRejectedEvent` (미구현) | `resumeAllBySeller(sellerId)`와 같은 처리 | `processed_event`(eventId, `product`), 철회로 중지된 상품만 바꾸므로 다시 와도 결과가 같다 |
+
+- Kafka 토픽 `seller.events`를 `@KafkaListener`(groupId `product`)로 받는다. 컨슈머가 생기면 회원의 `stopAllBySeller`·`resumeAllBySeller` 동기 호출을 뺀다.
 
 ## 4. order
 
@@ -364,7 +405,7 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
 | `OrderReturnedEvent` (미구현) | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
-| `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (`@EventListener`, 가입 트랜잭션 안에서 처리) | `wallet.member_id` 유니크, 이미 있으면 무시 |
+| `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (Kafka `member.events`, `@KafkaListener` groupId `payment`, 가입과 별도 트랜잭션) | `processed_event`(eventId, `payment`)로 재전달을 거르고, 지갑이 이미 있으면 무시(`wallet.member_id` 유니크) |
 
 - 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다. (미구현: 지금은 예외가 그대로 올라가 전체가 롤백되고, FAILED_SYSTEM_ERROR·PAYMENT_FAILED는 기록되지 않는다)
 
@@ -389,13 +430,27 @@ public interface SettlementApi {
 }
 ```
 
+### 내부 API (HTTP)
+
+정산 모듈을 분리하면 회원은 `SettlementApi.getUnsettledAmount` 대신 아래 내부 API를 HTTP로 부릅니다. 지금도 같은 앱 안에서 동작하며, 회원 쪽 클라이언트는 `MemberSettlementPort`의 HTTP 구현으로 만듭니다([개발 가이드 6.2](palette_development_guide.md)).
+
+| SettlementApi | 요청 | 없을 때·실패 |
+| --- | --- | --- |
+| `getUnsettledAmount` | `GET /internal/v1/settlements/sellers/{sellerId}/unsettled-amount` | 정산 후보가 없거나 없는 판매자면 200 + `data: 0` |
+
+- 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 금액(원)을 담습니다.
+- `holdSeller`는 HTTP로 열지 않습니다. 회원이 `SellerSanctionedEvent`(sellerId, reason)를 `seller.events` 토픽으로 발행하고 정산이 컨슈머(groupId `settlement`)로 받는 구조로 바뀝니다(#205). 이벤트 전환이 반영되기 전까지는 회원이 같은 앱 안에서 `SettlementApi.holdSeller`를 그대로 부릅니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
+
 ### 받는 이벤트
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
 | `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `processed_event`(eventId, `settlement`)로 재전달을 거르고, `settlement_candidate.order_item_id` 유니크로 한 번 더 막음 |
+| `SellerSanctionedEvent` (미구현) | `holdSeller(sellerId, reason)`와 같은 처리 | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다.
+- `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(미구현). 컨슈머가 생기면 회원의 `holdSeller` 동기 호출을 뺀다.
 - 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
 - 실패하면 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `order.events-dlt`로 보내고 ERROR 로그로 Slack에 알린다. 원인을 고친 뒤 `order.events`로 다시 보낸다 → [개발 가이드 6.5](palette_development_guide.md#65-outbox)
 - 구매 확정 후 후보가 생기기까지 릴레이 간격(최대 약 1초)과 Kafka 전달 시간만큼 늦어진다.

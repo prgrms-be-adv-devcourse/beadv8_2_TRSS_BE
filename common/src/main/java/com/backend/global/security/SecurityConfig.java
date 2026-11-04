@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -17,14 +18,20 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.backend.global.exception.GlobalErrorCode;
+
 import lombok.RequiredArgsConstructor;
 
 /**
  * 비밀번호 BCrypt 해시, JWT 인증, URL별 권한, CORS
+ * 서비스 간 호출(/internal/**)은 JWT 대신 내부 전용 키로 인증하는 체인을 따로 둠
  */
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+    // 서비스 간 호출 전용. 외부에는 열지 않음 (nginx는 /api/ 등만 앱으로 넘김)
+    private static final String INTERNAL_API_URLS = "/internal/**";
 
     private static final String[] SWAGGER_URLS = {
             "/swagger-ui/**",
@@ -67,16 +74,40 @@ public class SecurityConfig {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
+    private final SecurityErrorResponseWriter securityErrorResponseWriter;
 
     @Value("${custom.cors.allowedOrigins}")
     private List<String> allowedOrigins;
+
+    // 서비스 간 호출용 내부 키. 기본값 없이 환경변수(.env)로만 주입
+    @Value("${custom.internal.apiKey}")
+    private String internalApiKey;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    // /internal/** 전용 체인. 사용자 JWT는 보지 않으므로 사용자 토큰으로는 내부 API를 부를 수 없음
     @Bean
+    @Order(1)
+    public SecurityFilterChain internalFilterChain(HttpSecurity httpSecurity) throws Exception {
+        return httpSecurity
+                .securityMatcher(INTERNAL_API_URLS)
+                .csrf(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, e) ->
+                                securityErrorResponseWriter.write(response, GlobalErrorCode.INTERNAL_API_KEY_INVALID)))  // 401
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("INTERNAL"))
+                .addFilterBefore(new InternalApiKeyFilter(internalApiKey), UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
         return httpSecurity
                 .cors(cors -> cors.configurationSource(configurationSource()))
