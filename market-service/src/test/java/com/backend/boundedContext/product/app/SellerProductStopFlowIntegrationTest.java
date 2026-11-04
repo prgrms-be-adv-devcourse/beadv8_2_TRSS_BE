@@ -1,11 +1,5 @@
-package com.backend.boundedContext.member.app;
+package com.backend.boundedContext.product.app;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.domain.MemberErrorCode;
-import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
-import com.backend.boundedContext.member.out.MemberRepository;
-import com.backend.boundedContext.member.out.SellerRepository;
-import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.out.CartRepository;
@@ -18,10 +12,12 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
-import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.product.out.ProductApi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,42 +25,34 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.BDDMockito.given;
 
 /**
- * 판매자 제재·철회가 상품 판매 중지 → 결제 대기 주문 취소 → 재고 복원까지 이어지는지 목 없이 확인한다.
- * 회원 → 상품 → 주문 → 상품으로 모듈 경계를 실제로 넘으므로, 연결이 끊기면 이 테스트가 실패한다.
+ * 판매자 철회·제재로 회원 서비스가 상품 중지·재개를 호출했을 때, 상품 판매 중지 → 결제 대기 주문 취소 → 재고 복원까지 이어지는지 확인한다.
+ * 상품·주문은 실제로 돌리고 회원 서비스만 목으로 둔다. 회원 쪽 호출 여부는 회원 서비스의 유스케이스 테스트가,
+ * 서비스 간 HTTP 연결은 E2E가 확인한다.
  * 이벤트 리스너(AFTER_COMMIT)가 섞여도 실제 흐름과 같게 돌도록 @Transactional을 붙이지 않고, 만든 데이터는 @AfterEach에서 지운다.
- * 로컬 Docker PostgreSQL·Redis가 필요하다.
  */
 @SpringBootTest
-class SellerSalesStopFlowIntegrationTest {
+class SellerProductStopFlowIntegrationTest {
 
     private static final int STOCK = 10;
     private static final int ORDER_QUANTITY = 3;
     private static final long PRICE = 10_000L;
 
     @Autowired
-    private MemberSellerFacade memberSellerFacade;
+    private ProductApi productApi;
 
     @Autowired
     private OrderFacade orderFacade;
-
-    @Autowired
-    private MemberRepository memberRepository;
-
-    @Autowired
-    private SellerRepository sellerRepository;
-
-    @Autowired
-    private SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -87,18 +75,21 @@ class SellerSalesStopFlowIntegrationTest {
     @Autowired
     private TransactionTemplate transactionTemplate;
 
-    private Long sellerMemberId;
-    private Long buyerId;
+    @MockitoBean
+    private MemberApi memberApi;
+
     private Long sellerId;
+    private Long buyerId;
     private Long productId;
     private Long optionId;
 
     @BeforeEach
     void setUp() {
-        sellerMemberId = saveMember("판매자");
-        buyerId = saveMember("구매자");
-        sellerId = memberSellerFacade.applySeller(sellerMemberId, applyRequest()).sellerId();
-        memberSellerFacade.approveSeller(sellerId);
+        // 회원 데이터는 다른 서비스라 겹치지 않는 임의 ID를 쓴다
+        sellerId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
+        buyerId = sellerId + 1;
+        given(memberApi.getSellers(anyCollection()))
+                .willReturn(List.of(new SellerDto(sellerId, sellerId + 2, "팔레트 뷰티", SellerStatus.APPROVED)));
 
         transactionTemplate.executeWithoutResult(status -> {
             Product product = productRepository.save(Product.create(
@@ -116,19 +107,16 @@ class SellerSalesStopFlowIntegrationTest {
             stockHistoryRepository.deleteAll(stockHistoryRepository.findByOptionId(optionId, Pageable.unpaged()).getContent());
             productOptionRepository.deleteById(optionId);
             productRepository.deleteById(productId);
-            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId));
-            sellerRepository.deleteById(sellerId);
-            memberRepository.deleteAllById(List.of(sellerMemberId, buyerId));
         });
     }
 
     @Test
-    @DisplayName("제재: 판매 중 상품이 중지되고, 그 상품이 든 결제 대기 주문이 취소되며 재고가 복원된다")
-    void sanction_stopsSalesAndCancelsPendingOrders() {
+    @DisplayName("판매 중지: 판매 중 상품이 중지되고, 그 상품이 든 결제 대기 주문이 취소되며 재고가 복원된다")
+    void stop_stopsSalesAndCancelsPendingOrders() {
         Long orderId = createPendingOrder();
         assertThat(stock()).isEqualTo(STOCK - ORDER_QUANTITY);
 
-        memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매");
+        productApi.stopAllBySeller(sellerId, "위조 상품 판매");
 
         Product product = productRepository.findById(productId).orElseThrow();
         assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
@@ -143,34 +131,16 @@ class SellerSalesStopFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("철회 요청: 상품 중지·결제 대기 주문 취소·재고 복원이 일어나고, 철회 거절 시 상품이 다시 판매 중이 된다")
-    void withdrawal_requestStopsSales_rejectResumes() {
+    @DisplayName("판매 재개: 판매자 철회로 중지된 상품이 다시 판매 중이 되고, 취소된 주문은 되살아나지 않는다")
+    void resume_resumesSales() {
         Long orderId = createPendingOrder();
+        productApi.stopAllBySeller(sellerId, "폐업 예정");
 
-        memberSellerFacade.requestWithdrawal(sellerMemberId, "폐업 예정");
-
-        assertThat(productRepository.findById(productId).orElseThrow().getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
-        assertThat(orderRepository.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELED);
-        assertThat(stock()).isEqualTo(STOCK);
-
-        memberSellerFacade.rejectWithdrawal(sellerId, "진행 중인 판매 확인 필요");
+        productApi.resumeAllBySeller(sellerId);
 
         assertThat(productRepository.findById(productId).orElseThrow().getStatus()).isEqualTo(ProductSaleStatus.ON_SALE);
-    }
-
-    @Test
-    @DisplayName("철회 요청으로 상품이 중지된 뒤 제재되면, 철회 반려는 409 SELLER_STATE_INVALID이고 상품은 다시 판매되지 않는다")
-    void withdrawalRequested_thenSanctioned_rejectIsBlocked() {
-        memberSellerFacade.requestWithdrawal(sellerMemberId, "폐업 예정");
-        memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매");
-
-        // 반려는 WITHDRAW_REQUESTED일 때만 됨. 상태 확인이 resumeAllBySeller보다 먼저라 상품 재개까지 가지 않음
-        assertThatThrownBy(() -> memberSellerFacade.rejectWithdrawal(sellerId, "진행 중인 판매 확인 필요"))
-                .isInstanceOfSatisfying(DomainException.class,
-                        e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_STATE_INVALID.resultCode()));
-
-        assertThat(productRepository.findById(productId).orElseThrow().getStatus()).isEqualTo(ProductSaleStatus.STOPPED);
-        assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.SANCTIONED);
+        assertThat(orderRepository.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELED);
+        assertThat(stock()).isEqualTo(STOCK);
     }
 
     private Long createPendingOrder() {
@@ -181,16 +151,5 @@ class SellerSalesStopFlowIntegrationTest {
 
     private int stock() {
         return productOptionRepository.findById(optionId).orElseThrow().getStock();
-    }
-
-    private Long saveMember(String name) {
-        String email = "seller-sales-stop-it-" + UUID.randomUUID() + "@palette.com";
-        return memberRepository.save(Member.signUp(email, "encoded-password", name)).getId();
-    }
-
-    private SellerApplyRequest applyRequest() {
-        String businessNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
-        return new SellerApplyRequest("팔레트 뷰티", businessNumber, "홍길동",
-                "010-1234-5678", "국민은행", "123456-01-123456", "홍길동");
     }
 }

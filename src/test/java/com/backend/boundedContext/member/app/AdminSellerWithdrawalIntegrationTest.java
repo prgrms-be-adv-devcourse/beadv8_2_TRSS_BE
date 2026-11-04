@@ -16,6 +16,7 @@ import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.order.out.OrderApi;
+import com.backend.shared.product.out.ProductApi;
 import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
@@ -62,6 +63,10 @@ class AdminSellerWithdrawalIntegrationTest {
 
     @MockitoBean
     private SettlementApi settlementApi;
+
+    // 상품·주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
+    @MockitoBean
+    private ProductApi productApi;
 
     private Long memberId;
     private Long sellerId;

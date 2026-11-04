@@ -18,20 +18,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.app.MemberSellerFacade;
 import com.backend.boundedContext.member.in.ApiV1SellerController;
-import com.backend.boundedContext.order.app.OrderFacade;
-import com.backend.boundedContext.order.in.ApiV1CartController;
-import com.backend.boundedContext.order.in.ApiV1OrderController;
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.in.ApiV1TopupController;
 import com.backend.boundedContext.payment.in.ApiV1WalletController;
 import com.backend.shared.member.dto.MemberRole;
 
 /**
- * 구매자 API(장바구니·주문·충전·지갑·판매자 신청) 권한
+ * 구매자 API(충전·지갑·판매자 신청) 권한. 장바구니·주문은 market-service의 MarketBuyerApiAccessTest에서 확인한다
  * 관리자는 403, 구매자·판매자는 통과한다. 응답 내용은 각 컨트롤러 테스트에서 확인한다
  */
-@WebMvcTest({ApiV1CartController.class, ApiV1OrderController.class, ApiV1TopupController.class,
-        ApiV1WalletController.class, ApiV1SellerController.class})
+@WebMvcTest({ApiV1TopupController.class, ApiV1WalletController.class, ApiV1SellerController.class})
 @Import({SecurityConfig.class, JwtTokenProvider.class, JwtAuthenticationEntryPoint.class,
         JwtAccessDeniedHandler.class, SecurityErrorResponseWriter.class})
 class BuyerApiAccessTest {
@@ -43,16 +39,13 @@ class BuyerApiAccessTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @MockitoBean
-    private OrderFacade orderFacade;
-
-    @MockitoBean
     private PaymentFacade paymentFacade;
 
     @MockitoBean
     private MemberSellerFacade memberSellerFacade;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/v1/cart", "/api/v1/orders", "/api/v1/topups", "/api/v1/wallet", "/api/v1/sellers/me"})
+    @ValueSource(strings = {"/api/v1/topups", "/api/v1/wallet", "/api/v1/sellers/me"})
     @DisplayName("관리자가 구매자 API를 조회하면 403 FORBIDDEN")
     void admin_forbidden(String url) throws Exception {
         mockMvc.perform(get(url).header("Authorization", "Bearer " + token(MemberRole.ADMIN)))
@@ -71,7 +64,7 @@ class BuyerApiAccessTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/v1/cart", "/api/v1/orders", "/api/v1/topups", "/api/v1/wallet", "/api/v1/sellers/me"})
+    @ValueSource(strings = {"/api/v1/topups", "/api/v1/wallet", "/api/v1/sellers/me"})
     @DisplayName("구매자(USER)는 구매자 API를 호출할 수 있다")
     void user_allowed(String url) throws Exception {
         mockMvc.perform(get(url).header("Authorization", "Bearer " + token(MemberRole.USER)))

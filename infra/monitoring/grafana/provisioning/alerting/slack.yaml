@@ -17,11 +17,11 @@ contactPoints:
           title: '{{ template "palette.slack.title" . }}'
           text: '{{ template "palette.slack.text" . }}'
 
-# 모든 알림을 Slack으로 보낸다. 로그를 남긴 클래스(log_logger)마다 따로 알린다.
+# 모든 알림을 Slack으로 보낸다. 로그를 남긴 앱(container)·클래스(log_logger)마다 따로 알린다.
 policies:
   - orgId: 1
     receiver: slack-palette
-    group_by: ["alertname", "log_logger"]
+    group_by: ["alertname", "container", "log_logger"]
     group_wait: 30s        # 처음 발생하면 30초 모았다가 보낸다
     group_interval: 5m     # 같은 묶음에 새 알림이 생기면 최소 5분 간격으로 보낸다
     repeat_interval: 1h    # 계속 발생 중이면 1시간마다 다시 알린다
