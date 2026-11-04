@@ -10,6 +10,9 @@ import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.ErrorCode;
+import com.backend.global.outbox.OutboxEvent;
+import com.backend.global.outbox.OutboxEventRepository;
+import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.order.out.OrderApi;
@@ -24,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -49,6 +54,9 @@ class AdminSellerWithdrawalIntegrationTest {
 
     @Autowired
     private SellerStatusHistoryRepository sellerStatusHistoryRepository;
+
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
 
     @MockitoBean
     private OrderApi orderApi;
@@ -78,6 +86,7 @@ class AdminSellerWithdrawalIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        outboxEventRepository.deleteAll(sellerOutbox());
         sellerRepository.findById(sellerId).ifPresent(seller -> {
             sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId));
             sellerRepository.delete(seller);
@@ -138,7 +147,7 @@ class AdminSellerWithdrawalIntegrationTest {
     }
 
     @Test
-    @DisplayName("철회 거절: APPROVED로 돌아가고 사유가 이력에 남으며, 다시 판매할 수 있다")
+    @DisplayName("철회 거절: APPROVED로 돌아가고 사유가 이력에 남으며, 다시 판매할 수 있다. 철회 요청 다음에 철회 거절 이벤트가 outbox에 남는다")
     void rejectWithdrawal() {
         AdminSellerDetailDto response = memberSellerFacade.rejectWithdrawal(sellerId, " 진행 중인 반품 처리 후 다시 요청해 주세요 ");
 
@@ -151,6 +160,10 @@ class AdminSellerWithdrawalIntegrationTest {
         assertThat(latest.getReason()).isEqualTo("진행 중인 반품 처리 후 다시 요청해 주세요");
 
         assertThat(memberSellerFacade.getApprovedSellerByMemberId(memberId).sellerId()).isEqualTo(sellerId);
+
+        assertThat(sellerOutbox()).extracting(OutboxEvent::getEventType)
+                .containsExactly("SellerWithdrawalRequestedEvent", "SellerWithdrawalRejectedEvent");
+        assertThat(sellerOutbox()).allSatisfy(outbox -> assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING));
     }
 
     @Test
@@ -160,6 +173,13 @@ class AdminSellerWithdrawalIntegrationTest {
 
         assertError(() -> memberSellerFacade.approveWithdrawal(sellerId), MemberErrorCode.SELLER_STATE_INVALID);
         assertError(() -> memberSellerFacade.rejectWithdrawal(sellerId, "거절"), MemberErrorCode.SELLER_STATE_INVALID);
+    }
+
+    private List<OutboxEvent> sellerOutbox() {
+        return outboxEventRepository.findAll().stream()
+                .filter(outbox -> outbox.getAggregateType().equals("SELLER") && outbox.getAggregateId().equals(sellerId))
+                .sorted(Comparator.comparing(OutboxEvent::getId))
+                .toList();
     }
 
     private int historyCount() {
