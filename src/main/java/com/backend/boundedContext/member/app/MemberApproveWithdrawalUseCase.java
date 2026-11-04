@@ -6,10 +6,10 @@ import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
+import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
-import com.backend.shared.settlement.out.SettlementApi;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,8 +24,8 @@ import lombok.RequiredArgsConstructor;
 public class MemberApproveWithdrawalUseCase {
 
     private final SellerSupport sellerSupport;
-    private final OrderApi orderApi;
-    private final SettlementApi settlementApi;
+    private final MemberOrderPort memberOrderPort;
+    private final MemberSettlementPort memberSettlementPort;
 
     public AdminSellerDetailDto approveWithdrawal(Long sellerId) {
         Seller seller = sellerSupport.getSeller(sellerId);
@@ -36,10 +36,10 @@ public class MemberApproveWithdrawalUseCase {
         }
 
         // 판매자 상품이 들어간 CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED 주문
-        if (orderApi.hasActiveSales(sellerId)) {
+        if (memberOrderPort.hasActiveSales(sellerId)) {
             throw new DomainException(MemberErrorCode.ACTIVE_SALES_EXIST);
         }
-        if (settlementApi.getUnsettledAmount(sellerId) > 0) {
+        if (memberSettlementPort.getUnsettledAmount(sellerId) > 0) {
             throw new DomainException(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
         }
 

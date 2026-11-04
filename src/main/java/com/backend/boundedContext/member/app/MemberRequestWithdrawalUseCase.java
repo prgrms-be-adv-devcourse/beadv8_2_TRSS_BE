@@ -4,11 +4,11 @@ import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
+import com.backend.boundedContext.member.out.MemberProductPort;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
-import com.backend.shared.product.out.ProductApi;
-import com.backend.shared.settlement.out.SettlementApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -22,14 +22,14 @@ import org.springframework.stereotype.Component;
 public class MemberRequestWithdrawalUseCase {
     private final SellerRepository sellerRepository;
     private final SellerStatusHistoryRepository sellerStatusHistoryRepository;
-    private final SettlementApi settlementApi;
-    private final ProductApi productApi;
+    private final MemberSettlementPort memberSettlementPort;
+    private final MemberProductPort memberProductPort;
 
     public MySellerResponse requestWithdrawal(Long memberId, String reason) {
         Seller seller = sellerRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.SELLER_NOT_FOUND));
 
-        long unsettledAmount = settlementApi.getUnsettledAmount(seller.getId());
+        long unsettledAmount = memberSettlementPort.getUnsettledAmount(seller.getId());
         if (unsettledAmount > 0) {
             throw new DomainException(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
         }
@@ -40,7 +40,7 @@ public class MemberRequestWithdrawalUseCase {
         sellerStatusHistoryRepository.save(history);
 
         // ON_SALE 상품을 STOPPED(SELLER_WITHDRAWN)로 바꾸고, 그 상품이 든 결제 대기 주문을 취소한다 (상품 담당, 같은 트랜잭션)
-        productApi.stopAllBySeller(seller.getId(), strippedReason);
+        memberProductPort.stopAllBySeller(seller.getId(), strippedReason);
 
         return MySellerResponse.from(seller, history, unsettledAmount);
     }

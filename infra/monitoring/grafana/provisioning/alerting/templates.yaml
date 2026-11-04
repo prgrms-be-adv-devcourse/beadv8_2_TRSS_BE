@@ -33,7 +33,7 @@ templates:
       • 발생: {{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05" }} (KST)
       {{ with .Annotations.Error }}• 오류: `{{ . }}`
       {{ end -}}
-      • 확인: 서버에서 `docker compose -f compose.prod.yaml ps loki grafana`, `docker compose -f compose.prod.yaml logs --tail 50 loki`
+      • 확인: 서버에서 `docker compose -f infra/compose.prod.yaml ps loki grafana`, `docker compose -f infra/compose.prod.yaml logs --tail 50 loki`
       {{ end -}}
       {{ end -}}
       {{- end }}

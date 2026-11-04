@@ -18,9 +18,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberProductPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.product.out.ProductApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberRejectWithdrawalUseCaseTest {
@@ -31,7 +31,7 @@ class MemberRejectWithdrawalUseCaseTest {
     private SellerSupport sellerSupport;
 
     @Mock
-    private ProductApi productApi;
+    private MemberProductPort memberProductPort;
 
     @InjectMocks
     private MemberRejectWithdrawalUseCase memberRejectWithdrawalUseCase;
@@ -46,7 +46,7 @@ class MemberRejectWithdrawalUseCaseTest {
         memberRejectWithdrawalUseCase.rejectWithdrawal(SELLER_ID, " 진행 중인 반품 처리 후 다시 요청해 주세요 ");
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
-        verify(productApi).resumeAllBySeller(SELLER_ID);
+        verify(memberProductPort).resumeAllBySeller(SELLER_ID);
         verify(sellerSupport).saveHistory(any(), any());
     }
 
@@ -59,7 +59,7 @@ class MemberRejectWithdrawalUseCaseTest {
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_STATE_INVALID.resultCode()));
 
-        verifyNoInteractions(productApi);
+        verifyNoInteractions(memberProductPort);
         verify(sellerSupport, never()).saveHistory(any(), any());
     }
 
