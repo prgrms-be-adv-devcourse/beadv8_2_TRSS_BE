@@ -27,7 +27,7 @@ import java.util.List;
  *
  * 결제 시드(PaymentDataInit)가 같은 주문 -1(25,000원)·-2(9,999원)로 HELD 홀딩을 만들어 두지만, 결제는 아직 다른 앱이라
  * 결제 서비스 연결 전에는 월 정산을 실행해도 지급 단계에서 실패한다(PaymentApiClient.transfer 예외).
- * 시드 판매자(회원 2번)의 sellerId는 SettlementMemberPort로 찾는다. 회원 서비스 연결 전에는 임시 구현이 회원 ID와 같은 값을 돌려준다.
+ * 시드 판매자(회원 2번)의 sellerId는 SettlementMemberPort로 찾는다. 회원 서비스 연결 전에는 임시 구현(MemberApiClient)이 empty를 돌려주므로 시드를 건너뛴다.
  *
  * TODO 주문 서비스가 실제로 구매 확정 이벤트를 발행하게 되면 PaymentDataInit의 홀딩 시드와 함께 지우기
  */

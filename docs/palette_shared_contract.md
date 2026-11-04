@@ -415,7 +415,7 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 
 | 방향 | 임시 구현 | 동작 |
 | --- | --- | --- |
-| 정산 → 회원 (`getSeller`, `getSellers`, `findSellerByMemberId`) | `settlement-service`의 `MemberApiClient` | 판매자를 모르는 것으로 응답: `getSellers` 빈 목록, `findSellerByMemberId` empty, `getSeller` 예외. 연결 전까지 판매자 정산 조회는 빈 결과(목록·예상 금액은 빈 목록, 상세는 404), 관리자 목록·미리보기의 상호명은 비고, 시드 정산 데이터는 만들어지지 않는다 |
+| 정산 → 회원 (`getSeller`, `getSellers`, `findSellerByMemberId`) | `settlement-service`의 `MemberApiClient` | 지어낸 판매자를 돌려주지 않음: `getSeller`·`getSellers` 예외, `findSellerByMemberId` empty. 연결 전까지 월 정산 집계(제재 여부 확인)와 관리자 정산 목록·미리보기(상호명 조회)는 실패하고, 판매자 정산 조회는 빈 결과(목록·예상 금액은 빈 목록, 상세는 404), 시드 정산 데이터는 만들어지지 않는다 |
 | 정산 → 결제 (`transfer`) | `settlement-service`의 `PaymentApiClient` | 예외. 그래서 정산 스케줄러는 기본으로 꺼 둔다(`SETTLEMENT_SCHEDULING_ENABLED=false`) |
 | 회원 → 정산 (`getUnsettledAmount`, `holdSeller`) | 루트 모놀리스의 `SettlementApiClient` | 예외. 연결 전까지 판매자 제재·철회·판매자 회원 탈퇴·내 판매자 정보 조회가 실패한다 |
 | 주문 → 정산 (`OrderConfirmedEvent`) | 없음 (Kafka `order.events`) | 그대로 동작. 앱이 달라도 같은 토픽을 받는다 |
