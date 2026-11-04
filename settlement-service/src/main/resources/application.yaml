@@ -1,0 +1,103 @@
+server:
+  port: ${SETTLEMENT_PORT:8084}   # 로컬에서 루트 모놀리스(8080)와 같이 띄울 수 있게 다른 포트를 쓴다
+
+spring:
+  application:
+    name: settlement-service
+
+  # 프로젝트 루트의 .env를 읽음 (없으면 무시). bootRun은 모듈 폴더에서 실행되므로 상위 폴더도 찾는다
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
+
+  # settlement 스키마만 쓴다. 운영에서는 settlement_user(자기 스키마 권한만 가진 계정)로 접속한다
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}?currentSchema=settlement
+    username: ${SETTLEMENT_DB_USERNAME:${DB_USERNAME:settlement_user}}
+    password: ${SETTLEMENT_DB_PASSWORD:${DB_PASSWORD:settlement_user}}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
+
+  flyway:
+    schemas: settlement
+    default-schema: settlement
+    # 운영 DB: 테이블을 public에서 settlement로 옮긴 뒤 처음 뜰 때 V1(baseline)은 이미 적용된 것으로 기록하고 V2부터 실행한다
+    #   V1의 테이블이 settlement에 모두 있어야 한다. 옮기지 못하는 outbox_event·processed_event 처리 등 이전 절차는 V1 파일 주석 참고
+    # 빈 DB(로컬·CI·새 서버): V1부터 실행한다
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  batch:
+    jdbc:
+      initialize-schema: never   # 배치 메타 테이블도 Flyway(V1__settlement_baseline.sql)로만 만든다
+    job:
+      enabled: false             # 앱 시작 시 Job 자동 실행 금지. 정산 Job은 스케줄러·관리자 요청으로만 실행한다
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  # Outbox 릴레이가 이벤트 봉투를 발행하는 Kafka. 정산은 order.events를 받는다(SettlementEventListener, groupId settlement)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all                   # 브로커가 기록을 마친 뒤에 성공으로 본다(그때 outbox를 PUBLISHED로 바꿈)
+      properties:
+        enable.idempotence: true  # 프로듀서 재시도로 같은 메시지가 두 번 기록되지 않게
+        max.block.ms: 5000        # 브로커가 없을 때 send가 오래 막히지 않게(기본 60초)
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record            # 메시지 하나를 처리(커밋)한 뒤에 offset을 커밋한다
+
+  task:
+    scheduling:
+      pool:
+        size: 3          # 스케줄 작업(정산 2, outbox 릴레이 1)이 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 재시도 스케줄러가 멈추지 않는다
+
+
+# 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
+custom:
+  jwt:
+    # 서명 키: 모든 서비스가 같은 값을 쓴다. 기본값 없이 환경변수(.env)로만 주입한다.
+    secret: ${JWT_SECRET}
+    accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
+  settlement:
+    feeRate: 10                # 수수료율(%)
+    payDayOfMonth: 10          # 매월 정산일
+    maxAttempts: 3             # 최초 1회 + 재시도 2회
+    retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
+    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
+    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+  outbox:
+    relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
+    relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
+    relayBatchSize: 100         # 릴레이가 한 번에 발행하는 최대 이벤트 수
+    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다(Kafka가 내려가 있는 건 세지 않음)
+    sendTimeoutMillis: 10000    # Kafka 브로커의 기록 확인(ack)을 기다리는 최대 시간(밀리초)
+    topicPartitions: 3          # 이벤트 토픽(<대상>.events) 파티션 수. 같은 aggregateId는 같은 파티션으로 가서 순서가 지켜진다
+  kafka:
+    consumer:
+      # 컨슈머가 실패한 메시지를 다시 처리하는 방식. 기본값이면 1·2·4·8초 간격으로 4번 더 처리하고(총 5번), 그래도 실패하면 <토픽>-dlt로 보낸다
+      maxRetries: 4                     # 처음 처리 뒤 다시 처리하는 횟수
+      retryInitialIntervalMillis: 1000  # 첫 재시도 전 대기(밀리초)
+      retryMultiplier: 2.0              # 재시도마다 대기 시간에 곱하는 값
+  scheduling:
+    # false면 모든 스케줄러(월 정산, 지급 재시도, outbox 릴레이)가 멈춘다.
+    # 결제 서비스 연결 전에는 PaymentApiClient.transfer가 예외를 던져서, 스케줄러가 돌면 정산서가 FAILED → MANUAL_REQUIRED로 굳는다.
+    # 그래서 기본값을 false로 두고, 켜야 할 때만 SETTLEMENT_SCHEDULING_ENABLED=true로 켠다.
+    # TODO 서비스 간 연결 작업에서 결제 지급이 연결되면 기본값을 true로 바꾼다
+    enabled: ${SETTLEMENT_SCHEDULING_ENABLED:false}

@@ -64,16 +64,10 @@ spring:
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
 
-  batch:
-    jdbc:
-      initialize-schema: always
-    job:
-      enabled: false           # 앱 시작 시 Job 자동 실행 금지. 정산 Job은 스케줄러·관리자 요청으로만 실행한다
-
   task:
     scheduling:
       pool:
-        size: 6          # 스케줄 작업 6개(정산 2, 충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 다른 스케줄러가 멈추지 않는다
+        size: 4          # 스케줄 작업 4개(충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 정산 스케줄러는 settlement-service로 옮김
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
@@ -143,13 +137,6 @@ custom:
     redirectUri: ${KAKAO_REDIRECT_URI:http://localhost:5173/oauth/kakao/callback}   # 프론트 콜백 화면. 인가 요청 때와 같아야 토큰을 받을 수 있다
     connectTimeoutSeconds: 3
     readTimeoutSeconds: 5
-  settlement:
-    feeRate: 10                # 수수료율(%)
-    payDayOfMonth: 10          # 매월 정산일
-    maxAttempts: 3             # 최초 1회 + 재시도 2회
-    retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
-    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
-    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
