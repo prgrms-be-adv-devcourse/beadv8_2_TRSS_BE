@@ -85,8 +85,13 @@ custom:
         bucket: ${PRODUCT_IMAGE_S3_BUCKET:}                  # 버킷 이름
         region: ${PRODUCT_IMAGE_S3_REGION:ap-northeast-2}    # 버킷 리전 (서울)
         baseUrl: ${PRODUCT_IMAGE_S3_BASE_URL:}               # 이미지 URL 앞부분 (예: https://{버킷}.s3.ap-northeast-2.amazonaws.com)
+  # 회원 내부 API(/internal/v1/members·sellers). 회원 서비스 분리 전까지는 루트 모놀리스(8080), 분리 후 member-service(8081)
+  member:
+    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8080}
+    connectTimeoutMillis: 1000   # 회원 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 장바구니·주문 요청 안에서 부르므로 짧게 둔다
   order:
-    cartMaxQuantity: 99        # 장바구니 최대 수량
+    cartMaxQuantity: 99       # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
     autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
     autoConfirmIntervalSeconds: 3600   # 자동 구매 확정 스케줄러 실행 간격(초). 7일 경과 후 최대 이 시간만큼 늦게 확정된다
