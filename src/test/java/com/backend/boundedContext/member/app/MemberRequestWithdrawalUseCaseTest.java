@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,8 +27,10 @@ import com.backend.boundedContext.member.out.MemberProductPort;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
+import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.member.event.SellerWithdrawalRequestedEvent;
 
 @ExtendWith(MockitoExtension.class)
 class MemberRequestWithdrawalUseCaseTest {
@@ -46,11 +50,14 @@ class MemberRequestWithdrawalUseCaseTest {
     @Mock
     private MemberProductPort memberProductPort;
 
+    @Mock
+    private EventPublisher eventPublisher;
+
     @InjectMocks
     private MemberRequestWithdrawalUseCase memberRequestWithdrawalUseCase;
 
     @Test
-    @DisplayName("판매 중이고 미정산 금액이 없으면 WITHDRAW_REQUESTED가 되고, 이력을 저장한 뒤 상품 판매 중지를 사유와 함께 요청한다")
+    @DisplayName("판매 중이고 미정산 금액이 없으면 WITHDRAW_REQUESTED가 되고, 이력을 저장한 뒤 상품 판매 중지를 사유와 함께 요청하고 철회 요청 이벤트를 발행한다")
     void requestWithdrawal_success() {
         Seller seller = seller();
         seller.approve();
@@ -61,11 +68,13 @@ class MemberRequestWithdrawalUseCaseTest {
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
         verify(sellerStatusHistoryRepository).save(any());
-        verify(memberProductPort).stopAllBySeller(SELLER_ID, "폐업 예정");
+        InOrder inOrder = inOrder(memberProductPort, eventPublisher);
+        inOrder.verify(memberProductPort).stopAllBySeller(SELLER_ID, "폐업 예정");
+        inOrder.verify(eventPublisher).publish(new SellerWithdrawalRequestedEvent(SELLER_ID, "폐업 예정"));
     }
 
     @Test
-    @DisplayName("미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS이고 상품 판매 중지를 요청하지 않는다")
+    @DisplayName("미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS이고 상품 판매 중지 요청도 이벤트 발행도 하지 않는다")
     void requestWithdrawal_unsettledAmount() {
         Seller seller = seller();
         seller.approve();
@@ -75,11 +84,11 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
-        verifyNoInteractions(memberProductPort);
+        verifyNoInteractions(memberProductPort, eventPublisher);
     }
 
     @Test
-    @DisplayName("판매 중이 아니면 409 SELLER_STATE_INVALID이고 상품 판매 중지를 요청하지 않는다")
+    @DisplayName("판매 중이 아니면 409 SELLER_STATE_INVALID이고 상품 판매 중지 요청도 이벤트 발행도 하지 않는다")
     void requestWithdrawal_notApproved() {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller()));   // PENDING
         given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(0L);
@@ -87,7 +96,7 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
         verify(sellerStatusHistoryRepository, never()).save(any());
-        verifyNoInteractions(memberProductPort);
+        verifyNoInteractions(memberProductPort, eventPublisher);
     }
 
     private void assertError(MemberErrorCode errorCode) {
