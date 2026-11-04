@@ -88,6 +88,22 @@ jobs:
           READONLY_DB_PASSWORD: readonly_user
         run: bash infra/postgres/init/01-init-schemas.sh
 
+      # 서비스별 스키마와 계정(market_user 등)을 만든다. 서비스 컨테이너에는 init 스크립트를 넣을 수 없어서 직접 실행한다.
+      # 비밀번호는 infra/compose.yaml 로컬 기본값과 같다.
+      - name: Create service schemas
+        env:
+          PGHOST: localhost
+          PGPASSWORD: palette
+          POSTGRES_USER: palette
+          POSTGRES_DB: palette
+          MEMBER_DB_PASSWORD: member_user
+          MARKET_DB_PASSWORD: market_user
+          PAYMENT_DB_PASSWORD: payment_user
+          SETTLEMENT_DB_PASSWORD: settlement_user
+          AI_DB_PASSWORD: ai_user
+          READONLY_DB_PASSWORD: readonly_user
+        run: bash infra/postgres/init/01-init-schemas.sh
+
       # 컴파일 + 테스트 + jar 생성. DB·Redis 접속 정보는 application.yaml 기본값(localhost)을 쓴다.
       - name: Build and test
         run: ./gradlew build --no-daemon
