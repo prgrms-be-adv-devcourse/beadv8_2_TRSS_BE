@@ -20,6 +20,7 @@ import com.backend.global.exception.DomainException;
 import com.backend.global.exception.ErrorCode;
 import com.backend.global.exception.GlobalErrorCode;
 import com.backend.global.rsData.RsData;
+import com.backend.global.security.InternalApiKeyFilter;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.out.MemberApi;
@@ -42,15 +43,22 @@ public class MemberApiClient implements MemberApi {
     @Autowired
     public MemberApiClient(
             @Value("${custom.member.baseUrl}") String baseUrl,
+            @Value("${custom.internal.apiKey}") String internalApiKey,
             @Value("${custom.member.connectTimeoutMillis}") long connectTimeoutMillis,
             @Value("${custom.member.readTimeoutMillis}") long readTimeoutMillis
     ) {
-        this(RestClient.builder().requestFactory(requestFactory(connectTimeoutMillis, readTimeoutMillis)), baseUrl);
+        this(RestClient.builder().requestFactory(requestFactory(connectTimeoutMillis, readTimeoutMillis)), baseUrl, internalApiKey);
     }
 
-    /** 테스트에서 MockRestServiceServer를 연결한 builder를 넘길 수 있게 열어 둔다 */
-    MemberApiClient(RestClient.Builder builder, String baseUrl) {
-        this.restClient = builder.baseUrl(baseUrl).build();
+    /**
+     * 테스트에서 MockRestServiceServer를 연결한 builder를 넘길 수 있게 열어 둔다
+     * 모든 요청에 내부 API 키 헤더(X-Internal-Key)를 넣는다. 없으면 회원 서비스가 401-INTERNAL_API_KEY_INVALID로 막는다
+     */
+    MemberApiClient(RestClient.Builder builder, String baseUrl, String internalApiKey) {
+        this.restClient = builder
+                .baseUrl(baseUrl)
+                .defaultHeader(InternalApiKeyFilter.HEADER, internalApiKey)
+                .build();
     }
 
     @Override

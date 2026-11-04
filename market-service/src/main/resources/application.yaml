@@ -72,6 +72,10 @@ custom:
     # 서명 키: 모든 서비스가 같은 값을 쓴다. 기본값 없이 환경변수(.env)로만 주입한다.
     secret: ${JWT_SECRET}
     accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  internal:
+    # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 모든 서비스가 같은 값을 쓰고, 기본값 없이 환경변수(.env)로만 주입한다.
+    # market이 받는 내부 API(/internal/v1/orders) 검사와 회원 내부 API 호출(MemberApiClient)에 함께 쓴다
+    apiKey: ${INTERNAL_API_KEY}
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   product:

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.ExpectedCount.never;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.anything;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -30,6 +31,7 @@ import com.backend.shared.member.dto.SellerStatus;
 class MemberApiClientTest {
 
     private static final String BASE_URL = "http://member:8080";
+    private static final String INTERNAL_API_KEY = "test-internal-api-key";
 
     private static final String SELLER_JSON = """
             {"sellerId": 3, "memberId": 7, "businessName": "팔레트 뷰티", "status": "APPROVED"}
@@ -42,14 +44,15 @@ class MemberApiClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new MemberApiClient(builder, BASE_URL);
+        client = new MemberApiClient(builder, BASE_URL, INTERNAL_API_KEY);
     }
 
     @Test
-    @DisplayName("활성 회원이면 예외 없이 끝난다")
+    @DisplayName("활성 회원이면 예외 없이 끝난다. 요청에는 내부 API 키 헤더가 붙는다")
     void checkActiveMember_active() {
         server.expect(requestTo(BASE_URL + "/internal/v1/members/7/active"))
                 .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Internal-Key", INTERNAL_API_KEY))
                 .andRespond(withSuccess(rsData("null"), MediaType.APPLICATION_JSON));
 
         client.checkActiveMember(7L);
