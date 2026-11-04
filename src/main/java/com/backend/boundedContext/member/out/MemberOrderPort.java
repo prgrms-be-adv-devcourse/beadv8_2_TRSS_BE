@@ -7,6 +7,7 @@ import com.backend.shared.order.dto.OrderSummaryDto;
 /**
  * 회원 컨텍스트가 쓰는 주문 기능만 담은 Port
  * 지금은 같은 앱의 OrderApi를 부르고, 주문 모듈이 분리되면 주문 내부 API를 부르는 HTTP 클라이언트로 바꿈
+ * 주문 모듈을 부르지 못하면(시간 초과·연결 실패·5xx) MemberPortUnavailableException, 주문 모듈이 오류로 응답하면 같은 resultCode의 DomainException을 던짐
  */
 public interface MemberOrderPort {
 

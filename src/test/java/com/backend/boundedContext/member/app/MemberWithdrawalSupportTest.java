@@ -1,6 +1,7 @@
 package com.backend.boundedContext.member.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -18,12 +19,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
 import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberPaymentPort;
+import com.backend.boundedContext.member.out.MemberPortUnavailableException;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
+import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.payment.dto.WalletSummaryDto;
 
@@ -118,6 +123,70 @@ class MemberWithdrawalSupportTest {
         assertThat(memberWithdrawalSupport.check(MEMBER_ID).withdrawable()).isTrue();
     }
 
+    @Test
+    @DisplayName("지갑이 아직 없으면(404 WALLET_NOT_FOUND) 잔액 0으로 보고 탈퇴할 수 있다")
+    void walletNotFound_balanceZero() {
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willThrow(new DomainException(PaymentErrorCode.WALLET_NOT_FOUND));
+
+        WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
+
+        assertThat(check.balance()).isZero();
+        assertThat(check.withdrawable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("지갑 조회가 지갑 없음이 아닌 오류로 실패하면 그 오류를 그대로 던진다")
+    void walletOtherError_propagates() {
+        DomainException walletError = new DomainException(MemberErrorCode.MEMBER_NOT_FOUND);
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willThrow(walletError);
+
+        assertThatThrownBy(() -> memberWithdrawalSupport.check(MEMBER_ID)).isSameAs(walletError);
+    }
+
+    @Test
+    @DisplayName("주문을 조회하지 못하면 통과시키지 않고 503 WITHDRAWAL_CHECK_UNAVAILABLE")
+    void orderUnavailable_rejected() {
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willThrow(unavailable());
+
+        assertUnavailable();
+    }
+
+    @Test
+    @DisplayName("판매자의 정산을 조회하지 못하면 503 WITHDRAWAL_CHECK_UNAVAILABLE")
+    void settlementUnavailable_rejected() {
+        Seller seller = seller(SellerStatus.WITHDRAWN);
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willThrow(unavailable());
+
+        assertUnavailable();
+    }
+
+    @Test
+    @DisplayName("지갑이나 충전 건을 조회하지 못하면 503 WITHDRAWAL_CHECK_UNAVAILABLE")
+    void paymentUnavailable_rejected() {
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willThrow(unavailable());
+
+        assertUnavailable();
+    }
+
+    private void assertUnavailable() {
+        assertThatThrownBy(() -> memberWithdrawalSupport.check(MEMBER_ID))
+                .isInstanceOfSatisfying(DomainException.class, e -> assertThat(e.getResultCode())
+                        .isEqualTo(MemberErrorCode.WITHDRAWAL_CHECK_UNAVAILABLE.resultCode()));
+    }
+
+    private static MemberPortUnavailableException unavailable() {
+        return new MemberPortUnavailableException("시간 초과", null);
+    }
+
     private void givenBuyer(boolean hasActiveOrders, long balance) {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
         given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(hasActiveOrders);
@@ -125,14 +194,17 @@ class MemberWithdrawalSupportTest {
     }
 
     private void givenSeller(SellerStatus status, long unsettledAmount) {
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller(status)));
+        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
+    }
+
+    private static Seller seller(SellerStatus status) {
         Seller seller = Seller.apply(Member.signUp("seller@palette.test", "encoded", "판매자"),
                 "팔레트 뷰티", "1234567890", "홍길동", "01012345678", "국민은행", "12345601123456", "홍길동");
         ReflectionTestUtils.setField(seller, "id", SELLER_ID);
         ReflectionTestUtils.setField(seller, "status", status);
-
-        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
-        given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
-        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(unsettledAmount);
-        given(memberPaymentPort.getWallet(MEMBER_ID)).willReturn(new WalletSummaryDto(MEMBER_ID, 0, 0));
+        return seller;
     }
 }
