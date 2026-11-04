@@ -79,10 +79,12 @@ custom:
     topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
     # 회원 기능은 회원 내부 API(/internal/v1/members)를 HTTP로 부른다
-    memberClient: http
     memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}   # 회원 서비스 주소
     memberConnectTimeoutSeconds: 2   # 회원 서비스 접속 제한 시간(초)
     memberReadTimeoutSeconds: 5      # 요청 후 회원 서비스 응답 대기 제한 시간(초)
+  member:
+    # 개발용 시드 비밀번호. 회원 서비스와 같은 환경변수로, 있을 때만 결제 시드(PaymentDataInit: 정산 시드용 홀딩)를 넣는다(운영은 비움)
+    seedPassword: ${MEMBER_SEED_PASSWORD:}
   # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
   toss:
     baseUrl: https://api.tosspayments.com

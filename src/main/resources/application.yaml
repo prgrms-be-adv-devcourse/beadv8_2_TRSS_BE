@@ -73,7 +73,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 6          # 스케줄 작업 6개(정산 2, 충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 다른 스케줄러가 멈추지 않는다
+        size: 4          # 스케줄 작업 4개(정산 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 다른 스케줄러가 멈추지 않는다 (충전 스케줄러는 payment-service로 이동)
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
@@ -118,32 +118,11 @@ custom:
     schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
-  payment:
-    topupUnit: 10000           # 충전 단위·최소 금액(원)
-    topupMax: 1000000          # 1회 최대 충전 금액(원)
-    topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
-    topupExpireIntervalSeconds: 60      # READY 만료 스케줄러 실행 간격(초)
-    topupReconcileIntervalSeconds: 300  # PROCESSING 결과 확인 스케줄러 실행 간격(초)
-    topupReconcileDelayMinutes: 5       # PROCESSING이 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
-    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
-    adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
-    # 결제가 회원 기능을 부르는 방식: local(같은 앱의 MemberApi) | http(회원 내부 API). 결제 서비스를 분리하면 http
-    memberClient: ${PAYMENT_MEMBER_CLIENT:local}
-    memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}   # http일 때 회원 서비스 주소
-    memberConnectTimeoutSeconds: 2   # 회원 서비스 접속 제한 시간(초)
-    memberReadTimeoutSeconds: 5      # 요청 후 회원 서비스 응답 대기 제한 시간(초)
-  # 루트 앱(회원·주문·정산)이 결제 기능을 부르는 방식: local(같은 앱의 PaymentApiAdapter) | http(결제 내부 API). 결제 서비스를 분리하면 http
+  # 결제 서비스(payment-service). 루트 앱(회원·주문·정산)은 결제 내부 API를 HTTP로 부른다(PaymentApiHttpAdapter)
   paymentService:
-    client: ${PAYMENT_CLIENT:local}
-    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}   # http일 때 결제 서비스 주소
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}   # 결제 서비스 주소
     connectTimeoutSeconds: 2   # 결제 서비스 접속 제한 시간(초)
     readTimeoutSeconds: 10     # 요청 후 결제 서비스 응답 대기 제한 시간(초). 결제는 지갑 잠금을 기다릴 수 있어 회원 조회보다 길게
-  # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
-  toss:
-    baseUrl: https://api.tosspayments.com
-    secretKey: ${TOSS_SECRET_KEY:}
-    connectTimeoutSeconds: 5   # 토스 서버 접속 제한 시간(초)
-    readTimeoutSeconds: 30     # 요청 후 토스 응답 대기 제한 시간(초). 넘으면 충전 건을 PROCESSING으로 두고, 스케줄러가 토스 조회로 최종 결과를 반영
   # 카카오 로그인(이미 가입한 회원이 카카오 계정을 연결해 로그인 수단으로 씀). 프론트가 받은 인가 코드를 서버가 토큰으로 바꿔 회원번호를 조회한다.
   # Client Secret은 환경변수로만 주입하고, 키가 없으면 카카오를 호출할 때만 실패한다.
   kakao:

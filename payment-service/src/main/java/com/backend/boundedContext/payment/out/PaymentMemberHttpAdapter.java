@@ -8,7 +8,6 @@ import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,8 +28,7 @@ import com.backend.global.rsData.RsData;
 import com.backend.shared.member.dto.MemberDto;
 
 /**
- * 회원 내부 API(/internal/v1/members)를 HTTP로 불러 PaymentMemberPort를 구현함 (결제 서비스 분리 후 사용)
- * custom.payment.memberClient가 http일 때만 빈으로 등록됨
+ * 회원 내부 API(/internal/v1/members)를 HTTP로 불러 PaymentMemberPort를 구현함
  *
  * 실패 처리
  * - 회원 서비스가 RsData 오류로 응답하면(예: 401-UNAUTHORIZED) 같은 resultCode의 DomainException으로 바꿈
@@ -38,7 +36,6 @@ import com.backend.shared.member.dto.MemberDto;
  * - 응답을 못 받았거나(접속 실패·시간 초과) 본문이 RsData가 아니면 502 EXTERNAL_SERVICE_ERROR
  */
 @Component
-@ConditionalOnProperty(name = "custom.payment.memberClient", havingValue = "http")
 public class PaymentMemberHttpAdapter implements PaymentMemberPort {
 
     private final MemberHttpClient client;

@@ -7,7 +7,6 @@ import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,9 +32,8 @@ import com.backend.shared.payment.dto.WalletSummaryDto;
 import com.backend.shared.payment.out.PaymentApi;
 
 /**
- * 결제 내부 API(/internal/v1/payments)를 HTTP로 불러 PaymentApi를 구현함 (결제 서비스 분리 후 루트 앱이 사용)
+ * 결제 내부 API(/internal/v1/payments)를 HTTP로 불러 PaymentApi를 구현함 (루트 앱의 유일한 PaymentApi 구현체)
  * 회원·주문·정산 코드는 지금처럼 PaymentApi만 보므로, 이 어댑터로 바뀌어도 그쪽 코드는 그대로임
- * custom.paymentService.client가 http일 때만 빈으로 등록됨 (기본 local은 같은 앱의 PaymentApiAdapter)
  *
  * 임시 코드: 회원·주문·정산이 아직 루트 앱에 남아 있는 동안만 씀
  * 각 서비스가 분리되면 부르는 쪽이 자기 Port + HTTP 클라이언트를 만들어 결제를 부르므로(예: MemberPaymentPort),
@@ -48,7 +46,6 @@ import com.backend.shared.payment.out.PaymentApi;
  *   pay·transfer에서 이 오류가 나면 결제 서비스에서 처리됐는지 알 수 없음 → 부른 쪽이 같은 멱등 키로 취소하거나 다시 부름
  */
 @Component
-@ConditionalOnProperty(name = "custom.paymentService.client", havingValue = "http")
 public class PaymentApiHttpAdapter implements PaymentApi {
 
     private final PaymentHttpClient client;
