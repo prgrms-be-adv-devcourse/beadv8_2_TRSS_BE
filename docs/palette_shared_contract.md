@@ -389,6 +389,18 @@ public interface SettlementApi {
 }
 ```
 
+### 내부 API (HTTP)
+
+정산 모듈을 분리하면 회원은 `SettlementApi.getUnsettledAmount` 대신 아래 내부 API를 HTTP로 부릅니다. 지금도 같은 앱 안에서 동작하며, 회원 쪽 클라이언트는 `MemberSettlementPort`의 HTTP 구현으로 만듭니다([개발 가이드 6.2](palette_development_guide.md)).
+
+| SettlementApi | 요청 | 없을 때·실패 |
+| --- | --- | --- |
+| `getUnsettledAmount` | `GET /internal/v1/settlements/sellers/{sellerId}/unsettled-amount` | 정산 후보가 없거나 없는 판매자면 200 + `data: 0` |
+
+- 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 금액(원)을 담습니다.
+- `holdSeller`는 HTTP로 열지 않습니다. 회원이 `SellerSanctionedEvent`(sellerId, reason)를 `seller.events` 토픽으로 발행하고 정산이 컨슈머(groupId `settlement`)로 받는 구조로 바뀝니다(#205). 이벤트 전환이 반영되기 전까지는 회원이 같은 앱 안에서 `SettlementApi.holdSeller`를 그대로 부릅니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). `/internal/**` 접근 제한(내부 전용 키, 외부 차단)은 보안 설정 작업에서 함께 정합니다.
+
 ### 받는 이벤트
 
 | 이벤트 | 처리 | 멱등 기준 |

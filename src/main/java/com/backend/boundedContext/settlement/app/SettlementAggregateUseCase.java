@@ -6,11 +6,11 @@ import com.backend.boundedContext.settlement.domain.SettlementCandidate;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryResult;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
+import com.backend.boundedContext.settlement.out.SettlementMemberPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.member.out.MemberApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -35,7 +35,7 @@ public class SettlementAggregateUseCase {
     private final SettlementRepository settlementRepository;
     private final SettlementCandidateRepository settlementCandidateRepository;
     private final SettlementProcessHistoryRepository settlementProcessHistoryRepository;
-    private final MemberApi memberApi;
+    private final SettlementMemberPort settlementMemberPort;
 
     /** @return 정산서에 묶은 후보 수 (이월하거나 대상이 없으면 0) */
     public int aggregateSeller(Long sellerId, YearMonth targetMonth, Long batchExecutionId, SettlementTrigger trigger) {
@@ -85,7 +85,7 @@ public class SettlementAggregateUseCase {
      * 지급 단계에서 판매자 조회 실패(404-SELLER_NOT_FOUND)로 재시도 불가 처리된다.
      */
     private String holdReasonOf(Long sellerId) {
-        boolean sanctioned = memberApi.getSellers(List.of(sellerId)).stream()
+        boolean sanctioned = settlementMemberPort.getSellers(List.of(sellerId)).stream()
                 .map(SellerDto::status)
                 .anyMatch(status -> status == SellerStatus.SANCTIONED);
         return sanctioned ? SANCTIONED_HOLD_REASON : null;

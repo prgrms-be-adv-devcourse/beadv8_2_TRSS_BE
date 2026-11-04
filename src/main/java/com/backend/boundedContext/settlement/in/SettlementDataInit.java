@@ -1,9 +1,9 @@
 package com.backend.boundedContext.settlement.in;
 
 import com.backend.boundedContext.settlement.app.SettlementFacade;
+import com.backend.boundedContext.settlement.out.SettlementMemberPort;
 import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.shared.member.dto.SellerDto;
-import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.order.dto.ConfirmType;
 import com.backend.shared.order.dto.ConfirmedOrderItemDto;
 import com.backend.shared.order.event.OrderConfirmedEvent;
@@ -31,7 +31,7 @@ import java.util.List;
  *
  * 결제 시드(PaymentDataInit, @Order(3))가 같은 주문 -1(25,000원)·-2(9,999원)로 HELD 홀딩을 만들어 두므로,
  * 월 정산을 실행하면 지급까지 PAID로 끝난다. 주문 ID나 금액을 바꾸면 PaymentDataInit도 함께 바꿔야 한다.
- * 시드 판매자(회원 2번)의 sellerId는 자동 증가라 회원 ID와 다르므로 MemberApi로 찾는다.
+ * 시드 판매자(회원 2번)의 sellerId는 자동 증가라 회원 ID와 다르므로 SettlementMemberPort로 찾는다.
  * 시드 판매자가 없으면(MEMBER_SEED_PASSWORD가 없는 환경 등) 아무것도 하지 않는다.
  *
  * TODO 주문 컨텍스트가 실제로 이벤트를 발행하게 되면 PaymentDataInit의 홀딩 시드와 함께 지우기
@@ -55,13 +55,13 @@ public class SettlementDataInit implements ApplicationRunner {
     private final SettlementDataInit self;
     private final SettlementFacade settlementFacade;
     private final EventPublisher eventPublisher;
-    private final MemberApi memberApi;
+    private final SettlementMemberPort settlementMemberPort;
 
     @Override
     public void run(ApplicationArguments args) {
         if (settlementFacade.hasAnyCandidate()) return;
 
-        Long sellerId = memberApi.findSellerByMemberId(SEED_SELLER_MEMBER_ID)
+        Long sellerId = settlementMemberPort.findSellerByMemberId(SEED_SELLER_MEMBER_ID)
                 .map(SellerDto::sellerId)
                 .orElse(null);
         if (sellerId == null) {

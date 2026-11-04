@@ -10,13 +10,13 @@ import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
 import com.backend.boundedContext.settlement.out.SettlementCandidateTotalsRow;
+import com.backend.boundedContext.settlement.out.SettlementMemberPort;
+import com.backend.boundedContext.settlement.out.SettlementPaymentPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.global.exception.DomainException;
-import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.payment.dto.SettledOrderAmountDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
-import com.backend.shared.payment.out.PaymentApi;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -31,7 +31,7 @@ import java.util.List;
  *
  * ① 지급 (하나의 트랜잭션)
  *    정산서 잠금 → 지급 가능한 상태인지 확인 → 정산서 합계 = 후보 합계 확인
- *    → PaymentApi.transfer(홀딩 차감·판매자/관리자 지갑 입금·원장 기록, 같은 트랜잭션에 참여)
+ *    → SettlementPaymentPort.transfer(홀딩 차감·판매자/관리자 지갑 입금·원장 기록, 같은 트랜잭션에 참여)
  *    → 정산서 PAID → 처리 이력(성공)
  *
  * ② 실패 기록 (별도 트랜잭션)
@@ -47,8 +47,8 @@ public class SettlementPayoutUseCase {
     private final SettlementSupport settlementSupport;
     private final SettlementCandidateRepository settlementCandidateRepository;
     private final SettlementProcessHistoryRepository settlementProcessHistoryRepository;
-    private final PaymentApi paymentApi;
-    private final MemberApi memberApi;
+    private final SettlementPaymentPort settlementPaymentPort;
+    private final SettlementMemberPort settlementMemberPort;
     // 10/14 리뷰 반영:정책 빈을 생성자로 주입받아 getMaxAttempts()·getRetryIntervalMinutes()로 꺼낸다(값은 인스턴스).
     // isNonRetryable 같은 규칙은 값에 기대지 않으므로 그대로 SettlementPolicy.isNonRetryable(...)로 부른다(규칙은 정적)
     private final SettlementPolicy settlementPolicy;
@@ -57,15 +57,15 @@ public class SettlementPayoutUseCase {
     public SettlementPayoutUseCase(SettlementSupport settlementSupport,
                                    SettlementCandidateRepository settlementCandidateRepository,
                                    SettlementProcessHistoryRepository settlementProcessHistoryRepository,
-                                   PaymentApi paymentApi,
-                                   MemberApi memberApi,
+                                   SettlementPaymentPort settlementPaymentPort,
+                                   SettlementMemberPort settlementMemberPort,
                                    SettlementPolicy settlementPolicy, // 10/14 리뷰 반영: 정책 빈 생성자 주입
                                    PlatformTransactionManager transactionManager) {
         this.settlementSupport = settlementSupport;
         this.settlementCandidateRepository = settlementCandidateRepository;
         this.settlementProcessHistoryRepository = settlementProcessHistoryRepository;
-        this.paymentApi = paymentApi;
-        this.memberApi = memberApi;
+        this.settlementPaymentPort = settlementPaymentPort;
+        this.settlementMemberPort = settlementMemberPort;
         this.settlementPolicy = settlementPolicy;
         this.newTransaction = new TransactionTemplate(transactionManager);
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -141,10 +141,10 @@ public class SettlementPayoutUseCase {
         List<SettledOrderAmountDto> orders = settlementCandidateRepository.sumSalePriceByOrder(settlementId).stream()
                 .map(row -> new SettledOrderAmountDto(row.orderId(), row.amount()))
                 .toList();
-        Long sellerMemberId = memberApi.getSeller(settlement.getSellerId()).memberId();
+        Long sellerMemberId = settlementMemberPort.getSeller(settlement.getSellerId()).memberId();
 
         // 홀딩 차감·지갑 입금·원장 기록. 이 트랜잭션에 참여하므로 아래가 실패하면 함께 롤백된다
-        TransferResultDto transferred = paymentApi.transfer(new SettlementTransferCommand(
+        TransferResultDto transferred = settlementPaymentPort.transfer(new SettlementTransferCommand(
                 settlement.getIdempotencyKey(), settlementId, sellerMemberId,
                 settlement.getPayoutAmount(), settlement.getTotalFee(), orders));
         // 같은 멱등 키의 지급 내역이 이미 있었는데 금액이 다르면 재시도 불가

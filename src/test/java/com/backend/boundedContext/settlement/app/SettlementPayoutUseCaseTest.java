@@ -11,15 +11,15 @@ import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
 import com.backend.boundedContext.settlement.out.SettlementCandidateTotalsRow;
 import com.backend.boundedContext.settlement.out.SettlementOrderAmountRow;
+import com.backend.boundedContext.settlement.out.SettlementMemberPort;
+import com.backend.boundedContext.settlement.out.SettlementPaymentPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
-import com.backend.shared.payment.out.PaymentApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.infrastructure.support.transaction.ResourcelessTransactionManager;
@@ -42,8 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 지급(하나의 지급 트랜잭션 + 별도 실패 기록 트랜잭션)을 DB 없이 검증한다.
- * Repository·PaymentApi·MemberApi는 메모리 가짜이고, 트랜잭션은 ResourcelessTransactionManager로 흉내 낸다.
- * PaymentApi 가짜는 동적 프록시로 transfer·findTransfer만 흉내 내므로, 결제 쪽 계약에 메서드가 더 있어도 이 테스트는 고칠 필요가 없다.
+ * Repository·SettlementPaymentPort·SettlementMemberPort는 메모리 가짜이고, 트랜잭션은 ResourcelessTransactionManager로 흉내 낸다.
+ * Port 가짜는 동적 프록시로 쓰는 메서드만 흉내 내므로, Port에 메서드가 더 생겨도 이 테스트는 고칠 필요가 없다.
  */
 class SettlementPayoutUseCaseTest {
 
@@ -71,10 +71,10 @@ class SettlementPayoutUseCaseTest {
                     histories.add((SettlementProcessHistory) args[0]);
                     return args[0];
                 }));
-        MemberApi memberApi = fake(MemberApi.class, Map.of("getSeller", args -> seller.get()));
+        SettlementMemberPort settlementMemberPort = fake(SettlementMemberPort.class, Map.of("getSeller", args -> seller.get()));
         useCase = new SettlementPayoutUseCase(
-                new SettlementSupport(settlementRepository, candidateRepository, historyRepository, memberApi),
-                candidateRepository, historyRepository, fakePaymentApi(), memberApi,
+                new SettlementSupport(settlementRepository, candidateRepository, historyRepository, settlementMemberPort),
+                candidateRepository, historyRepository, fakePaymentPort(), settlementMemberPort,
                 new SettlementPolicy(10, 10, 3, 10, 100, 50) /* 10/14 리뷰 반영: 정적 값 대입 대신 정책 객체를 직접 만들어 넘긴다 */, new ResourcelessTransactionManager());
     }
 
@@ -342,10 +342,9 @@ class SettlementPayoutUseCaseTest {
         }
     }
 
-    /** PaymentApi를 프록시로 만들어 transfer·findTransfer만 FakePayment로 넘긴다 */
-    private PaymentApi fakePaymentApi() {
-        return fake(PaymentApi.class, Map.of(
-                "transfer", args -> paymentApi.transfer((SettlementTransferCommand) args[0]),
-                "findTransfer", args -> Optional.empty()));
+    /** SettlementPaymentPort를 프록시로 만들어 transfer를 FakePayment로 넘긴다 */
+    private SettlementPaymentPort fakePaymentPort() {
+        return fake(SettlementPaymentPort.class, Map.of(
+                "transfer", args -> paymentApi.transfer((SettlementTransferCommand) args[0])));
     }
 }
