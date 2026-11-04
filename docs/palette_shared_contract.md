@@ -33,6 +33,26 @@ public record EventEnvelope<T extends DomainEvent>(UUID eventId, String eventTyp
 - 아래 컨텍스트별 이벤트는 모두 `DomainEvent`를 구현한다. 새 이벤트를 추가할 때도 구현한다.
 - 봉투는 Outbox 도입(TRSS-121)에서 쓴다. 단계와 필드 설명은 [개발 가이드 6.5](palette_development_guide.md#65-outbox)
 
+### 내부 API 공통 규칙
+
+서비스끼리 HTTP로 부르는 내부 API(`/internal/**`)는 사용자 JWT 대신 **내부 전용 키**로 인증한다(TRSS-162).
+
+```http
+GET /internal/v1/members/1
+X-Internal-Key: <INTERNAL_API_KEY 값>
+```
+
+| 요청 | 응답 |
+| --- | --- |
+| `X-Internal-Key`가 설정값과 같음 | 통과 (JWT 없어도 됨) |
+| 키가 없거나 다름 | 401 `401-INTERNAL_API_KEY_INVALID` ("내부 API 키가 없거나 올바르지 않습니다.") |
+| 사용자 JWT(`Authorization: Bearer`)만 있음 | 401 `401-INTERNAL_API_KEY_INVALID` (사용자 토큰으로는 내부 API를 부를 수 없다) |
+
+- 키는 환경 변수 `INTERNAL_API_KEY`(설정 `custom.internal.apiKey`)로 넣고 기본값이 없다. 없으면 앱이 뜨지 않는다. 지금은 모든 서비스가 같은 값을 쓴다.
+- 부르는 쪽 HTTP 클라이언트(`RestClient`)는 모든 요청에 `X-Internal-Key` 헤더를 기본으로 붙인다.
+- 외부에는 열지 않는다. nginx는 `/api/` 등만 앱으로 넘기고 `/internal/`은 넘기지 않는다. 게이트웨이를 만들 때도 `/internal/**`은 라우팅하지 않는다.
+- 내부 API 컨트롤러는 Swagger에 나오지 않게 `@Hidden`을 붙이고, 응답은 다른 API와 같은 `RsData`로 돌려준다.
+
 ## 1. 시나리오별 호출 흐름
 
 계약이 왜 필요한지 보여 주는 표입니다. "같은 Tx"는 호출한 쪽 트랜잭션에 참여한다는 뜻입니다.
@@ -114,7 +134,7 @@ public interface MemberApi {
 - 실패는 `MemberApi`와 같은 `resultCode`와 HTTP 상태로 돌려줍니다. 부르는 쪽은 `resultCode`로 같은 `DomainException`을 다시 만들 수 있습니다.
 - 결과가 없을 수 있는 조회(`Optional`)는 404가 아니라 200 + `data: null`입니다.
 - 이메일은 URL·접근 로그에 남지 않도록 본문으로 받습니다. 형식 검증은 하지 않고, 형식이 맞지 않으면 없는 것으로 응답합니다.
-- Swagger에는 나오지 않습니다(`@Hidden`). `/internal/**` 접근 제한(내부 전용 키, 외부 차단)은 보안 설정 작업에서 함께 정합니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
 
 ### DTO
 
@@ -420,7 +440,7 @@ public interface SettlementApi {
 
 - 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 금액(원)을 담습니다.
 - `holdSeller`는 HTTP로 열지 않습니다. 회원이 `SellerSanctionedEvent`(sellerId, reason)를 `seller.events` 토픽으로 발행하고 정산이 컨슈머(groupId `settlement`)로 받는 구조로 바뀝니다(#205). 이벤트 전환이 반영되기 전까지는 회원이 같은 앱 안에서 `SettlementApi.holdSeller`를 그대로 부릅니다.
-- Swagger에는 나오지 않습니다(`@Hidden`). `/internal/**` 접근 제한(내부 전용 키, 외부 차단)은 보안 설정 작업에서 함께 정합니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
 
 ### 받는 이벤트
 
