@@ -83,6 +83,9 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
       MARKET_DB_USERNAME: ${MARKET_DB_USERNAME:?MARKET_DB_USERNAME이 .env에 없습니다}
+      # 회원 내부 API(/internal/v1/members·sellers)를 부르는 주소. 회원 서비스 분리 전까지는 루트 모놀리스(app)
+      # Docker 내부망으로 직접 부르고 nginx를 거치지 않는다. 키(INTERNAL_API_KEY)는 .env에서 읽는다
+      MEMBER_SERVICE_URL: http://app:8080
       SERVER_FORWARD_HEADERS_STRATEGY: native
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     # 서버 8GB를 app(2g)·Kafka(1g)·DB·모니터링과 나눠 쓴다
