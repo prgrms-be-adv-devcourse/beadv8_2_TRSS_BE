@@ -71,10 +71,10 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
-| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `ProductApi.stopAllBySeller(sellerId, reason)` (판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원) → `SellerWithdrawalRequestedEvent` | 동기, 같은 Tx + 이벤트 (상품 컨슈머가 생기면 동기 호출을 뺀다) |
+| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `SellerWithdrawalRequestedEvent` → (market) 판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원 | 이벤트 (미정산 확인은 동기 조회) |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기, 같은 Tx |
-| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `ProductApi.resumeAllBySeller(sellerId)` (철회로 중지된 상품만 판매 중으로) → `SellerWithdrawalRejectedEvent` | 동기, 같은 Tx + 이벤트 (상품 컨슈머가 생기면 동기 호출을 뺀다) |
-| 관리자 제재 | member | 판매자 SANCTIONED → `ProductApi.stopAllBySeller(sellerId, reason)` → `SettlementApi.holdSeller(sellerId, reason)` → `SellerSanctionedEvent` | 동기, 같은 Tx + 이벤트 (상품·정산 컨슈머가 생기면 동기 호출을 뺀다) |
+| 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `SellerWithdrawalRejectedEvent` → (market) 철회로 중지된 상품만 판매 중으로 | 이벤트 |
+| 관리자 제재 | member | 판매자 SANCTIONED → `SettlementApi.holdSeller(sellerId, reason)` → `SellerSanctionedEvent` → (market) 판매 중 상품 STOPPED | 이벤트 + 정산 보류는 동기, 같은 Tx (정산 컨슈머가 생기면 뺀다, #225) |
 | 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 |
 | 충전 준비·승인, 주문 생성·결제 | payment, order | `MemberApi.checkActiveMember(memberId)`: 탈퇴한 회원이면 401 (탈퇴 후 남은 Access Token 차단) | 동기 조회 |
 | 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 |
@@ -174,7 +174,8 @@ public record SellerWithdrawalRejectedEvent(Long sellerId) implements DomainEven
 - 가입 이벤트는 가입 트랜잭션에서 outbox에 저장되고, 릴레이가 커밋 뒤 토픽 `member.events`로 보낸다. 결제가 Kafka 컨슈머(groupId `payment`)로 받아 별도 트랜잭션에서 지갑을 만든다(TRSS-138). 지갑 생성이 실패해도 가입은 롤백되지 않는다.
 - 그래서 가입 직후 지갑이 아직 없는 구간이 있다(보통 몇 초). 이 구간의 충전·결제 처리는 결제 담당이 정한다(#194).
 - 판매자 이벤트(TRSS-144)는 토픽 `seller.events`로 나가고 키는 `sellerId`다. 같은 판매자의 이벤트는 같은 파티션으로 가서 발행 순서대로 처리된다. 사유(`reason`)는 앞뒤 공백을 뺀 값이다.
-- 판매자 이벤트는 상태 변경과 같은 트랜잭션에서 outbox에 저장한다. 받는 쪽(상품 groupId `product`, 정산 groupId `settlement`)이 컨슈머를 만들기 전까지는 위 동기 호출도 그대로 하고, 컨슈머가 생기면 동기 호출을 뺀다. 상품 중지·재개와 정산 보류는 다시 해도 결과가 같아서 둘 다 실행돼도 된다.
+- 판매자 이벤트는 상태 변경과 같은 트랜잭션에서 outbox에 저장한다. 상품 중지·재개는 market 컨슈머(groupId `market`)가 이벤트로 처리하고 회원은 상품을 부르지 않는다(TRSS-160).
+- 정산 보류는 정산 컨슈머(groupId `settlement`)가 생기기 전까지 제재 트랜잭션에서 `holdSeller`도 동기로 부른다(#225). 정산 보류는 다시 해도 결과가 같아서 둘 다 실행돼도 된다.
 
 ## 3. product
 
@@ -264,11 +265,12 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `SellerSanctionedEvent` (미구현) | `stopAllBySeller(sellerId, reason)`와 같은 처리 | `processed_event`(eventId, `product`), 판매 중 상품만 바꾸므로 다시 와도 결과가 같다 |
-| `SellerWithdrawalRequestedEvent` (미구현) | `stopAllBySeller(sellerId, reason)`와 같은 처리 | 위와 같음 |
-| `SellerWithdrawalRejectedEvent` (미구현) | `resumeAllBySeller(sellerId)`와 같은 처리 | `processed_event`(eventId, `product`), 철회로 중지된 상품만 바꾸므로 다시 와도 결과가 같다 |
+| `SellerSanctionedEvent` | `stopAllBySeller(sellerId, reason)`와 같은 처리 | `processed_event`(eventId, `market`), 판매 중 상품만 바꾸므로 다시 와도 결과가 같다 |
+| `SellerWithdrawalRequestedEvent` | `stopAllBySeller(sellerId, reason)`와 같은 처리 | 위와 같음 |
+| `SellerWithdrawalRejectedEvent` | `resumeAllBySeller(sellerId)`와 같은 처리 | `processed_event`(eventId, `market`), 철회로 중지된 상품만 바꾸므로 다시 와도 결과가 같다 |
 
-- Kafka 토픽 `seller.events`를 `@KafkaListener`(groupId `product`)로 받는다. 컨슈머가 생기면 회원의 `stopAllBySeller`·`resumeAllBySeller` 동기 호출을 뺀다.
+- Kafka 토픽 `seller.events`를 market-service의 `ProductSellerEventListener`(`@KafkaListener` groupId `market`)로 받는다. 한 메시지를 한 트랜잭션에서 처리하고, 실패하면 재시도 후 `seller.events-dlt`로 보낸다.
+- 회원은 `stopAllBySeller`·`resumeAllBySeller`를 부르지 않는다(TRSS-160). 두 메서드는 market 안에서 컨슈머가 쓴다.
 
 ## 4. order
 
