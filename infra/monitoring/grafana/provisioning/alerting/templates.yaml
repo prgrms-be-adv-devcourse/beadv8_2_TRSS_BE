@@ -12,9 +12,9 @@ templates:
       {{ define "palette.slack.title" -}}
       {{ with .Alerts.Firing }}{{ with index . 0 -}}
       {{ if .Labels.log_logger -}}
-      🚨 [palette-app] ERROR {{ printf "%.0f" .Values.B }}건 (최근 5분)
+      🚨 [{{ .Labels.container }}] ERROR {{ printf "%.0f" .Values.B }}건 (최근 5분)
       {{- else -}}
-      ⚠️ [palette-app] ERROR 알림 검사 실패
+      ⚠️ [palette] ERROR 알림 검사 실패
       {{- end }}
       {{- end }}{{ end }}
       {{- end }}
@@ -23,7 +23,7 @@ templates:
       {{ range .Alerts.Firing -}}
       {{ if .Labels.log_logger -}}
       {{ $logger := .Labels.log_logger -}}
-      {{ $expr := printf `{container="palette-app"} | json | log_level="ERROR" | log_logger="%s"` $logger -}}
+      {{ $expr := printf `{container="%s"} | json | log_level="ERROR" | log_logger="%s"` .Labels.container $logger -}}
       {{ $panes := printf `{"a":{"datasource":"loki","queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"%s"}],"range":{"from":"now-1h","to":"now"}}}` (reReplaceAll `"` `\"` $expr) -}}
       • 위치: `{{ reReplaceAll `.*\.` "" $logger }}`
       • 발생: {{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05" }} (KST)
