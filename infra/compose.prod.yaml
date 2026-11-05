@@ -69,6 +69,8 @@ services:
       # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
       # 로컬은 이 값이 없어 지금처럼 사람이 읽는 형식으로 찍힌다.
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # 로그의 service.version에 배포 커밋 SHA를 넣는다(deploy.sh가 APP_VERSION을 넘김). Slack 에러 알림이 배포 커밋 링크로 쓴다
+      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # JVM 힙은 이 값의 75%(Dockerfile의 MaxRAMPercentage). 서버 8GB를 DB·Redis와 나눠 쓴다.
     mem_limit: 2g
     healthcheck:
@@ -106,6 +108,7 @@ services:
       MEMBER_SERVICE_URL: http://app:8080
       SERVER_FORWARD_HEADERS_STRATEGY: native
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # 서버 8GB를 app(2g)·Kafka(1g)·DB·모니터링과 나눠 쓴다
     mem_limit: 1g
     healthcheck:
@@ -141,6 +144,7 @@ services:
       SETTLEMENT_DB_USERNAME: ${SETTLEMENT_DB_USERNAME:?SETTLEMENT_DB_USERNAME이 .env에 없습니다}
       SERVER_FORWARD_HEADERS_STRATEGY: native
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # market과 같은 1g(힙 768MB). 월 1회 배치와 관리자 조회뿐이라 평소 사용량은 market(약 430MB)과 비슷하다
     mem_limit: 1g
     healthcheck:

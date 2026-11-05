@@ -17,11 +17,12 @@ contactPoints:
           title: '{{ template "palette.slack.title" . }}'
           text: '{{ template "palette.slack.text" . }}'
 
-# 모든 알림을 Slack으로 보낸다. 로그를 남긴 앱(container)·클래스(log_logger)마다 따로 알린다.
+# 모든 알림을 Slack으로 보낸다. 앱(container)·클래스(log_logger)·원인(root_cause)·배포 버전(service_version)마다 따로 알린다.
+# 원인이 같으면 요청 경로(http_path)가 달라도 한 메시지에 묶여 온다. 배포 직후 새로 생긴 에러는 배포 버전이 달라 별도 메시지로 온다.
 policies:
   - orgId: 1
     receiver: slack-palette
-    group_by: ["alertname", "container", "log_logger"]
+    group_by: ["alertname", "container", "log_logger", "root_cause", "service_version"]
     group_wait: 30s        # 처음 발생하면 30초 모았다가 보낸다
     group_interval: 5m     # 같은 묶음에 새 알림이 생기면 최소 5분 간격으로 보낸다
-    repeat_interval: 1h    # 계속 발생 중이면 1시간마다 다시 알린다
+    repeat_interval: 1h    # 계속 발생 중이면 1시간마다 다시 알린다(제목의 1시간·24시간 누적 건수로 추세를 본다)
