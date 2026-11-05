@@ -96,6 +96,38 @@ services:
       kafka:
         condition: service_healthy
 
+  # 정산(settlement-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 settlement 스키마에 settlement_user로 접속한다(app의 DB_USERNAME과 다른 계정).
+  # 처음 띄우기 전에 운영 DB의 정산 테이블을 public에서 settlement로 옮겨야 한다(settlement-service V1 파일 주석 참고).
+  #   옮기기 전에 뜨면 빈 settlement 스키마에 V1으로 빈 테이블을 만들어 버린다.
+  # 결제·회원 서비스 연결 전이라 스케줄러(월 정산·지급 재시도)는 끈 채로 둔다(SETTLEMENT_SCHEDULING_ENABLED 기본 false).
+  settlement:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: settlement-service
+    image: palette-settlement
+    container_name: palette-settlement
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      SETTLEMENT_DB_USERNAME: ${SETTLEMENT_DB_USERNAME:?SETTLEMENT_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # market과 같은 1g(힙 768MB). 월 1회 배치와 관리자 조회뿐이라 평소 사용량은 market(약 430MB)과 비슷하다
+    mem_limit: 1g
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     container_name: palette-postgres
