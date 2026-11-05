@@ -12,6 +12,7 @@ import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.ErrorCode;
 import com.backend.shared.member.dto.SellerStatus;
+import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +41,10 @@ class SellerReapplyIntegrationTest {
 
     @Autowired
     private MemberSellerFacade memberSellerFacade;
+
+    // 정산은 settlement-service로 옮겨 갔다. 모놀리스의 임시 SettlementApiClient는 예외를 던지므로 mock으로 바꾼다(미정산 금액 0, 보류는 아무것도 안 함)
+    @MockitoBean
+    private SettlementApi settlementApi;
 
     @Autowired
     private MemberRepository memberRepository;
