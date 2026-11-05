@@ -2,8 +2,6 @@ package com.backend.boundedContext.member.out;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -17,7 +15,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-import com.backend.shared.settlement.out.SettlementApi;
 
 class MemberSettlementHttpAdapterTest {
 
@@ -26,16 +23,13 @@ class MemberSettlementHttpAdapterTest {
     private static final String URL = BASE_URL + "/internal/v1/settlements/sellers/5/unsettled-amount";
 
     private MockRestServiceServer server;
-    private SettlementApi settlementApi;
     private MemberSettlementHttpAdapter adapter;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        settlementApi = mock(SettlementApi.class);
-        adapter = new MemberSettlementHttpAdapter(
-                new MemberInternalApiClient("settlement", builder, BASE_URL, INTERNAL_API_KEY), settlementApi);
+        adapter = new MemberSettlementHttpAdapter(new MemberInternalApiClient("settlement", builder, BASE_URL, INTERNAL_API_KEY));
     }
 
     @Test
@@ -56,14 +50,6 @@ class MemberSettlementHttpAdapterTest {
         server.expect(requestTo(URL)).andRespond(withSuccess(rsData("null"), MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> adapter.getUnsettledAmount(5L)).isInstanceOf(MemberPortUnavailableException.class);
-    }
-
-    @Test
-    @DisplayName("정산 보류는 HTTP로 열려 있지 않아 같은 앱의 SettlementApi를 부른다 (#225에서 제거)")
-    void holdSeller() {
-        adapter.holdSeller(5L, "위조 상품 판매");
-
-        verify(settlementApi).holdSeller(5L, "위조 상품 판매");
     }
 
     private static String rsData(String data) {
