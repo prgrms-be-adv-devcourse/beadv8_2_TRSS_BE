@@ -9,7 +9,7 @@
 | 컨텍스트 | 담당 | 제공하는 Api | 발행하는 이벤트 |
 | --- | --- | --- | --- |
 | member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent`, `SellerSanctionedEvent`, `SellerWithdrawalRequestedEvent`, `SellerWithdrawalRejectedEvent` |
-| product | 유진 | `ProductApi` | - |
+| product | 유진 | `ProductApi` | `WishAddedEvent`, `WishRemovedEvent` |
 | order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
 | settlement | 다은 | `SettlementApi` | - |
@@ -271,6 +271,21 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 
 - Kafka 토픽 `seller.events`를 market-service의 `ProductSellerEventListener`(`@KafkaListener` groupId `market`)로 받는다. 한 메시지를 한 트랜잭션에서 처리하고, 실패하면 재시도 후 `seller.events-dlt`로 보낸다.
 - 회원은 `stopAllBySeller`·`resumeAllBySeller`를 부르지 않는다(TRSS-160). 두 메서드는 market 안에서 컨슈머가 쓴다.
+
+현### 발행하는 이벤트
+
+```java
+package com.backend.shared.product.event;
+
+/** 구매자가 상품을 찜함. 이미 찜한 상품을 다시 찜하면 발행하지 않는다 */
+public record WishAddedEvent(Long memberId, Long productId) implements DomainEvent { }   // aggregateType PRODUCT, aggregateId productId
+
+/** 구매자가 찜을 해제함. 찜하지 않은 상품을 해제하면 발행하지 않는다 */
+public record WishRemovedEvent(Long memberId, Long productId) implements DomainEvent { }  // aggregateType PRODUCT, aggregateId productId
+```
+
+- 찜 추가·해제와 같은 트랜잭션에서 outbox에 저장하고, 릴레이가 Kafka 토픽 `product.events`로 발행한다(키 `productId`, 같은 상품의 찜 이벤트는 순서대로 전달된다).
+- 아직 받는 쪽은 없다. 상품 검색 색인(ES)의 찜 수 반영에 쓸 예정이다(TRSS-167).
 
 ## 4. order
 
