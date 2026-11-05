@@ -30,7 +30,6 @@ import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.shared.order.out.OrderApi;
-import com.backend.shared.product.out.ProductApi;
 import com.backend.shared.member.dto.MemberStatus;
 
 /**
@@ -60,10 +59,7 @@ class MemberWithdrawalIntegrationTest {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
-    // 상품·주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
-    @MockitoBean
-    private ProductApi productApi;
-
+    // 주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
     @MockitoBean
     private OrderApi orderApi;
 

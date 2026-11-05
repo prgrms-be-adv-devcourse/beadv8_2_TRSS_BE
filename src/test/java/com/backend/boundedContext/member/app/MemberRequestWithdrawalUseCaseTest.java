@@ -23,7 +23,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
-import com.backend.boundedContext.member.out.MemberProductPort;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
@@ -48,16 +47,13 @@ class MemberRequestWithdrawalUseCaseTest {
     private MemberSettlementPort memberSettlementPort;
 
     @Mock
-    private MemberProductPort memberProductPort;
-
-    @Mock
     private EventPublisher eventPublisher;
 
     @InjectMocks
     private MemberRequestWithdrawalUseCase memberRequestWithdrawalUseCase;
 
     @Test
-    @DisplayName("판매 중이고 미정산 금액이 없으면 WITHDRAW_REQUESTED가 되고, 이력을 저장한 뒤 상품 판매 중지를 사유와 함께 요청하고 철회 요청 이벤트를 발행한다")
+    @DisplayName("판매 중이고 미정산 금액이 없으면 WITHDRAW_REQUESTED가 되고, 이력을 저장한 뒤 사유가 담긴 철회 요청 이벤트를 발행한다")
     void requestWithdrawal_success() {
         Seller seller = seller();
         seller.approve();
@@ -68,13 +64,12 @@ class MemberRequestWithdrawalUseCaseTest {
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
         verify(sellerStatusHistoryRepository).save(any());
-        InOrder inOrder = inOrder(memberProductPort, eventPublisher);
-        inOrder.verify(memberProductPort).stopAllBySeller(SELLER_ID, "폐업 예정");
+        InOrder inOrder = inOrder(eventPublisher);
         inOrder.verify(eventPublisher).publish(new SellerWithdrawalRequestedEvent(SELLER_ID, "폐업 예정"));
     }
 
     @Test
-    @DisplayName("미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS이고 상품 판매 중지 요청도 이벤트 발행도 하지 않는다")
+    @DisplayName("미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS이고 철회 요청 이벤트를 발행하지 않는다")
     void requestWithdrawal_unsettledAmount() {
         Seller seller = seller();
         seller.approve();
@@ -84,11 +79,11 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
-        verifyNoInteractions(memberProductPort, eventPublisher);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
-    @DisplayName("판매 중이 아니면 409 SELLER_STATE_INVALID이고 상품 판매 중지 요청도 이벤트 발행도 하지 않는다")
+    @DisplayName("판매 중이 아니면 409 SELLER_STATE_INVALID이고 철회 요청 이벤트를 발행하지 않는다")
     void requestWithdrawal_notApproved() {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller()));   // PENDING
         given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(0L);
@@ -96,7 +91,7 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
         verify(sellerStatusHistoryRepository, never()).save(any());
-        verifyNoInteractions(memberProductPort, eventPublisher);
+        verifyNoInteractions(eventPublisher);
     }
 
     private void assertError(MemberErrorCode errorCode) {
