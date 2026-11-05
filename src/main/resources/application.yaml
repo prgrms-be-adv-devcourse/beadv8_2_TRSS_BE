@@ -85,6 +85,11 @@ custom:
   internal:
     # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 기본값 없이 환경변수(.env)로만 주입한다.
     apiKey: ${INTERNAL_API_KEY}
+  market:
+    # 주문·상품(market-service) 주소. 회원이 주문 내부 API(/internal/v1/orders)를 부를 때 쓴다 (탈퇴 검사, 판매자 철회 승인, 관리자 회원 상세)
+    baseUrl: ${MARKET_SERVICE_URL:http://localhost:8082}
+    connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
@@ -147,6 +152,11 @@ custom:
     connectTimeoutSeconds: 3
     readTimeoutSeconds: 5
   settlement:
+    # 정산 주소. 회원이 정산 내부 API(/internal/v1/settlements)로 미지급 금액을 조회할 때 쓴다 (탈퇴 검사, 판매자 철회 요청·승인, 내 판매자 정보)
+    # 정산이 settlement-service로 분리되기 전에는 루트 앱(8080), 분리 후에는 settlement-service(8084)
+    baseUrl: ${SETTLEMENT_SERVICE_URL:http://localhost:8080}
+    connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
     feeRate: 10                # 수수료율(%)
     payDayOfMonth: 10          # 매월 정산일
     maxAttempts: 3             # 최초 1회 + 재시도 2회

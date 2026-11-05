@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 판매자 본인 철회 요청 (APPROVED → WITHDRAW_REQUESTED). 관리자가 승인해야 철회가 끝난다.
- * 아직 지급되지 않은 정산 금액이 있으면 요청할 수 없다.
+ * 아직 지급되지 않은 정산 금액이 있으면 요청할 수 없다. 정산을 조회하지 못하면 503 WITHDRAWAL_CHECK_UNAVAILABLE로 거부한다.
  * 요청하면 철회 요청 이벤트(SellerWithdrawalRequestedEvent)를 발행하고, 상품(market)이 받아 판매 중 상품을 모두 중지한다 (철회가 거절되면 다시 판매 중으로 돌아온다).
  */
 @Component
@@ -30,7 +30,7 @@ public class MemberRequestWithdrawalUseCase {
         Seller seller = sellerRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.SELLER_NOT_FOUND));
 
-        long unsettledAmount = memberSettlementPort.getUnsettledAmount(seller.getId());
+        long unsettledAmount = WithdrawalCheckQueries.query(() -> memberSettlementPort.getUnsettledAmount(seller.getId()));
         if (unsettledAmount > 0) {
             throw new DomainException(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
         }
