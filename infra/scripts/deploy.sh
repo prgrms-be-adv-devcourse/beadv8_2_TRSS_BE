@@ -31,6 +31,10 @@ main() {
 
     echo "▶ 배포 대상: $(git log -1 --format='%h %s')"
 
+    # 앱 로그의 service.version에 배포 커밋을 남긴다(compose.prod.yaml). Slack 에러 알림이 이 값으로 배포 커밋 링크를 단다
+    export APP_VERSION
+    APP_VERSION="$(git rev-parse --short=7 HEAD)"
+
     echo "▶ 빌드·재시작"
     "${compose[@]}" up -d --build --remove-orphans
 
