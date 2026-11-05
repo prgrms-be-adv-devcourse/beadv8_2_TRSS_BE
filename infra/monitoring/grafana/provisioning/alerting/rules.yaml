@@ -111,6 +111,10 @@ groups:
               expression: F
               reducer: last
         for: 0s
+        # ERROR가 멈춰도 1시간은 발생 중으로 유지한다. 없으면 띄엄띄엄 나는 에러(예: 10분 간격)마다
+        # 5분 뒤 해결됨 → 다음 에러에 새 알림이 되어, slack.yaml의 repeat_interval(1시간)이 적용되지 않고 알림이 반복된다.
+        # 대신 원인을 고친 뒤에도 최대 1시간은 발생 중으로 남는다. Grafana 12.2 이상에서만 읽는다
+        keepFiringFor: 1h
         noDataState: OK       # ERROR가 없으면 결과가 비어 있으므로 정상으로 본다
         execErrState: Error   # Loki 조회 자체가 실패하면 그것도 알린다
         labels:
