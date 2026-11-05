@@ -8,6 +8,7 @@ import com.backend.global.security.JwtAuthenticationEntryPoint;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.global.security.SecurityConfig;
 import com.backend.global.security.SecurityErrorResponseWriter;
+import com.backend.shared.member.dto.MemberRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,9 @@ class ApiV1ProductControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @MockitoBean
     private ProductFacade productFacade;
@@ -74,12 +78,32 @@ class ApiV1ProductControllerTest {
     }
 
     @Test
-    @DisplayName("상품 상세: 로그인 없이 호출할 수 있다")
+    @DisplayName("상품 상세: 로그인 없이 호출할 수 있고, 회원 ID 없이(찜 여부 false) 조회한다")
     void detail_public() throws Exception {
         mockMvc.perform(get("/api/v1/products/11"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"));
 
-        verify(productFacade).getProductDetail(11L);
+        verify(productFacade).getProductDetail(11L, null);
+    }
+
+    @Test
+    @DisplayName("상품 상세: 로그인 토큰을 보내면 그 회원 ID로 찜 여부를 함께 조회한다")
+    void detail_loggedIn() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/products/11").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        verify(productFacade).getProductDetail(11L, 3L);
+    }
+
+    @Test
+    @DisplayName("상품 상세: 만료·위조된 토큰이면 로그인하지 않은 것으로 보고 조회한다")
+    void detail_invalidToken() throws Exception {
+        mockMvc.perform(get("/api/v1/products/11").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isOk());
+
+        verify(productFacade).getProductDetail(11L, null);
     }
 }

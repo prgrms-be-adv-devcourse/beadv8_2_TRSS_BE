@@ -99,9 +99,16 @@ public class ProductFacade {
         return productSearchProductsUseCase.searchProducts(keyword, categoryId, sort, excludeSoldOut, pageable);
     }
 
+    /** 로그인하지 않은 구매자의 상품 상세 (찜 여부는 false) */
     @Transactional(readOnly = true)
     public ProductDetailDto getProductDetail(Long productId) {
-        return productGetProductDetailUseCase.getProductDetail(productId);
+        return productGetProductDetailUseCase.getProductDetail(productId, null);
+    }
+
+    /** 구매자 상품 상세. memberId가 null이 아니면 그 회원의 찜 여부를 채운다 */
+    @Transactional(readOnly = true)
+    public ProductDetailDto getProductDetail(Long productId, Long memberId) {
+        return productGetProductDetailUseCase.getProductDetail(productId, memberId);
     }
 
     /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. 대표 이미지는 필수, 상세 이미지는 선택이다. */
