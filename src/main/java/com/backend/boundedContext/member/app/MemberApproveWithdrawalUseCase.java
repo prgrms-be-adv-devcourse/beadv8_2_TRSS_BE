@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
  * 상품은 철회를 요청할 때 이미 중지했으므로 여기서 다시 중지하지 않는다.
  * 요청 전에 결제된 주문의 배송·반품이 남아 있을 수 있어, 승인할 때 진행 중인 판매와 미정산 금액을 다시 확인한다.
  * 신청서는 이력 스냅샷에 남기고 사업자번호는 비운다.
+ * 판매·정산을 조회하지 못하면 503 WITHDRAWAL_CHECK_UNAVAILABLE로 거부한다.
  */
 @Component
 @RequiredArgsConstructor
@@ -36,10 +37,10 @@ public class MemberApproveWithdrawalUseCase {
         }
 
         // 판매자 상품이 들어간 CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED 주문
-        if (memberOrderPort.hasActiveSales(sellerId)) {
+        if (WithdrawalCheckQueries.query(() -> memberOrderPort.hasActiveSales(sellerId))) {
             throw new DomainException(MemberErrorCode.ACTIVE_SALES_EXIST);
         }
-        if (memberSettlementPort.getUnsettledAmount(sellerId) > 0) {
+        if (WithdrawalCheckQueries.query(() -> memberSettlementPort.getUnsettledAmount(sellerId)) > 0) {
             throw new DomainException(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
         }
 

@@ -31,6 +31,7 @@ public class MemberUpdateSellerUseCase {
 
         SellerStatusHistory latest = sellerStatusHistoryRepository.findFirstBySellerIdOrderByIdDesc(seller.getId())
                 .orElse(null);
-        return MySellerResponse.from(seller, latest, memberSettlementPort.getUnsettledAmount(seller.getId()));
+        // 미지급 금액은 화면 표시용이라, 정산을 조회하지 못하면 그 값만 비우고 응답한다
+        return MySellerResponse.from(seller, latest, DisplayPortQueries.orNull(() -> memberSettlementPort.getUnsettledAmount(seller.getId())));
     }
 }

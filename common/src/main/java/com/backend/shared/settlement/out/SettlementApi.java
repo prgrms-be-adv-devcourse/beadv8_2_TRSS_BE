@@ -1,7 +1,8 @@
 package com.backend.shared.settlement.out;
 
 /**
- * 구현체: settlement 컨텍스트의 SettlementApiAdapter (boundedContext.settlement.in)
+ * 구현체: settlement-service의 SettlementApiAdapter (boundedContext.settlement.in)
+ * 루트 모놀리스에는 서비스 간 연결 전까지 임시 구현 SettlementApiClient(monolith.client)가 있다
  */
 public interface SettlementApi {
 
