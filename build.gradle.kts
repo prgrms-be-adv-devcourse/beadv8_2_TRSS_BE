@@ -63,7 +63,6 @@ allprojects {
 dependencies {
 	// webmvc, data-jpa, validation, security, kafka, jjwt, springdoc은 common이 api로 준다
 	implementation(project(":common"))
-	implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
@@ -72,7 +71,6 @@ dependencies {
 	runtimeOnly("org.postgresql:postgresql")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	testImplementation(testFixtures(project(":common")))   // OutboxTestEvent
-	testImplementation("org.springframework.boot:spring-boot-starter-batch-jdbc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")

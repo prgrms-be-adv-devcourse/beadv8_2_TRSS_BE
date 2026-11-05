@@ -6,6 +6,7 @@ import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -15,8 +16,6 @@ import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,13 +31,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 
 /**
  * 관리자 제재 (S10). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 정산 보류는 SettlementApi를 mock으로 바꿔 호출됐는지만 확인하고, 제재 이벤트는 outbox에 남는지 확인한다.
+ * 상품 중지·정산 보류는 제재 이벤트를 받은 상품·정산이 하므로, 제재 이벤트가 outbox에 남는지만 확인한다.
  */
 @SpringBootTest
 class AdminSellerSanctionIntegrationTest {
@@ -58,12 +54,9 @@ class AdminSellerSanctionIntegrationTest {
     @Autowired
     private OutboxEventRepository outboxEventRepository;
 
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
     @MockitoBean
-    private SettlementApi settlementApi;
-
-    // 주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
-    @MockitoBean
-    private OrderApi orderApi;
+    private MemberSettlementPort memberSettlementPort;
 
     private Long memberId;
     private Long sellerId;
@@ -88,7 +81,7 @@ class AdminSellerSanctionIntegrationTest {
     }
 
     @Test
-    @DisplayName("제재: SANCTIONED가 되고 사유가 이력에 남으며 정산 보류를 요청하고 제재 이벤트가 outbox에 PENDING으로 남는다. 사업자번호와 SELLER role은 남고, 판매는 막힌다")
+    @DisplayName("제재: SANCTIONED가 되고 사유가 이력에 남으며 제재 이벤트가 outbox에 PENDING으로 남는다. 사업자번호와 SELLER role은 남고, 판매는 막힌다")
     void sanction() {
         memberSellerFacade.approveSeller(sellerId);
 
@@ -102,7 +95,6 @@ class AdminSellerSanctionIntegrationTest {
         assertThat(latest.getToStatus()).isEqualTo(SellerStatus.SANCTIONED);
         assertThat(latest.getReason()).isEqualTo("위조 상품 판매");
 
-        verify(settlementApi).holdSeller(sellerId, "위조 상품 판매");
         assertThat(sellerOutbox()).singleElement()
                 .satisfies(outbox -> {
                     assertThat(outbox.getEventType()).isEqualTo("SellerSanctionedEvent");
@@ -136,12 +128,11 @@ class AdminSellerSanctionIntegrationTest {
     }
 
     @Test
-    @DisplayName("제재: 심사 대기 판매자는 제재할 수 없다 (409 SELLER_STATE_INVALID), 정산 보류도 요청하지 않고 제재 이벤트도 남지 않는다")
+    @DisplayName("제재: 심사 대기 판매자는 제재할 수 없다 (409 SELLER_STATE_INVALID), 제재 이벤트도 남지 않는다")
     void sanction_pending() {
         assertError(() -> memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매"), MemberErrorCode.SELLER_STATE_INVALID);
 
         assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.PENDING);
-        verify(settlementApi, never()).holdSeller(any(), any());
         assertThat(sellerOutbox()).isEmpty();
     }
 

@@ -25,6 +25,7 @@ import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberPaymentPort;
+import com.backend.boundedContext.member.out.MemberPortUnavailableException;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerDto;
@@ -93,6 +94,35 @@ class MemberGetMemberDetailUseCaseTest {
         AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
         assertThat(detail.sellerStatus()).isNull();
         assertThat(detail.recentOrders()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("결제를 조회하지 못하면 지갑만 null로 비우고, 회원 정보와 최근 주문은 그대로 돌려준다")
+    void getMemberDetail_paymentUnavailable() {
+        given(memberSupport.getMember(3L)).willReturn(member);
+        given(memberGetSellerUseCase.findSellerByMemberId(3L)).willReturn(Optional.empty());
+        given(memberPaymentPort.getWallet(3L)).willThrow(new MemberPortUnavailableException("시간 초과", null));
+        given(memberOrderPort.getRecentOrders(3L, 5)).willReturn(List.of());
+
+        AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
+
+        assertThat(detail.email()).isEqualTo("user@palette.com");
+        assertThat(detail.wallet()).isNull();
+        assertThat(detail.recentOrders()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("주문을 조회하지 못하면 최근 주문만 null로 비운다 (주문이 없는 빈 목록과 구분)")
+    void getMemberDetail_orderUnavailable() {
+        given(memberSupport.getMember(3L)).willReturn(member);
+        given(memberGetSellerUseCase.findSellerByMemberId(3L)).willReturn(Optional.empty());
+        given(memberPaymentPort.getWallet(3L)).willReturn(new WalletSummaryDto(3L, 50_000L, 0L));
+        given(memberOrderPort.getRecentOrders(3L, 5)).willThrow(new MemberPortUnavailableException("시간 초과", null));
+
+        AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
+
+        assertThat(detail.wallet().balance()).isEqualTo(50_000L);
+        assertThat(detail.recentOrders()).isNull();
     }
 
     @Test

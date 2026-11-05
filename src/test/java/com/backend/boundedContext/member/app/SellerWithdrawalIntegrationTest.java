@@ -6,7 +6,9 @@ import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -15,8 +17,6 @@ import com.backend.global.outbox.OutboxEvent;
 import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +36,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 판매자 철회 요청 (S7). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 관리자 승인 API는 아직 없어서 도메인 메서드로 승인하고, 미정산 금액은 SettlementApi를 mock으로 바꾼다.
+ * 관리자 승인 API는 아직 없어서 도메인 메서드로 승인하고, 미정산 금액은 MemberSettlementPort를 mock으로 바꾼다.
  */
 @SpringBootTest
 class SellerWithdrawalIntegrationTest {
@@ -56,12 +56,13 @@ class SellerWithdrawalIntegrationTest {
     @Autowired
     private OutboxEventRepository outboxEventRepository;
 
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
     @MockitoBean
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
-    // 주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
+    // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     private Long memberId;
 
@@ -117,7 +118,7 @@ class SellerWithdrawalIntegrationTest {
     void requestWithdrawal_unsettledAmount() {
         approve();
         Long sellerId = sellerRepository.findByMemberId(memberId).orElseThrow().getId();
-        given(settlementApi.getUnsettledAmount(sellerId)).willReturn(15_000L);
+        given(memberSettlementPort.getUnsettledAmount(sellerId)).willReturn(15_000L);
         List<SellerStatusHistory> before = sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId);
 
         assertError(() -> memberSellerFacade.requestWithdrawal(memberId, "폐업 예정"), MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);

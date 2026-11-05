@@ -23,13 +23,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.SocialProvider;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.boundedContext.payment.app.PaymentFacade;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.security.JwtTokenProvider;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.member.dto.MemberStatus;
 
 /**
@@ -59,9 +59,9 @@ class MemberWithdrawalIntegrationTest {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
-    // 주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
+    // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     @Autowired
     private LoginAttemptStore loginAttemptStore;

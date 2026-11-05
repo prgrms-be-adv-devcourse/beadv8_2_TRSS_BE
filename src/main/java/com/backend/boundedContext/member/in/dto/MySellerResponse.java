@@ -20,9 +20,9 @@ public record MySellerResponse(
         String reason,                  // 가장 최근 상태 변경 사유 (반려·철회 요청·철회 거절·제재)
         LocalDateTime appliedAt,
         LocalDateTime approvedAt,       // 승인 전·반려·재신청 뒤에는 null
-        long unsettledAmount            // 아직 지급되지 않은 정산 금액. 0일 때만 철회 요청 가능
+        Long unsettledAmount            // 아직 지급되지 않은 정산 금액. 0일 때만 철회 요청 가능. 정산을 조회하지 못하면 null
 ) {
-    public static MySellerResponse from(Seller seller, SellerStatusHistory latest, long unsettledAmount) {
+    public static MySellerResponse from(Seller seller, SellerStatusHistory latest, Long unsettledAmount) {
         return new MySellerResponse(
                 seller.getId(),
                 seller.getStatus(),

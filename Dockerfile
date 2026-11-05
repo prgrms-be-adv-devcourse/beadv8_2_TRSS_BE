@@ -25,6 +25,7 @@ ARG MODULE=""
 COPY common/src common/src
 COPY src src
 COPY market-service/src market-service/src
+COPY settlement-service/src settlement-service/src
 RUN if [ -z "$MODULE" ]; then \
         ./gradlew :bootJar -x test --no-daemon && cp build/libs/*.jar app.jar; \
     else \
@@ -45,6 +46,6 @@ RUN groupadd --system app && useradd --system --gid app app
 COPY --from=build --chown=app:app /workspace/app.jar app.jar
 USER app
 
-# 루트 모놀리스 8080, market-service 8082 (각 application.yaml의 server.port)
-EXPOSE 8080 8082
+# 루트 모놀리스 8080, market-service 8082, settlement-service 8084 (각 application.yaml의 server.port)
+EXPOSE 8080 8082 8084
 ENTRYPOINT ["java", "-jar", "app.jar"]
