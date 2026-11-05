@@ -15,6 +15,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -94,6 +95,14 @@ public class GlobalExceptionHandler {
         // 서비스에서 먼저 중복을 검사하지 못한 경우의 안전망. 원인 SQL은 로그에만 남긴다.
         log.warn("DataIntegrityViolation {} {}", req.getRequestURI(), e.getMostSpecificCause().getMessage());
         return toResponse(GlobalErrorCode.DATA_CONFLICT, null);
+    }
+
+    // 클라이언트가 응답을 다 받기 전에 연결을 끊은 경우 (Broken pipe, Connection reset by peer).
+    // 예: healthcheck 시간 초과, 사용자가 로딩 중에 창을 닫음. 서버 잘못이 아니므로 ERROR(Slack 알림 대상)로 남기지 않는다.
+    // 받을 상대가 없어 응답 본문도 쓰지 않는다(쓰면 같은 예외가 다시 난다)
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientAbort(AsyncRequestNotUsableException e, HttpServletRequest req) {
+        log.warn("Client aborted {} {}: {}", req.getMethod(), req.getRequestURI(), e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
