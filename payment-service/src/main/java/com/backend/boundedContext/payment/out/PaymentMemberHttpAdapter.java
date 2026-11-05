@@ -25,10 +25,12 @@ import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
 import com.backend.global.rsData.RsData;
+import com.backend.global.security.InternalApiKeyFilter;
 import com.backend.shared.member.dto.MemberDto;
 
 /**
  * 회원 내부 API(/internal/v1/members)를 HTTP로 불러 PaymentMemberPort를 구현함
+ * 모든 요청에 내부 키 헤더(X-Internal-Key)를 넣는다. 회원 서비스가 이 키로 내부 호출인지 확인함
  *
  * 실패 처리
  * - 회원 서비스가 RsData 오류로 응답하면(예: 401-UNAUTHORIZED) 같은 resultCode의 DomainException으로 바꿈
@@ -44,17 +46,21 @@ public class PaymentMemberHttpAdapter implements PaymentMemberPort {
     public PaymentMemberHttpAdapter(
             @Value("${custom.payment.memberBaseUrl}") String baseUrl,
             @Value("${custom.payment.memberConnectTimeoutSeconds}") long connectTimeoutSeconds,
-            @Value("${custom.payment.memberReadTimeoutSeconds}") long readTimeoutSeconds
+            @Value("${custom.payment.memberReadTimeoutSeconds}") long readTimeoutSeconds,
+            @Value("${custom.internal.apiKey}") String internalApiKey
     ) {
-        this(RestClient.builder().requestFactory(requestFactory(connectTimeoutSeconds, readTimeoutSeconds)), baseUrl);
+        this(RestClient.builder().requestFactory(requestFactory(connectTimeoutSeconds, readTimeoutSeconds)), baseUrl, internalApiKey);
     }
 
     /**
      * 테스트에서 MockRestServiceServer를 연결한 builder를 넘길 수 있게 열어 둠
      * HttpServiceProxyFactory가 아래 MemberHttpClient 인터페이스를 보고 실제 요청 코드를 만들어 줌
      */
-    PaymentMemberHttpAdapter(RestClient.Builder builder, String baseUrl) {
-        RestClient restClient = builder.baseUrl(baseUrl).build();
+    PaymentMemberHttpAdapter(RestClient.Builder builder, String baseUrl, String internalApiKey) {
+        RestClient restClient = builder
+                .baseUrl(baseUrl)
+                .defaultHeader(InternalApiKeyFilter.HEADER, internalApiKey)
+                .build();
         this.client = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
                 .build()
                 .createClient(MemberHttpClient.class);

@@ -63,19 +63,14 @@ allprojects {
 dependencies {
 	// webmvc, data-jpa, validation, security, kafka, jjwt, springdoc은 common이 api로 준다
 	implementation(project(":common"))
-	implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
-	// 상품 이미지 S3 저장소 (custom.product.image.storage=s3일 때만 사용)
-	implementation(platform("software.amazon.awssdk:bom:2.52.0"))
-	implementation("software.amazon.awssdk:s3")
 
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("org.postgresql:postgresql")
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	testImplementation(testFixtures(project(":common")))   // OutboxTestEvent
-	testImplementation("org.springframework.boot:spring-boot-starter-batch-jdbc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")

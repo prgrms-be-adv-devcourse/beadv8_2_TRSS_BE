@@ -13,6 +13,20 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
+# Spring 앱(app·market·settlement) 기동 확인. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
+# 앱마다 컨테이너 안에서 로그인 없이 열리는 Swagger 문서(/v3/api-docs)가 200인지 본다.
+#   정산처럼 로그인 없이 열리는 API가 없는 앱도 같은 방식으로 확인하려고 nginx를 거치지 않는다.
+# 실행 이미지에 curl이 없어도 되게 bash로 HTTP 요청을 직접 보낸다. 포트만 앱마다 다르다(각 서비스의 test).
+#   첫 줄(상태)만 읽고 끊으면 앱이 본문을 보내다 Broken pipe ERROR를 남기므로, 본문까지 끝까지 읽고 판단한다.
+#   $$는 compose가 $를 변수로 바꾸지 않게 하는 표기다(bash에는 $로 전달된다).
+x-app-healthcheck: &app-healthcheck
+  interval: 10s
+  # 막 뜬 앱은 첫 /v3/api-docs 생성(전체 API 스캔)에 5초 넘게 걸릴 수 있다.
+  # 시간이 다 되면 Docker가 요청을 끊어 앱에 Broken pipe가 나므로 넉넉히 기다린다(평소 응답은 1초 미만)
+  timeout: 15s
+  retries: 3
+  start_period: 90s   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다
+
 services:
   nginx:
     image: nginx:stable
@@ -26,10 +40,12 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../../palette-web:/usr/share/nginx/html:ro
-    # nginx는 시작할 때 app의 이름을 찾으므로 app이 먼저 떠 있어야 한다.
+    # nginx는 시작할 때 app·market·settlement의 이름을 찾으므로 셋이 먼저 떠 있어야 한다.
     # grafana는 요청할 때 찾으므로(nginx/default.conf의 resolver) 꺼져 있어도 nginx는 뜬다.
     depends_on:
       - app
+      - market
+      - settlement
 
   app:
     # 이미지는 레포 루트의 Dockerfile로 빌드한다(Gradle 빌드 기준이 루트)
@@ -48,17 +64,98 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 회원이 주문 내부 API(/internal/v1/orders)를 부를 market-service 주소 (탈퇴 검사, 판매자 철회 승인, 관리자 회원 상세)
+      MARKET_SERVICE_URL: http://market:8082
+      # 회원이 정산 내부 API(/internal/v1/settlements)를 부를 settlement-service 주소 (판매자 철회 요청·승인, 판매자 회원 탈퇴의 미지급 금액 확인)
+      SETTLEMENT_SERVICE_URL: http://settlement:8084
       # nginx가 넘긴 X-Forwarded-* 헤더로 원래 요청 주소·프로토콜을 판단한다.
       SERVER_FORWARD_HEADERS_STRATEGY: native
       # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
       # 로컬은 이 값이 없어 지금처럼 사람이 읽는 형식으로 찍힌다.
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # 로그의 service.version에 배포 커밋 SHA를 넣는다(deploy.sh가 APP_VERSION을 넘김). Slack 에러 알림이 배포 커밋 링크로 쓴다
+      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # JVM 힙은 이 값의 75%(Dockerfile의 MaxRAMPercentage). 서버 8GB를 DB·Redis와 나눠 쓴다.
     mem_limit: 2g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # 상품·주문(market-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 market 스키마에 market_user로 접속한다(app의 DB_USERNAME과 다른 계정).
+  market:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: market-service
+    image: palette-market
+    container_name: palette-market
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      MARKET_DB_USERNAME: ${MARKET_DB_USERNAME:?MARKET_DB_USERNAME이 .env에 없습니다}
+      # 회원 내부 API(/internal/v1/members·sellers)를 부르는 주소. 회원 서비스 분리 전까지는 루트 모놀리스(app)
+      # Docker 내부망으로 직접 부르고 nginx를 거치지 않는다. 키(INTERNAL_API_KEY)는 .env에서 읽는다
+      MEMBER_SERVICE_URL: http://app:8080
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
+    # 서버 8GB를 app(2g)·Kafka(1g)·DB·모니터링과 나눠 쓴다
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # 정산(settlement-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 settlement 스키마에 settlement_user로 접속한다(app의 DB_USERNAME과 다른 계정).
+  # 처음 띄우기 전에 운영 DB의 정산 테이블을 public에서 settlement로 옮겨야 한다(settlement-service V1 파일 주석 참고).
+  #   옮기기 전에 뜨면 빈 settlement 스키마에 V1으로 빈 테이블을 만들어 버린다.
+  # 결제·회원 서비스 연결 전이라 스케줄러(월 정산·지급 재시도)는 끈 채로 둔다(SETTLEMENT_SCHEDULING_ENABLED 기본 false).
+  settlement:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: settlement-service
+    image: palette-settlement
+    container_name: palette-settlement
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      SETTLEMENT_DB_USERNAME: ${SETTLEMENT_DB_USERNAME:?SETTLEMENT_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
+    # market과 같은 1g(힙 768MB). 월 1회 배치와 관리자 조회뿐이라 평소 사용량은 market(약 430MB)과 비슷하다
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    depends_on:
+      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -179,7 +276,8 @@ services:
       - loki
 
   grafana:
-    image: grafana/grafana:12.1.0
+    # 12.2부터 알림 규칙 파일의 keepFiringFor(해결 판단 유예)를 읽는다(monitoring/grafana/provisioning/alerting/rules.yaml)
+    image: grafana/grafana:12.2.0
     container_name: palette-grafana
     restart: unless-stopped
     logging: *default-logging

@@ -18,10 +18,19 @@ COPY ai-service/build.gradle.kts ai-service/
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon > /dev/null
 
 # 테스트는 CI에서 돌리므로 이미지 빌드에서는 생략한다.
-# 루트 모놀리스의 실행 jar만 만든다(common jar는 그 안의 BOOT-INF/lib에 들어간다).
+# MODULE로 고른 앱 하나의 실행 jar만 만든다(common jar는 그 안의 BOOT-INF/lib에 들어간다).
+#   비워 두면 루트 모놀리스, market-service처럼 적으면 그 서비스 (compose.prod.yaml의 build.args)
+# 서비스가 분리될 때마다 그 모듈의 src를 여기에 추가한다.
+ARG MODULE=""
 COPY common/src common/src
 COPY src src
-RUN ./gradlew :bootJar -x test --no-daemon && cp build/libs/*.jar app.jar
+COPY market-service/src market-service/src
+COPY settlement-service/src settlement-service/src
+RUN if [ -z "$MODULE" ]; then \
+        ./gradlew :bootJar -x test --no-daemon && cp build/libs/*.jar app.jar; \
+    else \
+        ./gradlew ":$MODULE:bootJar" -x test --no-daemon && cp "$MODULE"/build/libs/*.jar app.jar; \
+    fi
 
 # 2단계: 실행
 FROM eclipse-temurin:21-jre
@@ -37,5 +46,6 @@ RUN groupadd --system app && useradd --system --gid app app
 COPY --from=build --chown=app:app /workspace/app.jar app.jar
 USER app
 
-EXPOSE 8080
+# 루트 모놀리스 8080, market-service 8082, settlement-service 8084 (각 application.yaml의 server.port)
+EXPOSE 8080 8082 8084
 ENTRYPOINT ["java", "-jar", "app.jar"]

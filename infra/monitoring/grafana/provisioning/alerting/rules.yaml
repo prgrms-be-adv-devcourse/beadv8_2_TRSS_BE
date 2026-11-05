@@ -1,7 +1,18 @@
-# 앱 ERROR 로그 알림 규칙. 1분마다 최근 5분의 ERROR 로그 수를 클래스별로 세고, 1건이라도 있으면 알린다.
+# 앱 ERROR 로그 알림 규칙. 1분마다 최근 5분의 ERROR 로그 수를 세고, 1건이라도 있으면 알린다.
+# 서비스가 분리되어 컨테이너가 늘면 아래 container=~ 목록에 추가한다(세 쿼리 모두).
 # 앱 로그는 운영에서 JSON(ECS)으로 찍히므로(compose.prod.yaml의 LOGGING_STRUCTURED_FORMAT_CONSOLE)
-# | json 으로 log.level → log_level, log.logger → log_logger 필드를 꺼내 쓴다.
+# | json 으로 필요한 필드만 라벨로 꺼낸다.
+#   log_level·log_logger      : 로그 레벨·로그를 남긴 클래스
+#   error_type                : 맨 위 예외 (예: CannotCreateTransactionException)
+#   root_cause                : 스택트레이스의 마지막 "Caused by:" 예외 (예: UnknownHostException). 없으면 error_type
+#   http_path                 : "Unhandled GET /api/v1/..." 메시지의 요청 경로. 숫자 ID는 {id}로 바꿔 경로마다 알림이 쪼개지지 않게 한다
+#   service_version           : 배포 커밋 SHA (deploy.sh가 APP_VERSION으로 넘기고 compose.prod.yaml이 로그에 넣는다)
+# 원인(root_cause)·배포 버전이 다르면 다른 알림이 된다. 메시지 전문은 ID 등이 섞여 알림이 폭증하므로 라벨로 쓰지 않는다.
 # 4xx는 GlobalExceptionHandler가 ERROR로 남기지 않으므로 알림 대상이 아니다.
+# 클라이언트가 응답을 받기 전에 연결을 끊은 경우(AsyncRequestNotUsableException, Broken pipe)는 대응할 것이 없어 뺀다.
+#
+# A(최근 5분)가 알림 조건이고, D(최근 1시간)·F(최근 24시간)는 Slack 메시지에 누적 건수로만 보여 준다.
+# 세 쿼리는 범위([5m]·[1h]·[24h])만 다르고 나머지는 같아야 한다. 라벨이 같아야 누적 건수가 같은 알림에 붙는다.
 apiVersion: 1
 
 groups:
@@ -23,8 +34,14 @@ groups:
               refId: A
               queryType: instant
               expr: >-
-                sum by (log_logger) (
-                  count_over_time({container="palette-app"} | json | __error__="" | log_level="ERROR" [5m])
+                sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
+                  count_over_time({container=~"palette-app|palette-market|palette-settlement"}
+                    |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
+                    | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
+                    | __error__="" | log_level="ERROR"
+                    | label_format root_cause=`{{ if contains "Caused by: " .stack }}{{ regexReplaceAll "(?s).*Caused by: ([A-Za-z0-9_.]+).*" .stack "${1}" }}{{ else }}{{ .error_type }}{{ end }}`
+                    | label_format http_path=`{{ if hasPrefix "Unhandled " .message }}{{ regexReplaceAll "/[0-9]+" (regexReplaceAll "^Unhandled [A-Z]+ ([^ ?]+).*" .message "${1}") "/{id}" }}{{ end }}`
+                  [5m])
                 )
           - refId: B
             datasourceUid: __expr__
@@ -43,13 +60,67 @@ groups:
                 - evaluator:
                     type: gt
                     params: [0]
+          - refId: D
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: D
+              queryType: instant
+              expr: >-
+                sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
+                  count_over_time({container=~"palette-app|palette-market|palette-settlement"}
+                    |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
+                    | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
+                    | __error__="" | log_level="ERROR"
+                    | label_format root_cause=`{{ if contains "Caused by: " .stack }}{{ regexReplaceAll "(?s).*Caused by: ([A-Za-z0-9_.]+).*" .stack "${1}" }}{{ else }}{{ .error_type }}{{ end }}`
+                    | label_format http_path=`{{ if hasPrefix "Unhandled " .message }}{{ regexReplaceAll "/[0-9]+" (regexReplaceAll "^Unhandled [A-Z]+ ([^ ?]+).*" .message "${1}") "/{id}" }}{{ end }}`
+                  [1h])
+                )
+          - refId: E
+            datasourceUid: __expr__
+            model:
+              refId: E
+              type: reduce
+              expression: D
+              reducer: last
+          - refId: F
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: F
+              queryType: instant
+              expr: >-
+                sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
+                  count_over_time({container=~"palette-app|palette-market|palette-settlement"}
+                    |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
+                    | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
+                    | __error__="" | log_level="ERROR"
+                    | label_format root_cause=`{{ if contains "Caused by: " .stack }}{{ regexReplaceAll "(?s).*Caused by: ([A-Za-z0-9_.]+).*" .stack "${1}" }}{{ else }}{{ .error_type }}{{ end }}`
+                    | label_format http_path=`{{ if hasPrefix "Unhandled " .message }}{{ regexReplaceAll "/[0-9]+" (regexReplaceAll "^Unhandled [A-Z]+ ([^ ?]+).*" .message "${1}") "/{id}" }}{{ end }}`
+                  [24h])
+                )
+          - refId: G
+            datasourceUid: __expr__
+            model:
+              refId: G
+              type: reduce
+              expression: F
+              reducer: last
         for: 0s
+        # ERROR가 멈춰도 1시간은 발생 중으로 유지한다. 없으면 띄엄띄엄 나는 에러(예: 10분 간격)마다
+        # 5분 뒤 해결됨 → 다음 에러에 새 알림이 되어, slack.yaml의 repeat_interval(1시간)이 적용되지 않고 알림이 반복된다.
+        # 대신 원인을 고친 뒤에도 최대 1시간은 발생 중으로 남는다. Grafana 12.2 이상에서만 읽는다
+        keepFiringFor: 1h
         noDataState: OK       # ERROR가 없으면 결과가 비어 있으므로 정상으로 본다
         execErrState: Error   # Loki 조회 자체가 실패하면 그것도 알린다
         labels:
           severity: error
         annotations:
-          summary: "{{ $labels.log_logger }}에서 최근 5분간 ERROR {{ $values.B }}건"
+          summary: "{{ $labels.log_logger }}에서 최근 5분간 ERROR {{ $values.B }}건 (원인 {{ $labels.root_cause }})"
           description: >-
             Grafana Explore에서 확인:
-            {container="palette-app"} | json | log_level="ERROR" | log_logger="{{ $labels.log_logger }}"
+            {container="{{ $labels.container }}"} | json | log_level="ERROR" | log_logger="{{ $labels.log_logger }}"

@@ -6,13 +6,17 @@ import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.ErrorCode;
+import com.backend.global.outbox.OutboxEvent;
+import com.backend.global.outbox.OutboxEventRepository;
+import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +36,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 판매자 철회 요청 (S7). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 관리자 승인 API는 아직 없어서 도메인 메서드로 승인하고, 미정산 금액은 SettlementApi를 mock으로 바꾼다.
+ * 관리자 승인 API는 아직 없어서 도메인 메서드로 승인하고, 미정산 금액은 MemberSettlementPort를 mock으로 바꾼다.
  */
 @SpringBootTest
 class SellerWithdrawalIntegrationTest {
@@ -49,8 +53,16 @@ class SellerWithdrawalIntegrationTest {
     @Autowired
     private SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
     @MockitoBean
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
+
+    // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
+    @MockitoBean
+    private MemberOrderPort memberOrderPort;
 
     private Long memberId;
 
@@ -66,6 +78,7 @@ class SellerWithdrawalIntegrationTest {
     @AfterEach
     void cleanUp() {
         sellerRepository.findByMemberId(memberId).ifPresent(seller -> {
+            outboxEventRepository.deleteAll(sellerOutbox(seller.getId()));
             sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()));
             sellerRepository.delete(seller);
         });
@@ -73,7 +86,7 @@ class SellerWithdrawalIntegrationTest {
     }
 
     @Test
-    @DisplayName("판매 중이고 미정산 금액이 없으면 WITHDRAW_REQUESTED가 되고, 사유가 이력과 응답에 남는다")
+    @DisplayName("판매 중이고 미정산 금액이 없으면 WITHDRAW_REQUESTED가 되고, 사유가 이력과 응답에 남으며 철회 요청 이벤트가 outbox에 PENDING으로 남는다")
     void requestWithdrawal_success() {
         approve();
 
@@ -91,20 +104,28 @@ class SellerWithdrawalIntegrationTest {
         assertThat(latest.getFromStatus()).isEqualTo(SellerStatus.APPROVED);
         assertThat(latest.getToStatus()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
         assertThat(latest.getReason()).isEqualTo("폐업 예정");
+
+        assertThat(sellerOutbox(saved.getId())).singleElement()
+                .satisfies(outbox -> {
+                    assertThat(outbox.getEventType()).isEqualTo("SellerWithdrawalRequestedEvent");
+                    assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+                    assertThat(outbox.getPayload()).contains("폐업 예정");
+                });
     }
 
     @Test
-    @DisplayName("미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS이고 상태와 이력은 그대로다")
+    @DisplayName("미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS이고 상태와 이력은 그대로다, 철회 요청 이벤트도 남지 않는다")
     void requestWithdrawal_unsettledAmount() {
         approve();
         Long sellerId = sellerRepository.findByMemberId(memberId).orElseThrow().getId();
-        given(settlementApi.getUnsettledAmount(sellerId)).willReturn(15_000L);
+        given(memberSettlementPort.getUnsettledAmount(sellerId)).willReturn(15_000L);
         List<SellerStatusHistory> before = sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId);
 
         assertError(() -> memberSellerFacade.requestWithdrawal(memberId, "폐업 예정"), MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
         assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.APPROVED);
         assertThat(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId)).hasSameSizeAs(before);
+        assertThat(sellerOutbox(sellerId)).isEmpty();
     }
 
     @Test
@@ -136,6 +157,12 @@ class SellerWithdrawalIntegrationTest {
     }
 
     // 관리자 승인 API 대신 도메인 메서드로 승인한다
+    private List<OutboxEvent> sellerOutbox(Long sellerId) {
+        return outboxEventRepository.findAll().stream()
+                .filter(outbox -> outbox.getAggregateType().equals("SELLER") && outbox.getAggregateId().equals(sellerId))
+                .toList();
+    }
+
     private void approve() {
         Seller seller = sellerRepository.findByMemberId(memberId).orElseThrow();
         SellerStatusHistory history = seller.approve();

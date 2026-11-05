@@ -2,6 +2,7 @@ package com.backend.boundedContext.payment.out;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -22,6 +23,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import com.backend.global.exception.DomainException;
+import com.backend.global.security.InternalApiKeyFilter;
 import com.backend.shared.member.dto.MemberDto;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.MemberStatus;
@@ -33,6 +35,7 @@ import com.backend.shared.member.dto.MemberStatus;
 class PaymentMemberHttpAdapterTest {
 
     private static final String BASE_URL = "http://member-service:8081";
+    private static final String INTERNAL_API_KEY = "test-internal-api-key";
 
     private static final String MEMBER_JSON = """
             {"id": 3, "email": "buyer@palette.test", "name": "구매자", "role": "USER", "status": "ACTIVE"}
@@ -45,7 +48,7 @@ class PaymentMemberHttpAdapterTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        adapter = new PaymentMemberHttpAdapter(builder, BASE_URL);
+        adapter = new PaymentMemberHttpAdapter(builder, BASE_URL, INTERNAL_API_KEY);
     }
 
     @Test
@@ -53,6 +56,7 @@ class PaymentMemberHttpAdapterTest {
     void checkActiveMember_success() {
         server.expect(requestTo(BASE_URL + "/internal/v1/members/3/active"))
                 .andExpect(method(HttpMethod.GET))
+                .andExpect(header(InternalApiKeyFilter.HEADER, INTERNAL_API_KEY))   // 내부 키 헤더를 함께 보낸다
                 .andRespond(withSuccess("""
                         {"resultCode": "200-1", "msg": "활성 회원입니다.", "data": null}
                         """, MediaType.APPLICATION_JSON));

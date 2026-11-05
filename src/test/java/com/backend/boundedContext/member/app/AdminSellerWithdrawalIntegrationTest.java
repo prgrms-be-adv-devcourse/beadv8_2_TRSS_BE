@@ -5,15 +5,18 @@ import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.ErrorCode;
+import com.backend.global.outbox.OutboxEvent;
+import com.backend.global.outbox.OutboxEventRepository;
+import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +26,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -32,7 +37,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 관리자 철회 승인·거절 (S8·S9). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 진행 중인 판매와 미정산 금액은 OrderApi·SettlementApi를 mock으로 바꿔 정한다 (기본값: 없음).
+ * 진행 중인 판매와 미정산 금액은 MemberOrderPort·MemberSettlementPort를 mock으로 바꿔 정한다 (기본값: 없음).
  */
 @SpringBootTest
 class AdminSellerWithdrawalIntegrationTest {
@@ -49,11 +54,16 @@ class AdminSellerWithdrawalIntegrationTest {
     @Autowired
     private SellerStatusHistoryRepository sellerStatusHistoryRepository;
 
-    @MockitoBean
-    private OrderApi orderApi;
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
 
+    // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
-    private SettlementApi settlementApi;
+    private MemberOrderPort memberOrderPort;
+
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
+    @MockitoBean
+    private MemberSettlementPort memberSettlementPort;
 
     private Long memberId;
     private Long sellerId;
@@ -73,6 +83,7 @@ class AdminSellerWithdrawalIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        outboxEventRepository.deleteAll(sellerOutbox());
         sellerRepository.findById(sellerId).ifPresent(seller -> {
             sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId));
             sellerRepository.delete(seller);
@@ -113,7 +124,7 @@ class AdminSellerWithdrawalIntegrationTest {
     @Test
     @DisplayName("철회 승인: 진행 중인 판매 주문이 있으면 409 ACTIVE_SALES_EXIST이고 상태와 이력은 그대로다")
     void approveWithdrawal_activeSales() {
-        given(orderApi.hasActiveSales(sellerId)).willReturn(true);
+        given(memberOrderPort.hasActiveSales(sellerId)).willReturn(true);
         int before = historyCount();
 
         assertError(() -> memberSellerFacade.approveWithdrawal(sellerId), MemberErrorCode.ACTIVE_SALES_EXIST);
@@ -125,7 +136,7 @@ class AdminSellerWithdrawalIntegrationTest {
     @Test
     @DisplayName("철회 승인: 미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS")
     void approveWithdrawal_unsettledAmount() {
-        given(settlementApi.getUnsettledAmount(sellerId)).willReturn(15_000L);
+        given(memberSettlementPort.getUnsettledAmount(sellerId)).willReturn(15_000L);
 
         assertError(() -> memberSellerFacade.approveWithdrawal(sellerId), MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
@@ -133,7 +144,7 @@ class AdminSellerWithdrawalIntegrationTest {
     }
 
     @Test
-    @DisplayName("철회 거절: APPROVED로 돌아가고 사유가 이력에 남으며, 다시 판매할 수 있다")
+    @DisplayName("철회 거절: APPROVED로 돌아가고 사유가 이력에 남으며, 다시 판매할 수 있다. 철회 요청 다음에 철회 거절 이벤트가 outbox에 남는다")
     void rejectWithdrawal() {
         AdminSellerDetailDto response = memberSellerFacade.rejectWithdrawal(sellerId, " 진행 중인 반품 처리 후 다시 요청해 주세요 ");
 
@@ -146,6 +157,10 @@ class AdminSellerWithdrawalIntegrationTest {
         assertThat(latest.getReason()).isEqualTo("진행 중인 반품 처리 후 다시 요청해 주세요");
 
         assertThat(memberSellerFacade.getApprovedSellerByMemberId(memberId).sellerId()).isEqualTo(sellerId);
+
+        assertThat(sellerOutbox()).extracting(OutboxEvent::getEventType)
+                .containsExactly("SellerWithdrawalRequestedEvent", "SellerWithdrawalRejectedEvent");
+        assertThat(sellerOutbox()).allSatisfy(outbox -> assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING));
     }
 
     @Test
@@ -155,6 +170,13 @@ class AdminSellerWithdrawalIntegrationTest {
 
         assertError(() -> memberSellerFacade.approveWithdrawal(sellerId), MemberErrorCode.SELLER_STATE_INVALID);
         assertError(() -> memberSellerFacade.rejectWithdrawal(sellerId, "거절"), MemberErrorCode.SELLER_STATE_INVALID);
+    }
+
+    private List<OutboxEvent> sellerOutbox() {
+        return outboxEventRepository.findAll().stream()
+                .filter(outbox -> outbox.getAggregateType().equals("SELLER") && outbox.getAggregateId().equals(sellerId))
+                .sorted(Comparator.comparing(OutboxEvent::getId))
+                .toList();
     }
 
     private int historyCount() {

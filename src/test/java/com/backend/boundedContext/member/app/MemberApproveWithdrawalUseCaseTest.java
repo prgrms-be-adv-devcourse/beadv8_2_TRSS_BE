@@ -18,10 +18,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberPortUnavailableException;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
-import com.backend.shared.settlement.out.SettlementApi;
 
 @ExtendWith(MockitoExtension.class)
 class MemberApproveWithdrawalUseCaseTest {
@@ -32,10 +33,10 @@ class MemberApproveWithdrawalUseCaseTest {
     private SellerSupport sellerSupport;
 
     @Mock
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     @Mock
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @InjectMocks
     private MemberApproveWithdrawalUseCase memberApproveWithdrawalUseCase;
@@ -45,8 +46,8 @@ class MemberApproveWithdrawalUseCaseTest {
     void approveWithdrawal_success() {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(false);
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(0L);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(0L);
 
         memberApproveWithdrawalUseCase.approveWithdrawal(SELLER_ID);
 
@@ -60,7 +61,7 @@ class MemberApproveWithdrawalUseCaseTest {
     void approveWithdrawal_activeSales() {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(true);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(true);
 
         assertError(MemberErrorCode.ACTIVE_SALES_EXIST);
 
@@ -73,8 +74,8 @@ class MemberApproveWithdrawalUseCaseTest {
     void approveWithdrawal_unsettledAmount() {
         Seller seller = withdrawRequested();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
-        given(orderApi.hasActiveSales(SELLER_ID)).willReturn(false);
-        given(settlementApi.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID)).willReturn(15_000L);
 
         assertError(MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
@@ -91,7 +92,22 @@ class MemberApproveWithdrawalUseCaseTest {
 
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
-        verifyNoInteractions(orderApi, settlementApi);
+        verifyNoInteractions(memberOrderPort, memberSettlementPort);
+    }
+
+    @Test
+    @DisplayName("판매 주문이나 정산을 조회하지 못하면 503 WITHDRAWAL_CHECK_UNAVAILABLE이고 상태는 그대로다")
+    void approveWithdrawal_checkUnavailable() {
+        Seller seller = withdrawRequested();
+        given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
+        given(memberOrderPort.hasActiveSales(SELLER_ID)).willReturn(false);
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID))
+                .willThrow(new MemberPortUnavailableException("시간 초과", null));
+
+        assertError(MemberErrorCode.WITHDRAWAL_CHECK_UNAVAILABLE);
+
+        assertThat(seller.getStatus()).isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
+        verify(sellerSupport, never()).saveHistory(any(), any());
     }
 
     private void assertError(MemberErrorCode errorCode) {

@@ -17,6 +17,7 @@ public enum GlobalErrorCode implements ErrorCode {
     // 인증·권한
     UNAUTHORIZED(401, "로그인이 필요합니다."),
     AUTH_TOKEN_EXPIRED(401, "로그인이 만료되었습니다. 다시 로그인해 주세요."),
+    INTERNAL_API_KEY_INVALID(401, "내부 API 키가 없거나 올바르지 않습니다."),
     FORBIDDEN(403, "접근 권한이 없습니다."),
 
     // 경로

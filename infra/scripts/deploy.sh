@@ -12,7 +12,15 @@ set -euo pipefail
 # 스크립트 전체를 함수로 읽은 뒤 실행한다. 실행 중 git이 이 파일을 바꿔도 영향받지 않게 하기 위함이다.
 main() {
     local app_dir="${APP_DIR:-$HOME/palette}"
-    local health_url="http://localhost/v3/api-docs"   # nginx(80)를 거쳐 앱이 응답하는지 본다
+    # 앱마다 compose healthcheck 상태가 healthy인지 본다(compose.prod.yaml의 x-app-healthcheck).
+    # 서비스가 분리되어 컨테이너가 늘면 여기에 추가한다
+    local health_containers=(
+        "palette-app"
+        "palette-market"
+        "palette-settlement"
+    )
+    # 앱과 별개로, 재시작한 nginx(80)가 요청을 앱으로 넘기는지 본다. 로그인 없이 열리는 경로를 쓴다
+    local nginx_url="http://localhost/v3/api-docs"
     local compose=(docker compose -f infra/compose.prod.yaml)
 
     cd "$app_dir"
@@ -23,6 +31,10 @@ main() {
 
     echo "▶ 배포 대상: $(git log -1 --format='%h %s')"
 
+    # 앱 로그의 service.version에 배포 커밋을 남긴다(compose.prod.yaml). Slack 에러 알림이 이 값으로 배포 커밋 링크를 단다
+    export APP_VERSION
+    APP_VERSION="$(git rev-parse --short=7 HEAD)"
+
     echo "▶ 빌드·재시작"
     "${compose[@]}" up -d --build --remove-orphans
 
@@ -32,8 +44,18 @@ main() {
     "${compose[@]}" restart nginx
 
     echo "▶ 기동 확인 (최대 150초)"
+    local container healthy
     for _ in $(seq 1 30); do
-        if curl -fsS -o /dev/null "$health_url"; then
+        # 하나라도 준비되지 않으면 5초 뒤 처음부터 다시 본다
+        healthy=true
+        for container in "${health_containers[@]}"; do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)" = "healthy" ] \
+                || { healthy=false; break; }
+        done
+        if $healthy; then
+            curl -fsS -o /dev/null "$nginx_url" || healthy=false
+        fi
+        if $healthy; then
             echo "✅ 배포 완료"
             docker image prune -f > /dev/null   # 이전 빌드에서 남은 이미지 정리 (디스크 50GB 제한)
             return 0
@@ -43,7 +65,7 @@ main() {
 
     echo "❌ 앱이 150초 안에 응답하지 않습니다. 최근 앱 로그:"
     "${compose[@]}" ps
-    "${compose[@]}" logs --tail 80 app
+    "${compose[@]}" logs --tail 80 app market settlement
     return 1
 }
 
