@@ -13,6 +13,16 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
+# Spring 앱(app·market·settlement) 기동 확인. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
+# 앱마다 컨테이너 안에서 로그인 없이 열리는 Swagger 문서(/v3/api-docs)가 200인지 본다.
+#   정산처럼 로그인 없이 열리는 API가 없는 앱도 같은 방식으로 확인하려고 nginx를 거치지 않는다.
+# 실행 이미지에 curl이 없어도 되게 bash로 HTTP 요청을 직접 보낸다. 포트만 앱마다 다르다(각 서비스의 test).
+x-app-healthcheck: &app-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 3
+  start_period: 90s   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다
+
 services:
   nginx:
     image: nginx:stable
@@ -26,11 +36,12 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../../palette-web:/usr/share/nginx/html:ro
-    # nginx는 시작할 때 app·market의 이름을 찾으므로 둘이 먼저 떠 있어야 한다.
+    # nginx는 시작할 때 app·market·settlement의 이름을 찾으므로 셋이 먼저 떠 있어야 한다.
     # grafana는 요청할 때 찾으므로(nginx/default.conf의 resolver) 꺼져 있어도 nginx는 뜬다.
     depends_on:
       - app
       - market
+      - settlement
 
   app:
     # 이미지는 레포 루트의 Dockerfile로 빌드한다(Gradle 빌드 기준이 루트)
@@ -56,6 +67,9 @@ services:
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     # JVM 힙은 이 값의 75%(Dockerfile의 MaxRAMPercentage). 서버 8GB를 DB·Redis와 나눠 쓴다.
     mem_limit: 2g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -qE '^HTTP/[0-9.]+ 200'"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +104,9 @@ services:
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     # 서버 8GB를 app(2g)·Kafka(1g)·DB·모니터링과 나눠 쓴다
     mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -qE '^HTTP/[0-9.]+ 200'"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,6 +139,9 @@ services:
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     # market과 같은 1g(힙 768MB). 월 1회 배치와 관리자 조회뿐이라 평소 사용량은 market(약 430MB)과 비슷하다
     mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -qE '^HTTP/[0-9.]+ 200'"]
     depends_on:
       postgres:
         condition: service_healthy

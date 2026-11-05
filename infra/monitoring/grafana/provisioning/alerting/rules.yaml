@@ -25,7 +25,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger) (
-                  count_over_time({container=~"palette-app|palette-market"} | json | __error__="" | log_level="ERROR" [5m])
+                  count_over_time({container=~"palette-app|palette-market|palette-settlement"} | json | __error__="" | log_level="ERROR" [5m])
                 )
           - refId: B
             datasourceUid: __expr__
