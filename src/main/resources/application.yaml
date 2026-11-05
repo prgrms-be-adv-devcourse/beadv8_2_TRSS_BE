@@ -121,6 +121,11 @@ custom:
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
   payment:
+    # 결제 주소. 회원이 결제 내부 API(/internal/v1/payments)로 지갑·결과 대기 충전 건을 조회할 때 쓴다 (탈퇴 검사, 관리자 회원 상세)
+    # 결제가 payment-service로 분리되기 전에는 루트 앱(8080)
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8080}
+    connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
     topupUnit: 10000           # 충전 단위·최소 금액(원)
     topupMax: 1000000          # 1회 최대 충전 금액(원)
     topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)

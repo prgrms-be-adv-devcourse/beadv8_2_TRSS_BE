@@ -1,6 +1,7 @@
 package com.backend.boundedContext.member.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -24,13 +25,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.SocialProvider;
 import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
-import com.backend.boundedContext.payment.app.PaymentFacade;
-import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.shared.member.dto.MemberStatus;
+import com.backend.shared.payment.dto.WalletSummaryDto;
 
 /**
  * 탈퇴 조건 조회 → 탈퇴 → 로그인 불가를 실제 DB·Redis로 확인한다. 로컬 Docker가 필요하다.
@@ -47,11 +48,7 @@ class MemberWithdrawalIntegrationTest {
     @Autowired
     private MemberRepository memberRepository;
 
-    @Autowired
-    private WalletRepository walletRepository;
 
-    @Autowired
-    private PaymentFacade paymentFacade;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -62,6 +59,10 @@ class MemberWithdrawalIntegrationTest {
     // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
     private MemberOrderPort memberOrderPort;
+
+    // 결제 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 결제 Port를 목으로 둔다 (지갑 잔액 0)
+    @MockitoBean
+    private MemberPaymentPort memberPaymentPort;
 
     @Autowired
     private LoginAttemptStore loginAttemptStore;
@@ -78,7 +79,7 @@ class MemberWithdrawalIntegrationTest {
     @BeforeEach
     void setUp() {
         member = memberRepository.save(Member.signUp(email, passwordEncoder.encode(PASSWORD), "홍길동"));
-        paymentFacade.createWallet(member.getId());
+        given(memberPaymentPort.getWallet(member.getId())).willReturn(new WalletSummaryDto(member.getId(), 0L, 0L));
     }
 
     @AfterEach
@@ -86,7 +87,6 @@ class MemberWithdrawalIntegrationTest {
         loginAttemptStore.deleteAttempts(email);
         memberSocialAccountRepository.findByMemberIdAndProvider(member.getId(), SocialProvider.KAKAO)
                 .ifPresent(memberSocialAccountRepository::delete);
-        walletRepository.findByMemberId(member.getId()).ifPresent(walletRepository::delete);
         memberRepository.deleteById(member.getId());
     }
 
