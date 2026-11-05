@@ -29,6 +29,7 @@ import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
+import com.backend.global.security.InternalApiKeyFilter;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.shared.member.dto.MemberStatus;
 import com.backend.shared.payment.dto.WalletSummaryDto;
@@ -122,11 +123,9 @@ class MemberWithdrawalIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-LOGIN_FAILED"));
 
-        // 탈퇴 전에 받은 Access Token은 아직 만료되지 않았지만, 돈이 들어가는 충전은 막힌다
-        mockMvc.perform(post("/api/v1/topups").header("Authorization", bearer)
-                        .contentType(MediaType.APPLICATION_JSON).content("""
-                                {"amount": 10000}
-                                """))
+        // 탈퇴 전에 받은 Access Token은 아직 만료되지 않았지만, 결제는 충전 전에 활성 회원인지 회원 내부 API로 확인해서 막는다
+        mockMvc.perform(get("/internal/v1/members/{memberId}/active", member.getId())
+                        .header(InternalApiKeyFilter.HEADER, "test-internal-api-key"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
     }

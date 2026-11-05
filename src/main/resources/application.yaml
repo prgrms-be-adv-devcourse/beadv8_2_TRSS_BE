@@ -87,7 +87,11 @@ custom:
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
-    refreshTokenExpireDays: 14            # Refresh Token 유효 기간(일)
+    # 회원(member-service) 주소. 결제가 회원 내부 API(/internal/v1/members·sellers)를 부를 때 쓴다 (MemberApiClient)
+    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
+    connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
+    refreshTokenExpireDays: 14           # Refresh Token 유효 기간(일)
     seedPassword: ${MEMBER_SEED_PASSWORD:}   # 개발용 시드 회원 비밀번호. 비어 있으면 시드를 넣지 않는다(운영 환경)
     refreshCookieSecure: ${AUTH_COOKIE_SECURE:false}       # HTTPS 배포 시 true
     refreshCookieSameSite: ${AUTH_COOKIE_SAME_SITE:Lax}    # 프론트·백엔드 도메인이 다르면 None (Secure 필수)

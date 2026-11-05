@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,14 +14,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
+import com.backend.shared.member.out.MemberApi;
 
 /**
  * READY 만료 조건부 UPDATE를 실제 DB로 확인한다.
@@ -43,17 +43,17 @@ class TopupExpireIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    // 회원은 member-service에 있어 회원 조회는 목으로 둔다. 활성 회원 확인(checkActiveMember)은 아무것도 하지 않아 통과한다
+    @MockitoBean
+    private MemberApi memberApi;
 
-    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
     private Long memberId;
     private final List<Long> topupIds = new ArrayList<>();
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
-        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
         wallet = walletRepository.save(Wallet.create(memberId));
     }
 
@@ -61,7 +61,6 @@ class TopupExpireIntegrationTest {
     void cleanUp() {
         topupRepository.deleteAllById(topupIds);
         walletRepository.delete(wallet);
-        memberRepository.deleteById(memberId);
     }
 
     @Test
