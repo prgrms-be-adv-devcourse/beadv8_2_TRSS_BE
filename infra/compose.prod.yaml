@@ -62,6 +62,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # 회원이 주문 내부 API(/internal/v1/orders)를 부를 market-service 주소 (탈퇴 검사, 판매자 철회 승인, 관리자 회원 상세)
       MARKET_SERVICE_URL: http://market:8082
+      # 회원이 정산 내부 API(/internal/v1/settlements)를 부를 settlement-service 주소 (판매자 철회 요청·승인, 판매자 회원 탈퇴의 미지급 금액 확인)
+      SETTLEMENT_SERVICE_URL: http://settlement:8084
       # nginx가 넘긴 X-Forwarded-* 헤더로 원래 요청 주소·프로토콜을 판단한다.
       SERVER_FORWARD_HEADERS_STRATEGY: native
       # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
