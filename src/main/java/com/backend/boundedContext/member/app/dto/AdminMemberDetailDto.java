@@ -13,7 +13,7 @@ import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.order.dto.OrderSummaryDto;
 import com.backend.shared.payment.dto.WalletSummaryDto;
 
-// 관리자 회원 상세 (최근 주문은 주문 컨텍스트 API가 정해지면 추가)
+// 관리자 회원 상세. 지갑·최근 주문은 결제·주문을 조회하지 못하면 null (회원 정보는 그대로)
 public record AdminMemberDetailDto(
         Long memberId,
         String email,
@@ -23,8 +23,8 @@ public record AdminMemberDetailDto(
         MemberStatus status,
         LocalDateTime createdAt,
         SellerStatus sellerStatus,  // 판매자 신청 이력이 없으면 null
-        Wallet wallet,
-        List<RecentOrder> recentOrders  // 최신순, 주문이 없으면 빈 목록
+        Wallet wallet,                  // 결제를 조회하지 못하면 null
+        List<RecentOrder> recentOrders  // 최신순, 주문이 없으면 빈 목록. 주문을 조회하지 못하면 null
 ) {
     // 지갑 잔액 (사용 가능 금액, 홀딩 중 금액)
     public record Wallet(
@@ -46,8 +46,8 @@ public record AdminMemberDetailDto(
                 MemberType.of(member.getRole(), seller == null ? null : seller.status()),
                 member.getStatus(), member.getCreatedAt(),
                 seller == null ? null : seller.status(),
-                new Wallet(wallet.balance(), wallet.heldAmount()),
-                orders.stream()
+                wallet == null ? null : new Wallet(wallet.balance(), wallet.heldAmount()),
+                orders == null ? null : orders.stream()
                         .map(order -> new RecentOrder(order.orderId(), order.status(), order.totalAmount(), order.orderedAt()))
                         .toList()
         );

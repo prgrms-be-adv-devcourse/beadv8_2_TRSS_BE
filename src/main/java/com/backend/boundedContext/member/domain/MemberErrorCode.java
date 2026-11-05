@@ -15,6 +15,7 @@ public enum MemberErrorCode implements ErrorCode {
     MEMBER_NOT_FOUND(404, "회원을 찾을 수 없습니다."),
     PASSWORD_MISMATCH(400, "비밀번호가 올바르지 않습니다."),          // 탈퇴 등 로그인 상태에서 본인 확인. 401은 프론트가 토큰 만료로 처리하므로 400
     WITHDRAWAL_NOT_ALLOWED(409, "탈퇴 조건을 충족하지 않습니다."),    // data.reasons에 남은 조건
+    WITHDRAWAL_CHECK_UNAVAILABLE(503, "탈퇴 가능 여부를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."),   // 탈퇴·판매자 철회 판단에 필요한 다른 모듈 조회 실패
 
     // 회원가입·이메일 인증
     EMAIL_DUPLICATED(409, "이미 가입된 이메일입니다."),

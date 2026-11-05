@@ -26,11 +26,12 @@ public class MemberGetMemberDetailUseCase {
     private final MemberOrderPort memberOrderPort;
 
     // 관리자 회원 상세: 회원 기본 정보 + 판매자 상태 + 지갑 + 최근 주문
+    // 지갑·최근 주문은 화면 표시용이라, 결제·주문을 조회하지 못하면 그 영역만 비우고 회원 정보는 그대로 응답한다
     public AdminMemberDetailDto getMemberDetail(Long memberId) {
         Member member = memberSupport.getMember(memberId);
         SellerDto seller = memberGetSellerUseCase.findSellerByMemberId(memberId).orElse(null);
-        WalletSummaryDto wallet = memberPaymentPort.getWallet(memberId);
-        List<OrderSummaryDto> recentOrders = memberOrderPort.getRecentOrders(memberId, RECENT_ORDER_LIMIT);
+        WalletSummaryDto wallet = DisplayPortQueries.orNull(() -> memberPaymentPort.getWallet(memberId));
+        List<OrderSummaryDto> recentOrders = DisplayPortQueries.orNull(() -> memberOrderPort.getRecentOrders(memberId, RECENT_ORDER_LIMIT));
 
         return AdminMemberDetailDto.of(member, seller, wallet, recentOrders);
     }

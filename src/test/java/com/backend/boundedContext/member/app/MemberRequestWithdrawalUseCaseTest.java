@@ -23,6 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
+import com.backend.boundedContext.member.out.MemberPortUnavailableException;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
@@ -91,6 +92,21 @@ class MemberRequestWithdrawalUseCaseTest {
         assertError(MemberErrorCode.SELLER_STATE_INVALID);
 
         verify(sellerStatusHistoryRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("정산을 조회하지 못하면 503 WITHDRAWAL_CHECK_UNAVAILABLE이고 철회 요청 이벤트를 발행하지 않는다")
+    void requestWithdrawal_checkUnavailable() {
+        Seller seller = seller();
+        seller.approve();
+        given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(seller));
+        given(memberSettlementPort.getUnsettledAmount(SELLER_ID))
+                .willThrow(new MemberPortUnavailableException("시간 초과", null));
+
+        assertError(MemberErrorCode.WITHDRAWAL_CHECK_UNAVAILABLE);
+
+        assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
         verifyNoInteractions(eventPublisher);
     }
 

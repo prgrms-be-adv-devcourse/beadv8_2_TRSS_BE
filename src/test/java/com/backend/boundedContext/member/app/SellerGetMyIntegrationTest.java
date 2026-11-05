@@ -5,6 +5,7 @@ import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -45,6 +46,10 @@ class SellerGetMyIntegrationTest {
 
     @Autowired
     private SellerStatusHistoryRepository sellerStatusHistoryRepository;
+
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
+    @MockitoBean
+    private MemberSettlementPort memberSettlementPort;
 
     private Long memberId;
 

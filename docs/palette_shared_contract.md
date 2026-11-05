@@ -71,13 +71,13 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
-| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `SellerWithdrawalRequestedEvent` → (market) 판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원 | 이벤트 (미정산 확인은 동기 조회) |
-| 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기, 같은 Tx |
+| 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `SellerWithdrawalRequestedEvent` → (market) 판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원 | 이벤트 (미정산 확인은 동기 조회, 조회 실패 시 503) |
+| 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기 조회 (조회 실패 시 503) |
 | 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `SellerWithdrawalRejectedEvent` → (market) 철회로 중지된 상품만 판매 중으로 | 이벤트 |
 | 관리자 제재 | member | 판매자 SANCTIONED → `SettlementApi.holdSeller(sellerId, reason)` → `SellerSanctionedEvent` → (market) 판매 중 상품 STOPPED | 이벤트 + 정산 보류는 동기, 같은 Tx (정산 컨슈머가 생기면 뺀다, #225) |
-| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 |
+| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 (조회 실패 시 503, 지갑이 없으면 잔액 0) |
 | 충전 준비·승인, 주문 생성·결제 | payment, order | `MemberApi.checkActiveMember(memberId)`: 탈퇴한 회원이면 401 (탈퇴 후 남은 Access Token 차단) | 동기 조회 |
-| 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 |
+| 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 (조회 실패 시 해당 영역만 null) |
 | 관리자 결제·충전 조회 | payment | `MemberApi.findMemberByEmail`(이메일 검색) · `MemberApi.getMembers`(이메일 표시) | 동기 조회 |
 
 ## 2. member
@@ -135,6 +135,30 @@ public interface MemberApi {
 - 결과가 없을 수 있는 조회(`Optional`)는 404가 아니라 200 + `data: null`입니다.
 - 이메일은 URL·접근 로그에 남지 않도록 본문으로 받습니다. 형식 검증은 하지 않고, 형식이 맞지 않으면 없는 것으로 응답합니다.
 - Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
+
+### 회원이 부르는 다른 모듈 (TRSS-145)
+
+회원은 다른 모듈을 자기 Port(`member/out`)로만 부릅니다. 다른 서비스로 옮겨 간 모듈은 내부 API를 HTTP로 부릅니다.
+
+| Port | 구현 | 부르는 곳 | 주소 설정 |
+| --- | --- | --- | --- |
+| `MemberOrderPort` | `MemberOrderHttpAdapter` | market-service `/internal/v1/orders` | `custom.market.baseUrl` (`MARKET_SERVICE_URL`, 기본 `http://localhost:8082`) |
+| `MemberSettlementPort` | `MemberSettlementHttpAdapter` | 정산 `/internal/v1/settlements` (`holdSeller`만 같은 앱 `SettlementApi`, #225에서 제거) | `custom.settlement.baseUrl` (`SETTLEMENT_SERVICE_URL`, 기본 `http://localhost:8080`, settlement-service 분리 후 8084) |
+| `MemberPaymentPort` | `MemberPaymentApiAdapter` (같은 앱 `PaymentApi`) | 결제는 아직 루트 앱 안. 회원 서비스 이동 때 HTTP로 바꿉니다(#236) | - |
+
+- HTTP 호출은 `MemberInternalApiClient`가 맡습니다. 모든 요청에 `X-Internal-Key`를 붙이고, 접속 1초·응답 3초 제한을 둡니다.
+- 실패는 두 가지로 나눕니다.
+  - 상대가 4xx `RsData` 오류로 응답: 같은 `resultCode`의 `DomainException` (예: `404-WALLET_NOT_FOUND`)
+  - 응답을 받지 못함(접속 실패·시간 초과), 상대 5xx, 읽을 수 없는 응답: `MemberPortUnavailableException` (확인하지 못함)
+- 확인하지 못했을 때의 처리는 값의 쓰임에 따라 다릅니다.
+
+| 쓰임 | 해당 기능 | 확인하지 못하면 |
+| --- | --- | --- |
+| 판단 (통과 여부 결정) | 회원 탈퇴 조건 조회·요청, 판매자 철회 요청·승인 | 통과시키지 않고 `503-WITHDRAWAL_CHECK_UNAVAILABLE` ("탈퇴 가능 여부를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.") |
+| 표시 (보여 주기만 함) | 내 판매자 정보 조회·수정의 `unsettledAmount`, 관리자 회원 상세의 `wallet`·`recentOrders` | 그 값만 `null`로 비우고 나머지는 그대로 응답 (빈 목록과 `null`은 다르다: `null`은 조회하지 못함) |
+
+- 탈퇴 검사에서 지갑이 없으면(`404-WALLET_NOT_FOUND`, 가입 직후 지갑 생성 전) 잔액 0으로 봅니다.
+- 판단에 쓰는 여부·금액 응답의 `data`가 비어 있으면 `false`·0으로 통과시키지 않고 확인하지 못한 것으로 봅니다.
 
 ### DTO
 
