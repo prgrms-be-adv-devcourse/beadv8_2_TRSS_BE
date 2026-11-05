@@ -6,6 +6,7 @@ import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
@@ -15,7 +16,6 @@ import com.backend.global.outbox.OutboxEvent;
 import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
@@ -59,9 +59,9 @@ class SellerWithdrawalIntegrationTest {
     @MockitoBean
     private SettlementApi settlementApi;
 
-    // 주문은 market-service로 옮겨 갔다. 루트의 임시 구현은 예외를 던지므로 목으로 둔다
+    // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     private Long memberId;
 

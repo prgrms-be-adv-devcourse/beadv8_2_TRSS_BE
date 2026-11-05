@@ -5,6 +5,7 @@ import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
+import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
@@ -15,7 +16,6 @@ import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.order.out.OrderApi;
 import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
@@ -37,7 +37,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 관리자 철회 승인·거절 (S8·S9). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 진행 중인 판매와 미정산 금액은 OrderApi·SettlementApi를 mock으로 바꿔 정한다 (기본값: 없음).
+ * 진행 중인 판매와 미정산 금액은 MemberOrderPort·SettlementApi를 mock으로 바꿔 정한다 (기본값: 없음).
  */
 @SpringBootTest
 class AdminSellerWithdrawalIntegrationTest {
@@ -57,8 +57,9 @@ class AdminSellerWithdrawalIntegrationTest {
     @Autowired
     private OutboxEventRepository outboxEventRepository;
 
+    // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
-    private OrderApi orderApi;
+    private MemberOrderPort memberOrderPort;
 
     @MockitoBean
     private SettlementApi settlementApi;
@@ -122,7 +123,7 @@ class AdminSellerWithdrawalIntegrationTest {
     @Test
     @DisplayName("철회 승인: 진행 중인 판매 주문이 있으면 409 ACTIVE_SALES_EXIST이고 상태와 이력은 그대로다")
     void approveWithdrawal_activeSales() {
-        given(orderApi.hasActiveSales(sellerId)).willReturn(true);
+        given(memberOrderPort.hasActiveSales(sellerId)).willReturn(true);
         int before = historyCount();
 
         assertError(() -> memberSellerFacade.approveWithdrawal(sellerId), MemberErrorCode.ACTIVE_SALES_EXIST);
