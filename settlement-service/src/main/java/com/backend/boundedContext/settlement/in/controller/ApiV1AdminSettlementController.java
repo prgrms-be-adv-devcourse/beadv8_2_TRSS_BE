@@ -89,7 +89,7 @@ public class ApiV1AdminSettlementController {
     }
 
     @Operation(summary = "수동 재처리",
-            description = "MANUAL_REQUIRED 정산서 1건을 자동 실행과 같은 지급 로직으로 다시 지급(사유 필수). 성공 PAID, 실패 MANUAL_REQUIRED 유지(data.status로 구분)")
+            description = "MANUAL_REQUIRED 정산서 1건을 자동 실행과 같은 지급 로직으로 다시 지급(사유 필수). 성공 PAID, 실패 MANUAL_REQUIRED 유지, 판매자가 제재 상태면 지급하지 않고 HOLD(data.status·data.holdReason로 구분)")
     @ApiResponse(responseCode = "200", description = "200-1 재처리 완료")
     @ApiResponse(responseCode = "400", description = "400-VALIDATION_FAILED 사유 없음")
     @ApiResponse(responseCode = "404", description = "404-SETTLEMENT_NOT_FOUND")
@@ -135,10 +135,10 @@ public class ApiV1AdminSettlementController {
     }
 
     @Operation(summary = "정산 보류 해제",
-            description = "HOLD 정산서를 READY로 되돌린다. 지급은 10분마다 도는 재시도 스케줄러가 한다")
+            description = "HOLD 정산서를 READY로 되돌린다. 지급은 10분마다 도는 재시도 스케줄러가 한다. 판매자가 제재 중이면 해제할 수 없다")
     @ApiResponse(responseCode = "200", description = "200-1 해제 완료")
     @ApiResponse(responseCode = "404", description = "404-SETTLEMENT_NOT_FOUND")
-    @ApiResponse(responseCode = "409", description = "409-SETTLEMENT_STATE_INVALID HOLD가 아님")
+    @ApiResponse(responseCode = "409", description = "409-SETTLEMENT_STATE_INVALID HOLD가 아님, 409-SETTLEMENT_SELLER_SANCTIONED 판매자 제재 중")
     @PostMapping("/{settlementId}/release")
     public RsData<SettlementResponse> release(@PathVariable Long settlementId) {
         return RsData.of("200-1", "정산 보류를 해제했습니다.", settlementFacade.release(settlementId));

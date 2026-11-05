@@ -3,6 +3,7 @@ package com.backend.boundedContext.settlement.app;
 import com.backend.boundedContext.settlement.domain.Settlement;
 import com.backend.boundedContext.settlement.domain.SettlementCandidate;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryResult;
+import com.backend.boundedContext.settlement.domain.SettlementHistoryStage;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
@@ -247,6 +248,23 @@ class SettlementPayoutUseCaseTest {
     }
 
     @Test
+    @DisplayName("지급 직전 판매자가 SANCTIONED면 결제 쪽을 호출하지 않고 HOLD + 보류 이력(지급한 경로로 기록)")
+    void payout_sellerSanctioned() {
+        Settlement s = saveReady();
+        seller = () -> new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.SANCTIONED);
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, 900L, null);
+
+        assertFalse(result.processed());                     // 지급하지 않았으므로 실패 횟수에도 세지 않는다
+        assertEquals(SettlementStatus.HOLD, s.getStatus());
+        assertEquals(SettlementPayoutUseCase.SANCTIONED_HOLD_REASON, s.getHoldReason());
+        assertEquals(0, paymentApi.transferCalls);
+        SettlementProcessHistory h = histories.get(0);
+        assertEquals(SettlementHistoryStage.HOLD, h.getStage());
+        assertEquals(SettlementTrigger.MONTHLY_JOB, h.getTriggerType());
+    }
+
+    @Test
     @DisplayName("PAID·HOLD 정산서는 건너뛰고 결제 쪽을 호출하지 않는다")
     void payout_notPayable() {
         Settlement s = saveReady();
@@ -279,6 +297,22 @@ class SettlementPayoutUseCaseTest {
         assertEquals(SettlementTrigger.ADMIN, last.getTriggerType());
         assertEquals("원인 수정 후 재처리", last.getAdminReason());
         assertEquals(3, last.getAttemptNo());
+    }
+
+    @Test
+    @DisplayName("관리자 재처리: 판매자가 SANCTIONED면 409 대신 HOLD 결과(보류 사유 포함)를 돌려주고 결제 쪽은 호출하지 않는다")
+    void retryManually_sellerSanctioned() {
+        Settlement s = saveReady();
+        s.markManualRequired("금액 불일치");
+        seller = () -> new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.SANCTIONED);
+
+        SettlementPayoutResult result = useCase.retryManually(SETTLEMENT_ID, "확인 후 재처리");
+
+        assertFalse(result.processed());
+        assertEquals(SettlementStatus.HOLD, result.status());
+        assertEquals(SettlementPayoutUseCase.SANCTIONED_HOLD_REASON, result.holdReason());
+        assertEquals(SettlementStatus.HOLD, s.getStatus());
+        assertEquals(0, paymentApi.transferCalls);
     }
 
     @Test

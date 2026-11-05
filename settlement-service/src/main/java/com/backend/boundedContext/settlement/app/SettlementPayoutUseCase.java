@@ -14,6 +14,8 @@ import com.backend.boundedContext.settlement.out.SettlementMemberPort;
 import com.backend.boundedContext.settlement.out.SettlementPaymentPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.payment.dto.SettledOrderAmountDto;
 import com.backend.shared.payment.dto.SettlementTransferCommand;
 import com.backend.shared.payment.dto.TransferResultDto;
@@ -30,7 +32,7 @@ import java.util.List;
  * 정산서 1건 지급 (판매자 1명 = 정산서 1건 = 처리 단위 1개)
  *
  * ① 지급 (하나의 트랜잭션)
- *    정산서 잠금 → 지급 가능한 상태인지 확인 → 정산서 합계 = 후보 합계 확인
+ *    정산서 잠금 → 지급 가능한 상태인지 확인 → 판매자가 제재 상태면 HOLD로 바꾸고 끝(지급 안 함) → 정산서 합계 = 후보 합계 확인
  *    → SettlementPaymentPort.transfer(홀딩 차감·판매자/관리자 지갑 입금·원장 기록, 같은 트랜잭션에 참여)
  *    → 정산서 PAID → 처리 이력(성공)
  *
@@ -43,6 +45,9 @@ import java.util.List;
 @Slf4j
 @Component
 public class SettlementPayoutUseCase {
+
+    /** 지급 직전 판매자가 제재 상태일 때 정산서에 남기는 보류 사유 */
+    static final String SANCTIONED_HOLD_REASON = "판매자 제재 상태라 지급 직전에 보류(제재 이벤트 수신 전 지급 방지)";
 
     private final SettlementSupport settlementSupport;
     private final SettlementCandidateRepository settlementCandidateRepository;
@@ -106,6 +111,7 @@ public class SettlementPayoutUseCase {
      * 관리자 수동 재처리
      * MANUAL_REQUIRED만 가능(404·409는 지급 전에 바로 거절)
      * 성공하면 PAID, 실패하면 MANUAL_REQUIRED로 두고 실패 사유를 갱신
+     * 판매자가 제재 상태면 지급하지 않고 HOLD로 바꾼 결과(status HOLD, holdReason)를 그대로 돌려준다
      */
     public SettlementPayoutResult retryManually(Long settlementId, String adminReason) {
         Settlement settlement = settlementSupport.getSettlement(settlementId);
@@ -113,7 +119,10 @@ public class SettlementPayoutUseCase {
             throw new DomainException(SettlementErrorCode.SETTLEMENT_STATE_INVALID);
         }
         SettlementPayoutResult result = payout(settlementId, SettlementTrigger.ADMIN, null, adminReason);
-        if (!result.processed()) throw new DomainException(SettlementErrorCode.SETTLEMENT_STATE_INVALID);
+        // 건너뛴 결과 중 HOLD는 지급 직전 제재 확인으로 보류된 것이라 이미 커밋됐다. 409 대신 바뀐 상태를 알려 준다
+        if (!result.processed() && result.status() != SettlementStatus.HOLD) {
+            throw new DomainException(SettlementErrorCode.SETTLEMENT_STATE_INVALID);
+        }
         return result;
     }
 
@@ -131,6 +140,18 @@ public class SettlementPayoutUseCase {
         }
         int attemptNo = settlement.nextAttemptNo();
 
+        // 지급 전 확인: 판매자가 제재 상태면 지급하지 않고 보류한다.
+        // 제재 이벤트(SellerSanctionedEvent)가 도착해 보류하기 전의 틈을 막는다. 이미 조회하는 판매자 정보의 상태만 본다(추가 호출 없음)
+        SellerDto seller = settlementMemberPort.getSeller(settlement.getSellerId());
+        if (seller.status() == SellerStatus.SANCTIONED) {
+            settlement.hold(SANCTIONED_HOLD_REASON);
+            settlementProcessHistoryRepository.save(
+                    SettlementProcessHistory.held(settlementId, SANCTIONED_HOLD_REASON, trigger, now));
+            log.info("판매자 제재 상태라 지급하지 않고 보류 settlementId={} sellerId={} trigger={}",
+                    settlementId, settlement.getSellerId(), trigger);
+            return SettlementPayoutResult.skipped(settlement);
+        }
+
         // 지급 전 확인: 정산서 합계 = 묶인 정산 후보 합계
         SettlementCandidateTotalsRow totals = settlementCandidateRepository.sumIncludedTotals(settlementId);
         if (!settlement.matchesCandidateTotals(totals.saleTotal(), totals.feeTotal(), totals.payoutTotal(),
@@ -141,7 +162,7 @@ public class SettlementPayoutUseCase {
         List<SettledOrderAmountDto> orders = settlementCandidateRepository.sumSalePriceByOrder(settlementId).stream()
                 .map(row -> new SettledOrderAmountDto(row.orderId(), row.amount()))
                 .toList();
-        Long sellerMemberId = settlementMemberPort.getSeller(settlement.getSellerId()).memberId();
+        Long sellerMemberId = seller.memberId();
 
         // 홀딩 차감·지갑 입금·원장 기록. 이 트랜잭션에 참여하므로 아래가 실패하면 함께 롤백된다
         TransferResultDto transferred = settlementPaymentPort.transfer(new SettlementTransferCommand(
