@@ -8,10 +8,10 @@ import com.backend.boundedContext.member.in.dto.MySellerResponse;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.in.dto.SellerUpdateRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,9 +36,9 @@ class SellerUpdateIntegrationTest {
     @Autowired
     private MemberSellerFacade memberSellerFacade;
 
-    // 정산은 settlement-service로 옮겨 갔다. 모놀리스의 임시 SettlementApiClient는 예외를 던지므로 mock으로 바꾼다(미정산 금액 0, 보류는 아무것도 안 함)
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
     @MockitoBean
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     @Autowired
     private MemberRepository memberRepository;
