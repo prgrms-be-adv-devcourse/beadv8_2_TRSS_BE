@@ -28,6 +28,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -124,6 +125,32 @@ class ProductFacadeWishlistTest {
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-PRODUCT_NOT_FOUND");
         assertThat(events("WishAddedEvent", stopped.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("판매자는 본인 상품을 찜할 수 없다 (400 SELF_WISH_NOT_ALLOWED). 찜도 이벤트도 남지 않는다")
+    void addOwnProduct() {
+        Product product = create("내 크림", 10);
+        given(memberApi.findSellerByMemberId(MEMBER_ID))
+                .willReturn(Optional.of(new SellerDto(SELLER_ID, MEMBER_ID, "팔레트 상점", SellerStatus.APPROVED)));
+
+        assertThatThrownBy(() -> productFacade.addWishlist(MEMBER_ID, product.getId()))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-SELF_WISH_NOT_ALLOWED");
+        assertThat(productFacade.getProductDetail(product.getId(), MEMBER_ID).wished()).isFalse();
+        assertThat(events("WishAddedEvent", product.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("판매자도 다른 판매자의 상품은 찜할 수 있다")
+    void addOtherSellersProduct() {
+        Product product = create("남의 크림", 10);
+        given(memberApi.findSellerByMemberId(MEMBER_ID))
+                .willReturn(Optional.of(new SellerDto(SELLER_ID + 1, MEMBER_ID, "다른 상점", SellerStatus.APPROVED)));
+
+        productFacade.addWishlist(MEMBER_ID, product.getId());
+
+        assertThat(productFacade.getProductDetail(product.getId(), MEMBER_ID).wished()).isTrue();
     }
 
     @Test

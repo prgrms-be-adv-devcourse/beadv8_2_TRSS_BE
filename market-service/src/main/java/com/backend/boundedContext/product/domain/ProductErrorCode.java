@@ -33,7 +33,10 @@ public enum ProductErrorCode implements ErrorCode {
     STOP_REQUEST_NOT_PENDING(409, "심사 중인 요청만 처리할 수 있습니다."),
     STOP_REQUEST_NOT_FOUND(404, "판매 중지 요청을 찾을 수 없습니다."),
     PRODUCT_DELETED(409, "삭제된 상품입니다."),
-    OPTION_DELETED(409, "삭제된 옵션입니다.");
+    OPTION_DELETED(409, "삭제된 옵션입니다."),
+
+    // 찜
+    SELF_WISH_NOT_ALLOWED(400, "본인이 판매하는 상품은 찜할 수 없습니다.");
 
     private final int status;
     private final String msg;
