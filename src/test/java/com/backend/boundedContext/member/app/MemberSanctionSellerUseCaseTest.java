@@ -20,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.Seller;
-import com.backend.boundedContext.member.out.MemberProductPort;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
@@ -36,9 +35,6 @@ class MemberSanctionSellerUseCaseTest {
     private SellerSupport sellerSupport;
 
     @Mock
-    private MemberProductPort memberProductPort;
-
-    @Mock
     private MemberSettlementPort memberSettlementPort;
 
     @Mock
@@ -48,7 +44,7 @@ class MemberSanctionSellerUseCaseTest {
     private MemberSanctionSellerUseCase memberSanctionSellerUseCase;
 
     @Test
-    @DisplayName("판매 중이면 SANCTIONED가 되고, 상품 판매 중지 → 정산 보류 순서로 사유와 함께 요청하고 제재 이벤트를 발행한 뒤 이력을 저장한다")
+    @DisplayName("판매 중이면 SANCTIONED가 되고, 정산 보류를 사유와 함께 요청하고 제재 이벤트를 발행한 뒤 이력을 저장한다")
     void sanction_approved() {
         Seller seller = approved();
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(seller);
@@ -57,8 +53,7 @@ class MemberSanctionSellerUseCaseTest {
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.SANCTIONED);
         assertThat(seller.getBusinessNumber()).isEqualTo("1234567890");
-        InOrder inOrder = inOrder(memberProductPort, memberSettlementPort, eventPublisher);
-        inOrder.verify(memberProductPort).stopAllBySeller(SELLER_ID, "위조 상품 판매");
+        InOrder inOrder = inOrder(memberSettlementPort, eventPublisher);
         inOrder.verify(memberSettlementPort).holdSeller(SELLER_ID, "위조 상품 판매");
         inOrder.verify(eventPublisher).publish(new SellerSanctionedEvent(SELLER_ID, "위조 상품 판매"));
         verify(sellerSupport).saveHistory(any(), any());
@@ -74,13 +69,12 @@ class MemberSanctionSellerUseCaseTest {
         memberSanctionSellerUseCase.sanction(SELLER_ID, "위조 상품 판매");
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.SANCTIONED);
-        verify(memberProductPort).stopAllBySeller(SELLER_ID, "위조 상품 판매");
         verify(memberSettlementPort).holdSeller(SELLER_ID, "위조 상품 판매");
         verify(eventPublisher).publish(new SellerSanctionedEvent(SELLER_ID, "위조 상품 판매"));
     }
 
     @Test
-    @DisplayName("판매 중·철회 심사 중이 아니면 409 SELLER_STATE_INVALID이고 상품 중지·정산 보류를 요청하지 않고 제재 이벤트도 발행하지 않는다")
+    @DisplayName("판매 중·철회 심사 중이 아니면 409 SELLER_STATE_INVALID이고 정산 보류를 요청하지 않고 제재 이벤트도 발행하지 않는다")
     void sanction_stateInvalid() {
         given(sellerSupport.getSeller(SELLER_ID)).willReturn(pending());
 
@@ -88,7 +82,7 @@ class MemberSanctionSellerUseCaseTest {
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getResultCode()).isEqualTo(MemberErrorCode.SELLER_STATE_INVALID.resultCode()));
 
-        verifyNoInteractions(memberProductPort, memberSettlementPort, eventPublisher);
+        verifyNoInteractions(memberSettlementPort, eventPublisher);
         verify(sellerSupport, never()).saveHistory(any(), any());
     }
 
