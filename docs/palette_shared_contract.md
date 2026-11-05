@@ -437,6 +437,15 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 
 ## 6. settlement
 
+정산은 `settlement-service`(포트 8084, DB 스키마 `settlement`)로 옮겼습니다. 다른 서비스와의 연결은 서비스 간 연결 작업 전까지 임시 구현입니다.
+
+| 방향 | 임시 구현 | 동작 |
+| --- | --- | --- |
+| 정산 → 회원 (`getSeller`, `getSellers`, `findSellerByMemberId`) | `settlement-service`의 `MemberApiClient` | 지어낸 판매자를 돌려주지 않음: `getSeller`·`getSellers` 예외, `findSellerByMemberId` empty. 연결 전까지 월 정산 집계(제재 여부 확인), 관리자 정산 목록·미리보기(상호명 조회), 정산 보류 해제(제재 여부 확인)는 실패하고, 판매자 정산 조회는 빈 결과(목록·예상 금액은 빈 목록, 상세는 404), 시드 정산 데이터는 만들어지지 않는다 |
+| 정산 → 결제 (`transfer`) | `settlement-service`의 `PaymentApiClient` | 예외. 그래서 정산 스케줄러는 기본으로 꺼 둔다(`SETTLEMENT_SCHEDULING_ENABLED=false`) |
+| 회원 → 정산 (`getUnsettledAmount`, `holdSeller`) | 루트 모놀리스의 `SettlementApiClient` | 예외. 연결 전까지 판매자 제재·철회·판매자 회원 탈퇴·내 판매자 정보 조회가 실패한다 |
+| 주문 → 정산 (`OrderConfirmedEvent`) | 없음 (Kafka `order.events`) | 그대로 동작. 앱이 달라도 같은 토픽을 받는다 |
+
 ### SettlementApi
 
 ```java
@@ -465,7 +474,7 @@ public interface SettlementApi {
 | `getUnsettledAmount` | `GET /internal/v1/settlements/sellers/{sellerId}/unsettled-amount` | 정산 후보가 없거나 없는 판매자면 200 + `data: 0` |
 
 - 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 금액(원)을 담습니다.
-- `holdSeller`는 HTTP로 열지 않습니다. 회원이 `SellerSanctionedEvent`(sellerId, reason)를 `seller.events` 토픽으로 발행하고 정산이 컨슈머(groupId `settlement`)로 받는 구조로 바뀝니다(#205). 이벤트 전환이 반영되기 전까지는 회원이 같은 앱 안에서 `SettlementApi.holdSeller`를 그대로 부릅니다.
+- `holdSeller`는 HTTP로 열지 않습니다. 회원이 발행하는 `SellerSanctionedEvent`(sellerId, reason)를 정산 컨슈머(groupId `settlement`)가 `seller.events` 토픽으로 받아 보류합니다. #225에서 회원의 직접 호출을 빼기 전까지는 회원이 `SettlementApi.holdSeller`도 함께 부릅니다.
 - Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
 
 ### 받는 이벤트
@@ -473,10 +482,11 @@ public interface SettlementApi {
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
 | `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `processed_event`(eventId, `settlement`)로 재전달을 거르고, `settlement_candidate.order_item_id` 유니크로 한 번 더 막음 |
-| `SellerSanctionedEvent` (미구현) | `holdSeller(sellerId, reason)`와 같은 처리 | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
+| `SellerSanctionedEvent` | `holdSeller(sellerId, reason)`와 같은 처리, 처리 이력 trigger `EVENT` | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다.
-- `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(미구현). 컨슈머가 생기면 회원의 `holdSeller` 동기 호출을 뺀다.
+- `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(`SettlementSellerEventListener`). 같은 토픽의 다른 판매자 이벤트(철회 요청·철회 거절)는 정산이 할 일이 없어 무시한다. 회원은 #225에서 `holdSeller` 동기 호출을 뺀다.
+- 이벤트가 오기 전에 지급이 도는 틈은 지급 직전 확인으로 막는다. 정산서를 지급하기 직전에 판매자 상태가 `SANCTIONED`이면 지급하지 않고 HOLD로 바꾼다(처리 이력 trigger는 지급을 시작한 경로). 제재 뒤에 새로 만들어지는 정산서는 월 정산 집계가 판매자 상태를 보고 처음부터 HOLD로 만든다.
 - 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
 - 실패하면 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `order.events-dlt`로 보내고 ERROR 로그로 Slack에 알린다. 원인을 고친 뒤 `order.events`로 다시 보낸다 → [개발 가이드 6.5](palette_development_guide.md#65-outbox)
 - 구매 확정 후 후보가 생기기까지 릴레이 간격(최대 약 1초)과 Kafka 전달 시간만큼 늦어진다.

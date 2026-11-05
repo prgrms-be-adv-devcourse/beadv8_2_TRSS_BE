@@ -64,16 +64,10 @@ spring:
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
 
-  batch:
-    jdbc:
-      initialize-schema: always
-    job:
-      enabled: false           # 앱 시작 시 Job 자동 실행 금지. 정산 Job은 스케줄러·관리자 요청으로만 실행한다
-
   task:
     scheduling:
       pool:
-        size: 6          # 스케줄 작업 6개(정산 2, 충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 월 정산 Job이 오래 돌아도 다른 스케줄러가 멈추지 않는다
+        size: 4          # 스케줄 작업 4개(충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 정산 스케줄러는 settlement-service로 옮김
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
@@ -153,16 +147,10 @@ custom:
     readTimeoutSeconds: 5
   settlement:
     # 정산 주소. 회원이 정산 내부 API(/internal/v1/settlements)로 미지급 금액을 조회할 때 쓴다 (탈퇴 검사, 판매자 철회 요청·승인, 내 판매자 정보)
-    # 정산이 settlement-service로 분리되기 전에는 루트 앱(8080), 분리 후에는 settlement-service(8084)
-    baseUrl: ${SETTLEMENT_SERVICE_URL:http://localhost:8080}
+    # 정산은 settlement-service(8084)로 분리됐다. 정산 정책 값(수수료율, 정산일 등)은 settlement-service의 application.yaml에 있다
+    baseUrl: ${SETTLEMENT_SERVICE_URL:http://localhost:8084}
     connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
     readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
-    feeRate: 10                # 수수료율(%)
-    payDayOfMonth: 10          # 매월 정산일
-    maxAttempts: 3             # 최초 1회 + 재시도 2회
-    retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
-    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
-    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
