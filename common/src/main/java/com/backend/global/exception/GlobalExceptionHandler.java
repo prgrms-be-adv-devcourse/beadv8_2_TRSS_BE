@@ -98,11 +98,12 @@ public class GlobalExceptionHandler {
     }
 
     // 클라이언트가 응답을 다 받기 전에 연결을 끊은 경우 (Broken pipe, Connection reset by peer).
-    // 예: healthcheck 시간 초과, 사용자가 로딩 중에 창을 닫음. 서버 잘못이 아니므로 ERROR(Slack 알림 대상)로 남기지 않는다.
+    // 예: healthcheck 시간 초과, 사용자가 로딩 중에 창을 닫음. 서버가 고칠 것이 없으므로 운영 로그에 남기지 않는다
+    // (DEBUG, 아래 handleUnknown이 잡으면 ERROR·Slack 알림이 된다). Spring 기본 동작과 같다.
     // 받을 상대가 없어 응답 본문도 쓰지 않는다(쓰면 같은 예외가 다시 난다)
     @ExceptionHandler(AsyncRequestNotUsableException.class)
     public void handleClientAbort(AsyncRequestNotUsableException e, HttpServletRequest req) {
-        log.warn("Client aborted {} {}: {}", req.getMethod(), req.getRequestURI(), e.getMessage());
+        log.debug("Client aborted {} {}: {}", req.getMethod(), req.getRequestURI(), e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
