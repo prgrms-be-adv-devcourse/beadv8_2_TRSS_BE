@@ -6,6 +6,7 @@ import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -15,7 +16,6 @@ import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +37,7 @@ import static org.mockito.Mockito.verify;
 
 /**
  * 관리자 제재 (S10). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 정산 보류는 SettlementApi를 mock으로 바꿔 호출됐는지만 확인하고, 제재 이벤트는 outbox에 남는지 확인한다.
+ * 정산 보류는 MemberSettlementPort를 mock으로 바꿔 호출됐는지만 확인하고, 제재 이벤트는 outbox에 남는지 확인한다.
  */
 @SpringBootTest
 class AdminSellerSanctionIntegrationTest {
@@ -57,8 +57,9 @@ class AdminSellerSanctionIntegrationTest {
     @Autowired
     private OutboxEventRepository outboxEventRepository;
 
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
     @MockitoBean
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     private Long memberId;
     private Long sellerId;
@@ -97,7 +98,7 @@ class AdminSellerSanctionIntegrationTest {
         assertThat(latest.getToStatus()).isEqualTo(SellerStatus.SANCTIONED);
         assertThat(latest.getReason()).isEqualTo("위조 상품 판매");
 
-        verify(settlementApi).holdSeller(sellerId, "위조 상품 판매");
+        verify(memberSettlementPort).holdSeller(sellerId, "위조 상품 판매");
         assertThat(sellerOutbox()).singleElement()
                 .satisfies(outbox -> {
                     assertThat(outbox.getEventType()).isEqualTo("SellerSanctionedEvent");
@@ -136,7 +137,7 @@ class AdminSellerSanctionIntegrationTest {
         assertError(() -> memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매"), MemberErrorCode.SELLER_STATE_INVALID);
 
         assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.PENDING);
-        verify(settlementApi, never()).holdSeller(any(), any());
+        verify(memberSettlementPort, never()).holdSeller(any(), any());
         assertThat(sellerOutbox()).isEmpty();
     }
 

@@ -7,6 +7,7 @@ import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
 import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
@@ -16,7 +17,6 @@ import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +37,7 @@ import static org.mockito.BDDMockito.given;
 
 /**
  * 관리자 철회 승인·거절 (S8·S9). 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 진행 중인 판매와 미정산 금액은 MemberOrderPort·SettlementApi를 mock으로 바꿔 정한다 (기본값: 없음).
+ * 진행 중인 판매와 미정산 금액은 MemberOrderPort·MemberSettlementPort를 mock으로 바꿔 정한다 (기본값: 없음).
  */
 @SpringBootTest
 class AdminSellerWithdrawalIntegrationTest {
@@ -61,8 +61,9 @@ class AdminSellerWithdrawalIntegrationTest {
     @MockitoBean
     private MemberOrderPort memberOrderPort;
 
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
     @MockitoBean
-    private SettlementApi settlementApi;
+    private MemberSettlementPort memberSettlementPort;
 
     private Long memberId;
     private Long sellerId;
@@ -135,7 +136,7 @@ class AdminSellerWithdrawalIntegrationTest {
     @Test
     @DisplayName("철회 승인: 미정산 금액이 있으면 409 UNSETTLED_AMOUNT_EXISTS")
     void approveWithdrawal_unsettledAmount() {
-        given(settlementApi.getUnsettledAmount(sellerId)).willReturn(15_000L);
+        given(memberSettlementPort.getUnsettledAmount(sellerId)).willReturn(15_000L);
 
         assertError(() -> memberSellerFacade.approveWithdrawal(sellerId), MemberErrorCode.UNSETTLED_AMOUNT_EXISTS);
 
