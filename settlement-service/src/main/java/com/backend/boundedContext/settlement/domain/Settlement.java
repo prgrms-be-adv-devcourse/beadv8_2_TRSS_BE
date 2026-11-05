@@ -209,7 +209,7 @@ public class Settlement extends BaseIdAndTime {
     }
 
     /** 보류 해제 → READY
-     * 재시도 스케줄러가 판매자 상태를 다시 보지 않고 지급한다 */
+     * 재시도 스케줄러가 지급한다. 지급 직전에 판매자가 제재 상태면 다시 HOLD가 된다(SettlementPayoutUseCase) */
     public void release() {
         requireStatus(SettlementStatus.HOLD);
         this.status = SettlementStatus.READY;

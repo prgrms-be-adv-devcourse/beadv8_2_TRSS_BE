@@ -54,6 +54,7 @@ class SettlementAdminActionsUseCaseTest {
     private final Map<Long, SettlementCandidate> candidates = new HashMap<>();
     private final List<SettlementProcessHistory> histories = new ArrayList<>();
     private Long unsettledSum;
+    private SellerStatus sellerStatus = SellerStatus.APPROVED;
 
     private final SettlementSupport support;
     private final SettlementHoldUseCase holdUseCase;
@@ -84,6 +85,7 @@ class SettlementAdminActionsUseCaseTest {
                     return args[0];
                 }));
         SettlementMemberPort settlementMemberPort = fake(SettlementMemberPort.class, Map.of(
+                "getSeller", args -> new SellerDto((Long) args[0], SELLER_MEMBER_ID, "팔레트상점", sellerStatus),
                 "findSellerByMemberId", args -> {
                     if (SELLER_MEMBER_ID.equals(args[0])) {
                         return Optional.of(new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.APPROVED));
@@ -99,7 +101,7 @@ class SettlementAdminActionsUseCaseTest {
                         .toList()));
         support = new SettlementSupport(settlementRepository, candidateRepository, historyRepository, settlementMemberPort);
         holdUseCase = new SettlementHoldUseCase(support, historyRepository);
-        releaseUseCase = new SettlementReleaseUseCase(support, historyRepository);
+        releaseUseCase = new SettlementReleaseUseCase(support, historyRepository, settlementMemberPort);
         holdSellerUseCase = new SettlementHoldSellerUseCase(settlementRepository, historyRepository);
         excludeUseCase = new SettlementExcludeCandidateUseCase(support, historyRepository);
         sellerDetailUseCase = new SettlementGetSellerSettlementUseCase(support);
@@ -150,6 +152,20 @@ class SettlementAdminActionsUseCaseTest {
     }
 
     @Test
+    @DisplayName("해제: 판매자가 제재(SANCTIONED) 중이면 409이고 HOLD·보류 사유를 그대로 두며 이력을 남기지 않는다")
+    void release_sellerSanctioned() {
+        Settlement s = save(31L, SELLER_ID, "2026-09");
+        s.hold("판매자 제재");
+        sellerStatus = SellerStatus.SANCTIONED;
+
+        assertEquals("409-SETTLEMENT_SELLER_SANCTIONED",
+                assertThrows(DomainException.class, () -> releaseUseCase.release(31L)).getResultCode());
+        assertEquals(SettlementStatus.HOLD, s.getStatus());
+        assertEquals("판매자 제재", s.getHoldReason());
+        assertTrue(histories.isEmpty());
+    }
+
+    @Test
     @DisplayName("판매자 제재: 그 판매자의 지급 전 정산서만 HOLD, PAID·다른 판매자 정산서는 그대로")
     void holdSeller() {
         Settlement ready = save(31L, SELLER_ID, "2026-08");
@@ -159,7 +175,7 @@ class SettlementAdminActionsUseCaseTest {
         paid.markPaid(500L, LocalDateTime.now());
         Settlement other = save(34L, OTHER_SELLER_ID, "2026-09");
 
-        int held = holdSellerUseCase.holdSeller(SELLER_ID, "위조 상품 판매");
+        int held = holdSellerUseCase.holdSeller(SELLER_ID, "위조 상품 판매", SettlementTrigger.EVENT);
 
         assertEquals(2, held);
         assertEquals(SettlementStatus.HOLD, ready.getStatus());
@@ -168,6 +184,20 @@ class SettlementAdminActionsUseCaseTest {
         assertEquals(SettlementStatus.PAID, paid.getStatus());
         assertEquals(SettlementStatus.READY, other.getStatus());
         assertEquals(2, histories.size());
+        assertTrue(histories.stream().allMatch(h -> h.getTriggerType() == SettlementTrigger.EVENT));   // 제재 이벤트로 보류
+    }
+
+    @Test
+    @DisplayName("판매자 제재를 다시 받으면(이벤트 재전달) 이미 HOLD라 아무것도 바꾸지 않는다")
+    void holdSeller_again() {
+        save(31L, SELLER_ID, "2026-08");
+        holdSellerUseCase.holdSeller(SELLER_ID, "위조 상품 판매", SettlementTrigger.EVENT);
+        histories.clear();
+
+        int held = holdSellerUseCase.holdSeller(SELLER_ID, "위조 상품 판매", SettlementTrigger.EVENT);
+
+        assertEquals(0, held);
+        assertEquals(0, histories.size());
     }
 
     @Test

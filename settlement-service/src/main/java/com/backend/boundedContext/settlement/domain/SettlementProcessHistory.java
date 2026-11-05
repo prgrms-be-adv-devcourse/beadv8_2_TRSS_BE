@@ -144,13 +144,24 @@ public class SettlementProcessHistory extends BaseIdAndTime {
     // ---------- 보류·해제·제외 (관리자) ----------
 
     /**
-     * 정산서 보류(HOLD)
-     * 관리자가 정산서 1건을 보류한 경우와 판매자 제재로 지급 전 정산서를 한꺼번에 보류한 경우 모두 ADMIN으로 남긴다
+     * 관리자가 정산서를 보류(HOLD)
      * @param reason 보류 사유 (admin_reason)
      */
     public static SettlementProcessHistory held(Long settlementId, String reason, LocalDateTime now) {
+        return held(settlementId, reason, SettlementTrigger.ADMIN, now);
+    }
+
+    /**
+     * 정산서 보류(HOLD). 보류를 시작한 경로를 함께 남긴다
+     * - ADMIN: 관리자가 정산서 1건을 보류, 또는 회원 컨텍스트가 SettlementApi.holdSeller로 판매자 제재 보류(#225 전까지)
+     * - EVENT: 판매자 제재 이벤트(SellerSanctionedEvent)를 받아 보류
+     * - MONTHLY_JOB·RETRY_SCHEDULER·ADMIN(재처리): 지급 직전 판매자가 제재 상태여서 지급하지 않고 보류
+     * @param reason 보류 사유 (admin_reason)
+     */
+    public static SettlementProcessHistory held(Long settlementId, String reason, SettlementTrigger trigger,
+                                                LocalDateTime now) {
         return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
-                SettlementHistoryStage.HOLD, 1, SettlementTrigger.ADMIN,
+                SettlementHistoryStage.HOLD, 1, trigger,
                 SettlementHistoryResult.SUCCEEDED, null, null, reason, null, now);
     }
 

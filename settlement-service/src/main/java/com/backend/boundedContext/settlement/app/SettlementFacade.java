@@ -205,9 +205,16 @@ public class SettlementFacade {
         return settlementSupport.sumUnsettledPayout(sellerId);
     }
 
-    /** 판매자 제재: 회원 컨텍스트 트랜잭션(REQUIRED)에 참여해 함께 커밋·롤백된다 */
+    /** 판매자 제재(SettlementApi.holdSeller): 회원 컨텍스트 트랜잭션(REQUIRED)에 참여해 함께 커밋·롤백된다
+     * TODO #225에서 회원이 직접 호출을 빼면 SettlementApi.holdSeller와 함께 지운다 */
     @Transactional
     public int holdSeller(Long sellerId, String reason) {
-        return settlementHoldSellerUseCase.holdSeller(sellerId, reason);
+        return settlementHoldSellerUseCase.holdSeller(sellerId, reason, SettlementTrigger.ADMIN);
+    }
+
+    /** 판매자 제재 이벤트(SellerSanctionedEvent): 컨슈머 트랜잭션(REQUIRED)에 참여해 처리 기록과 함께 커밋·롤백된다 */
+    @Transactional
+    public int holdSellerBySanctionEvent(Long sellerId, String reason) {
+        return settlementHoldSellerUseCase.holdSeller(sellerId, reason, SettlementTrigger.EVENT);
     }
 }

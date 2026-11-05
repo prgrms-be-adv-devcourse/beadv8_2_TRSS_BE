@@ -6,7 +6,7 @@ package com.backend.boundedContext.settlement.domain;
  * 그래서 관리자가 수동 실행한 월 정산 Job은 ADMIN으로 이력에 남지만 자동 지급과 같은 기준으로 지급한다
  */
 public enum SettlementTrigger {
-    /** 구매 확정 이벤트 */
+    /** Kafka 이벤트: 구매 확정(정산 후보 생성), 판매자 제재(정산 보류) */
     EVENT,
     /** 매월 10일 월 정산 Job */
     MONTHLY_JOB,

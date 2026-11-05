@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 정산 내부 API. {@link com.backend.shared.settlement.out.SettlementApi} 중 다른 모듈이 동기로 부르는 기능을 HTTP로 제공함
  * 정산 모듈을 분리하면 회원 쪽이 MemberSettlementPort의 HTTP 어댑터로 이 API를 부름
- * holdSeller는 HTTP로 열지 않음. 회원이 발행하는 SellerSanctionedEvent(seller.events)를 정산 컨슈머가 받도록 바뀔 예정(#205)
+ * holdSeller는 HTTP로 열지 않음. 회원이 발행하는 SellerSanctionedEvent(seller.events)를 정산 컨슈머가 받아 보류함(SettlementSellerEventListener)
  * 서비스끼리만 부르는 API라 /internal 아래에 두고 Swagger에서 숨김. 응답·실패 형식은 다른 내부 API와 같음
  */
 @Hidden

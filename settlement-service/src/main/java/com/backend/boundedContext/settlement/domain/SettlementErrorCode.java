@@ -17,6 +17,7 @@ public enum SettlementErrorCode implements ErrorCode {
     SETTLEMENT_NOT_FOUND(404, "정산서를 찾을 수 없습니다."),
     SETTLEMENT_RUNNING(409, "같은 월의 정산이 이미 실행 중입니다."),
     SETTLEMENT_STATE_INVALID(409, "현재 정산서 상태에서는 처리할 수 없습니다."),
+    SETTLEMENT_SELLER_SANCTIONED(409, "제재 중인 판매자의 정산서는 보류를 해제할 수 없습니다."),
     SETTLEMENT_MONTH_INVALID(400, "아직 끝나지 않은 달은 정산할 수 없습니다."),
 
     SETTLEMENT_CANDIDATE_NOT_FOUND(404, "정산 후보를 찾을 수 없습니다."),
