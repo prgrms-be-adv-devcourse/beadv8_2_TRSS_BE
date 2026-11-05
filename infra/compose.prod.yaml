@@ -21,7 +21,9 @@ x-logging: &default-logging
 #   $$는 compose가 $를 변수로 바꾸지 않게 하는 표기다(bash에는 $로 전달된다).
 x-app-healthcheck: &app-healthcheck
   interval: 10s
-  timeout: 5s
+  # 막 뜬 앱은 첫 /v3/api-docs 생성(전체 API 스캔)에 5초 넘게 걸릴 수 있다.
+  # 시간이 다 되면 Docker가 요청을 끊어 앱에 Broken pipe가 나므로 넉넉히 기다린다(평소 응답은 1초 미만)
+  timeout: 15s
   retries: 3
   start_period: 90s   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다
 
