@@ -276,7 +276,8 @@ services:
       - loki
 
   grafana:
-    image: grafana/grafana:12.1.0
+    # 12.2부터 알림 규칙 파일의 keepFiringFor(해결 판단 유예)를 읽는다(monitoring/grafana/provisioning/alerting/rules.yaml)
+    image: grafana/grafana:12.2.0
     container_name: palette-grafana
     restart: unless-stopped
     logging: *default-logging
