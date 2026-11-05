@@ -62,6 +62,7 @@ public class SecurityConfig {
     private static final String[] BUYER_API_URLS = {
             "/api/v1/cart/**",
             "/api/v1/orders/**",
+            "/api/v1/wishlist/**",
             "/api/v1/topups/**",
             "/api/v1/wallet/**",
             "/api/v1/sellers/**"

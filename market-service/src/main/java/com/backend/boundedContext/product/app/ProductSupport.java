@@ -123,6 +123,13 @@ public class ProductSupport {
                 .map(SellerDto::sellerId);
     }
 
+    /** 회원이 이 상품의 판매자인지. 판매자 상태(승인·제재 등)와 상관없이 본인 상품이면 true */
+    public boolean isOwnProduct(Long memberId, Product product) {
+        return memberApi.findSellerByMemberId(memberId)
+                .filter(seller -> seller.sellerId().equals(product.getSellerId()))
+                .isPresent();
+    }
+
     public Category getChildCategory(String parentName, String name) {
         return categoryRepository.findByParentNameAndName(parentName, name)
                 .orElseThrow(() -> new DomainException(ProductErrorCode.CATEGORY_NOT_FOUND));

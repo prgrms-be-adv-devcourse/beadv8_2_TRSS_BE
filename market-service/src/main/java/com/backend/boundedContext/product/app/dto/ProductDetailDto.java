@@ -10,6 +10,7 @@ import java.util.List;
  * @param imageUrls    상세 이미지. 이미지 기능 전까지 빈 목록
  * @param soldOut      옵션이 모두 품절이면 true
  * @param options      삭제되지 않은 옵션 (ID 순)
+ * @param wished       로그인한 회원이 찜한 상품이면 true. 로그인하지 않았으면 false
  */
 public record ProductDetailDto(
         Long productId,
@@ -25,6 +26,7 @@ public record ProductDetailDto(
         String thumbnailUrl,
         List<String> imageUrls,
         boolean soldOut,
-        List<ProductOptionDto> options
+        List<ProductOptionDto> options,
+        boolean wished
 ) {
 }

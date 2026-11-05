@@ -6,6 +6,7 @@ import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
+import com.backend.global.security.AuthMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +14,7 @@ import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -46,9 +48,14 @@ public class ApiV1ProductController {
 
     @Operation(
             summary = "상품 상세",
-            description = "판매 중지·삭제된 상품과 사용 중지된 카테고리의 상품은 404입니다. 재고가 5개 이하인 옵션만 남은 수량을 줍니다.")
+            description = "판매 중지·삭제된 상품과 사용 중지된 카테고리의 상품은 404입니다. 재고가 5개 이하인 옵션만 남은 수량을 줍니다. "
+                    + "로그인 토큰을 보내면 wished에 찜 여부를 채우고, 없으면 false입니다.")
     @GetMapping("/{productId}")
-    public RsData<ProductDetailDto> getProductDetail(@PathVariable Long productId) {
-        return RsData.of("200-1", "상품을 조회했습니다.", productFacade.getProductDetail(productId));
+    public RsData<ProductDetailDto> getProductDetail(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal AuthMember authMember   // 로그인하지 않았으면 null
+    ) {
+        Long memberId = authMember == null ? null : authMember.memberId();
+        return RsData.of("200-1", "상품을 조회했습니다.", productFacade.getProductDetail(productId, memberId));
     }
 }

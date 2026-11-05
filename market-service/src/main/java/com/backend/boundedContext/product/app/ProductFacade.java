@@ -16,6 +16,10 @@ import com.backend.boundedContext.product.app.dto.StockHistoryDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
+import com.backend.boundedContext.product.app.dto.WishlistItemDto;
+import com.backend.boundedContext.product.app.wishlist.ProductAddWishlistUseCase;
+import com.backend.boundedContext.product.app.wishlist.ProductGetWishlistUseCase;
+import com.backend.boundedContext.product.app.wishlist.ProductRemoveWishlistUseCase;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.global.page.PageResponse;
@@ -59,6 +63,9 @@ public class ProductFacade {
     private final ProductGetStopRequestsUseCase productGetStopRequestsUseCase;
     private final ProductApproveStopRequestUseCase productApproveStopRequestUseCase;
     private final ProductRejectStopRequestUseCase productRejectStopRequestUseCase;
+    private final ProductAddWishlistUseCase productAddWishlistUseCase;
+    private final ProductRemoveWishlistUseCase productRemoveWishlistUseCase;
+    private final ProductGetWishlistUseCase productGetWishlistUseCase;
 
     // 내부 API (ProductApiAdapter). 호출한 쪽 트랜잭션에 참여한다
 
@@ -99,9 +106,34 @@ public class ProductFacade {
         return productSearchProductsUseCase.searchProducts(keyword, categoryId, sort, excludeSoldOut, pageable);
     }
 
+    /** 로그인하지 않은 구매자의 상품 상세 (찜 여부는 false) */
     @Transactional(readOnly = true)
     public ProductDetailDto getProductDetail(Long productId) {
-        return productGetProductDetailUseCase.getProductDetail(productId);
+        return productGetProductDetailUseCase.getProductDetail(productId, null);
+    }
+
+    /** 구매자 상품 상세. memberId가 null이 아니면 그 회원의 찜 여부를 채운다 */
+    @Transactional(readOnly = true)
+    public ProductDetailDto getProductDetail(Long productId, Long memberId) {
+        return productGetProductDetailUseCase.getProductDetail(productId, memberId);
+    }
+
+    /** 상품을 찜한다. 이미 찜했으면 그대로 성공 */
+    @Transactional
+    public void addWishlist(Long memberId, Long productId) {
+        productAddWishlistUseCase.addWishlist(memberId, productId);
+    }
+
+    /** 찜을 해제한다. 찜하지 않았으면 그대로 성공 */
+    @Transactional
+    public void removeWishlist(Long memberId, Long productId) {
+        productRemoveWishlistUseCase.removeWishlist(memberId, productId);
+    }
+
+    /** 내 찜 목록 (최근에 찜한 순) */
+    @Transactional(readOnly = true)
+    public PageResponse<WishlistItemDto> getWishlist(Long memberId, Pageable pageable) {
+        return productGetWishlistUseCase.getWishlist(memberId, pageable);
     }
 
     /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. 대표 이미지는 필수, 상세 이미지는 선택이다. */
