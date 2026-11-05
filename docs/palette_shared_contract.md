@@ -74,7 +74,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `SellerWithdrawalRequestedEvent` → (market) 판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원 | 이벤트 (미정산 확인은 동기 조회, 조회 실패 시 503) |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기 조회 (조회 실패 시 503) |
 | 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `SellerWithdrawalRejectedEvent` → (market) 철회로 중지된 상품만 판매 중으로 | 이벤트 |
-| 관리자 제재 | member | 판매자 SANCTIONED → `SettlementApi.holdSeller(sellerId, reason)` → `SellerSanctionedEvent` → (market) 판매 중 상품 STOPPED | 이벤트 + 정산 보류는 동기, 같은 Tx (정산 컨슈머가 생기면 뺀다, #225) |
+| 관리자 제재 | member | 판매자 SANCTIONED → `SellerSanctionedEvent` → (market) 판매 중 상품 STOPPED · (settlement) 지급 전 정산서 HOLD | 이벤트 |
 | 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 (조회 실패 시 503, 지갑이 없으면 잔액 0) |
 | 충전 준비·승인, 주문 생성·결제 | payment, order | `MemberApi.checkActiveMember(memberId)`: 탈퇴한 회원이면 401 (탈퇴 후 남은 Access Token 차단) | 동기 조회 |
 | 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 (조회 실패 시 해당 영역만 null) |
@@ -143,7 +143,7 @@ public interface MemberApi {
 | Port | 구현 | 부르는 곳 | 주소 설정 |
 | --- | --- | --- | --- |
 | `MemberOrderPort` | `MemberOrderHttpAdapter` | market-service `/internal/v1/orders` | `custom.market.baseUrl` (`MARKET_SERVICE_URL`, 기본 `http://localhost:8082`) |
-| `MemberSettlementPort` | `MemberSettlementHttpAdapter` | 정산 `/internal/v1/settlements` (`holdSeller`만 같은 앱 `SettlementApi`, #225에서 제거) | `custom.settlement.baseUrl` (`SETTLEMENT_SERVICE_URL`, 기본 `http://localhost:8080`, settlement-service 분리 후 8084) |
+| `MemberSettlementPort` | `MemberSettlementHttpAdapter` | settlement-service `/internal/v1/settlements` (정산 보류는 HTTP가 아니라 `SellerSanctionedEvent`) | `custom.settlement.baseUrl` (`SETTLEMENT_SERVICE_URL`, 기본 `http://localhost:8084`) |
 | `MemberPaymentPort` | `MemberPaymentApiAdapter` (같은 앱 `PaymentApi`) | 결제는 아직 루트 앱 안. 회원 서비스 이동 때 HTTP로 바꿉니다(#236) | - |
 
 - HTTP 호출은 `MemberInternalApiClient`가 맡습니다. 모든 요청에 `X-Internal-Key`를 붙이고, 접속 1초·응답 3초 제한을 둡니다.
@@ -199,7 +199,7 @@ public record SellerWithdrawalRejectedEvent(Long sellerId) implements DomainEven
 - 그래서 가입 직후 지갑이 아직 없는 구간이 있다(보통 몇 초). 이 구간의 충전·결제 처리는 결제 담당이 정한다(#194).
 - 판매자 이벤트(TRSS-144)는 토픽 `seller.events`로 나가고 키는 `sellerId`다. 같은 판매자의 이벤트는 같은 파티션으로 가서 발행 순서대로 처리된다. 사유(`reason`)는 앞뒤 공백을 뺀 값이다.
 - 판매자 이벤트는 상태 변경과 같은 트랜잭션에서 outbox에 저장한다. 상품 중지·재개는 market 컨슈머(groupId `market`)가 이벤트로 처리하고 회원은 상품을 부르지 않는다(TRSS-160).
-- 정산 보류는 정산 컨슈머(groupId `settlement`)가 생기기 전까지 제재 트랜잭션에서 `holdSeller`도 동기로 부른다(#225). 정산 보류는 다시 해도 결과가 같아서 둘 다 실행돼도 된다.
+- 정산 보류도 정산 컨슈머(groupId `settlement`)가 이벤트로 처리하고 회원은 정산을 부르지 않는다(TRSS-161). 이벤트가 오기 전에 지급이 돌면 정산이 지급 직전에 판매자 상태를 보고 보류한다.
 
 ## 3. product
 
@@ -474,7 +474,7 @@ public interface SettlementApi {
 | `getUnsettledAmount` | `GET /internal/v1/settlements/sellers/{sellerId}/unsettled-amount` | 정산 후보가 없거나 없는 판매자면 200 + `data: 0` |
 
 - 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 금액(원)을 담습니다.
-- `holdSeller`는 HTTP로 열지 않습니다. 회원이 발행하는 `SellerSanctionedEvent`(sellerId, reason)를 정산 컨슈머(groupId `settlement`)가 `seller.events` 토픽으로 받아 보류합니다. #225에서 회원의 직접 호출을 빼기 전까지는 회원이 `SettlementApi.holdSeller`도 함께 부릅니다.
+- `holdSeller`는 HTTP로 열지 않습니다. 회원이 발행하는 `SellerSanctionedEvent`(sellerId, reason)를 정산 컨슈머(groupId `settlement`)가 `seller.events` 토픽으로 받아 보류합니다. 회원은 `holdSeller`를 부르지 않습니다(TRSS-161).
 - Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
 
 ### 받는 이벤트
@@ -485,7 +485,7 @@ public interface SettlementApi {
 | `SellerSanctionedEvent` | `holdSeller(sellerId, reason)`와 같은 처리, 처리 이력 trigger `EVENT` | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다.
-- `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(`SettlementSellerEventListener`). 같은 토픽의 다른 판매자 이벤트(철회 요청·철회 거절)는 정산이 할 일이 없어 무시한다. 회원은 #225에서 `holdSeller` 동기 호출을 뺀다.
+- `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(`SettlementSellerEventListener`). 같은 토픽의 다른 판매자 이벤트(철회 요청·철회 거절)는 정산이 할 일이 없어 무시한다. 회원은 `holdSeller`를 부르지 않는다(TRSS-161).
 - 이벤트가 오기 전에 지급이 도는 틈은 지급 직전 확인으로 막는다. 정산서를 지급하기 직전에 판매자 상태가 `SANCTIONED`이면 지급하지 않고 HOLD로 바꾼다(처리 이력 trigger는 지급을 시작한 경로). 제재 뒤에 새로 만들어지는 정산서는 월 정산 집계가 판매자 상태를 보고 처음부터 HOLD로 만든다.
 - 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
 - 실패하면 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `order.events-dlt`로 보내고 ERROR 로그로 Slack에 알린다. 원인을 고친 뒤 `order.events`로 다시 보낸다 → [개발 가이드 6.5](palette_development_guide.md#65-outbox)

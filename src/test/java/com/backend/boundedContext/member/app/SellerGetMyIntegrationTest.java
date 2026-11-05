@@ -10,7 +10,6 @@ import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerStatus;
-import com.backend.shared.settlement.out.SettlementApi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,10 +32,6 @@ class SellerGetMyIntegrationTest {
 
     @Autowired
     private MemberSellerFacade memberSellerFacade;
-
-    // 정산은 settlement-service로 옮겨 갔다. 모놀리스의 임시 SettlementApiClient는 예외를 던지므로 mock으로 바꾼다(미정산 금액 0, 보류는 아무것도 안 함)
-    @MockitoBean
-    private SettlementApi settlementApi;
 
     @Autowired
     private MemberRepository memberRepository;
