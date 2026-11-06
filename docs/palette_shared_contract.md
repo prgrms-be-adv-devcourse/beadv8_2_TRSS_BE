@@ -82,6 +82,8 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 
 ## 2. member
 
+회원은 `member-service`(포트 8081, DB 스키마 `member`)로 옮겼습니다. 다른 서비스와는 내부 API(HTTP)와 이벤트(Kafka `member.events`·`seller.events`)로만 연결됩니다.
+
 ### MemberApi
 
 ```java
@@ -117,7 +119,15 @@ public interface MemberApi {
 
 ### 내부 API (HTTP)
 
-회원 모듈을 분리하면 다른 모듈은 `MemberApi` 대신 아래 내부 API를 HTTP로 부릅니다. 지금도 같은 앱 안에서 동작하며, 부르는 쪽 클라이언트는 각 모듈이 필요한 메서드만 담아 만듭니다([개발 가이드 6.2](palette_development_guide.md)).
+다른 서비스는 `MemberApi` 대신 아래 내부 API를 HTTP로 부릅니다. 부르는 쪽 클라이언트는 각 모듈이 필요한 메서드만 담아 만듭니다([개발 가이드 6.2](palette_development_guide.md)).
+
+| 부르는 쪽 | 클라이언트 | 주소 설정 |
+| --- | --- | --- |
+| market-service (상품·주문) | `market.client.MemberApiClient` | `custom.member.baseUrl` (`MEMBER_SERVICE_URL`, 기본 `http://localhost:8081`) |
+| 루트 모놀리스 (결제) | `monolith.client.MemberApiClient` | `custom.member.baseUrl` (`MEMBER_SERVICE_URL`, 기본 `http://localhost:8081`) |
+
+- 운영(`infra/compose.prod.yaml`)에서는 `MEMBER_SERVICE_URL: http://member:8081`로 Docker 내부망에서 직접 부르고 nginx를 거치지 않는다.
+- 외부 요청은 nginx가 회원 경로(`/api/v1/auth`·`users`·`sellers`·`seller/me`·`admin/users`·`admin/sellers`)를 member-service로 넘긴다. `seller/products`·`seller/order-items`(market), `seller/settlements`(정산)는 각 서비스로 간다.
 
 | MemberApi | 요청 | 없을 때·실패 |
 | --- | --- | --- |
@@ -144,7 +154,7 @@ public interface MemberApi {
 | --- | --- | --- | --- |
 | `MemberOrderPort` | `MemberOrderHttpAdapter` | market-service `/internal/v1/orders` | `custom.market.baseUrl` (`MARKET_SERVICE_URL`, 기본 `http://localhost:8082`) |
 | `MemberSettlementPort` | `MemberSettlementHttpAdapter` | settlement-service `/internal/v1/settlements` (정산 보류는 HTTP가 아니라 `SellerSanctionedEvent`) | `custom.settlement.baseUrl` (`SETTLEMENT_SERVICE_URL`, 기본 `http://localhost:8084`) |
-| `MemberPaymentPort` | `MemberPaymentApiAdapter` (같은 앱 `PaymentApi`) | 결제는 아직 루트 앱 안. 회원 서비스 이동 때 HTTP로 바꿉니다(#236) | - |
+| `MemberPaymentPort` | `MemberPaymentHttpAdapter` | 결제 `/internal/v1/payments` (payment-service로 분리되기 전에는 루트 앱) | `custom.payment.baseUrl` (`PAYMENT_SERVICE_URL`, 기본 `http://localhost:8080`) |
 
 - HTTP 호출은 `MemberInternalApiClient`가 맡습니다. 모든 요청에 `X-Internal-Key`를 붙이고, 접속 1초·응답 3초 제한을 둡니다.
 - 실패는 두 가지로 나눕니다.
@@ -458,7 +468,6 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 | --- | --- | --- |
 | 정산 → 회원 (`getSeller`, `getSellers`, `findSellerByMemberId`) | `settlement-service`의 `MemberApiClient` | 지어낸 판매자를 돌려주지 않음: `getSeller`·`getSellers` 예외, `findSellerByMemberId` empty. 연결 전까지 월 정산 집계(제재 여부 확인), 관리자 정산 목록·미리보기(상호명 조회), 정산 보류 해제(제재 여부 확인)는 실패하고, 판매자 정산 조회는 빈 결과(목록·예상 금액은 빈 목록, 상세는 404), 시드 정산 데이터는 만들어지지 않는다 |
 | 정산 → 결제 (`transfer`) | `settlement-service`의 `PaymentApiClient` | 예외. 그래서 정산 스케줄러는 기본으로 꺼 둔다(`SETTLEMENT_SCHEDULING_ENABLED=false`) |
-| 회원 → 정산 (`getUnsettledAmount`, `holdSeller`) | 루트 모놀리스의 `SettlementApiClient` | 예외. 연결 전까지 판매자 제재·철회·판매자 회원 탈퇴·내 판매자 정보 조회가 실패한다 |
 | 주문 → 정산 (`OrderConfirmedEvent`) | 없음 (Kafka `order.events`) | 그대로 동작. 앱이 달라도 같은 토픽을 받는다 |
 
 ### SettlementApi
@@ -482,7 +491,7 @@ public interface SettlementApi {
 
 ### 내부 API (HTTP)
 
-정산 모듈을 분리하면 회원은 `SettlementApi.getUnsettledAmount` 대신 아래 내부 API를 HTTP로 부릅니다. 지금도 같은 앱 안에서 동작하며, 회원 쪽 클라이언트는 `MemberSettlementPort`의 HTTP 구현으로 만듭니다([개발 가이드 6.2](palette_development_guide.md)).
+회원은 `SettlementApi.getUnsettledAmount` 대신 아래 내부 API를 HTTP로 부릅니다. 회원 쪽 클라이언트는 `MemberSettlementPort`의 HTTP 구현(`MemberSettlementHttpAdapter`)입니다([개발 가이드 6.2](palette_development_guide.md)).
 
 | SettlementApi | 요청 | 없을 때·실패 |
 | --- | --- | --- |

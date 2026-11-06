@@ -35,7 +35,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
-                  count_over_time({container=~"palette-app|palette-market|palette-settlement"}
+                  count_over_time({container=~"palette-app|palette-member|palette-market|palette-settlement"}
                     |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
                     | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
                     | __error__="" | log_level="ERROR"
@@ -70,7 +70,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
-                  count_over_time({container=~"palette-app|palette-market|palette-settlement"}
+                  count_over_time({container=~"palette-app|palette-member|palette-market|palette-settlement"}
                     |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
                     | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
                     | __error__="" | log_level="ERROR"
@@ -95,7 +95,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
-                  count_over_time({container=~"palette-app|palette-market|palette-settlement"}
+                  count_over_time({container=~"palette-app|palette-member|palette-market|palette-settlement"}
                     |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
                     | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
                     | __error__="" | log_level="ERROR"

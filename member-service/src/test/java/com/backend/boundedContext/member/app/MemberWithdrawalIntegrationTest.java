@@ -1,7 +1,6 @@
 package com.backend.boundedContext.member.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -26,19 +25,17 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.SocialProvider;
 import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
-import com.backend.global.exception.DomainException;
+import com.backend.global.security.InternalApiKeyFilter;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.shared.member.dto.MemberStatus;
-import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.payment.dto.WalletSummaryDto;
-import com.backend.shared.payment.out.PaymentApi;
 
 /**
  * 탈퇴 조건 조회 → 탈퇴 → 로그인 불가를 실제 DB·Redis로 확인한다. 로컬 Docker가 필요하다.
- * 지갑은 payment-service에 있으므로 PaymentApi를 목으로 바꿔 "잔액 0, 결과 대기 충전 없음"(탈퇴 가능)으로 응답한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,11 +49,7 @@ class MemberWithdrawalIntegrationTest {
     @Autowired
     private MemberRepository memberRepository;
 
-    @MockitoBean
-    private PaymentApi paymentApi;
 
-    @Autowired
-    private MemberApi memberApi;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -67,6 +60,10 @@ class MemberWithdrawalIntegrationTest {
     // 주문은 market-service의 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 주문 Port를 목으로 둔다
     @MockitoBean
     private MemberOrderPort memberOrderPort;
+
+    // 결제 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 결제 Port를 목으로 둔다 (지갑 잔액 0)
+    @MockitoBean
+    private MemberPaymentPort memberPaymentPort;
 
     @Autowired
     private LoginAttemptStore loginAttemptStore;
@@ -83,8 +80,7 @@ class MemberWithdrawalIntegrationTest {
     @BeforeEach
     void setUp() {
         member = memberRepository.save(Member.signUp(email, passwordEncoder.encode(PASSWORD), "홍길동"));
-        given(paymentApi.getWallet(member.getId())).willReturn(new WalletSummaryDto(member.getId(), 0, 0));
-        given(paymentApi.hasPendingTopups(member.getId())).willReturn(false);
+        given(memberPaymentPort.getWallet(member.getId())).willReturn(new WalletSummaryDto(member.getId(), 0L, 0L));
     }
 
     @AfterEach
@@ -127,11 +123,11 @@ class MemberWithdrawalIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-LOGIN_FAILED"));
 
-        // 탈퇴 전에 받은 Access Token은 아직 만료되지 않았지만, 돈이 들어가는 충전은 막힌다
-        // 충전은 payment-service에 있고, 충전 전에 회원 내부 API로 이 확인(checkActiveMember)을 불러 401을 받는다
-        assertThatThrownBy(() -> memberApi.checkActiveMember(member.getId()))
-                .isInstanceOfSatisfying(DomainException.class,
-                        e -> assertThat(e.getResultCode()).isEqualTo("401-UNAUTHORIZED"));
+        // 탈퇴 전에 받은 Access Token은 아직 만료되지 않았지만, 결제는 충전 전에 활성 회원인지 회원 내부 API로 확인해서 막는다
+        mockMvc.perform(get("/internal/v1/members/{memberId}/active", member.getId())
+                        .header(InternalApiKeyFilter.HEADER, "test-internal-api-key"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
     }
 
     @Test

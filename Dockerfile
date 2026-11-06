@@ -24,6 +24,7 @@ RUN chmod +x gradlew && ./gradlew dependencies --no-daemon > /dev/null
 ARG MODULE=""
 COPY common/src common/src
 COPY src src
+COPY member-service/src member-service/src
 COPY market-service/src market-service/src
 COPY settlement-service/src settlement-service/src
 RUN if [ -z "$MODULE" ]; then \
