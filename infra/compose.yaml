@@ -16,6 +16,7 @@ services:
       MARKET_DB_PASSWORD: ${MARKET_DB_PASSWORD:-market_user}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_user}
       SETTLEMENT_DB_PASSWORD: ${SETTLEMENT_DB_PASSWORD:-settlement_user}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-notification_user}
       AI_DB_PASSWORD: ${AI_DB_PASSWORD:-ai_user}
       READONLY_DB_PASSWORD: ${READONLY_DB_PASSWORD:-readonly_user}
     ports:

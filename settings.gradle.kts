@@ -8,5 +8,6 @@ include(
 	"market-service",
 	"payment-service",
 	"settlement-service",
+	"notification-service",
 	"ai-service",
 )
