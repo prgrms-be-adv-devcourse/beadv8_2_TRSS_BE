@@ -21,6 +21,9 @@ class MemberFacadeSeedTest {
     @Mock
     private MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
 
+    @Mock
+    private MemberCreateSeedLogisticsUseCase memberCreateSeedLogisticsUseCase;
+
     @InjectMocks
     private MemberFacade memberFacade;
 
@@ -52,5 +55,23 @@ class MemberFacadeSeedTest {
 
         verify(memberSupport, never()).countMembers();
         verify(memberCreateSeedMembersUseCase, never()).createSeedMembers(anyString());
+    }
+
+    @Test
+    @DisplayName("물류 담당자 시드: 다른 회원이 이미 있어도 회원 수와 상관없이 만든다")
+    void createSeedLogistics_existingDb() {
+        memberFacade.createSeedLogistics("logistics@palette.test", "seed-password");
+
+        verify(memberCreateSeedLogisticsUseCase).createSeedLogistics("logistics@palette.test", "seed-password");
+        verify(memberSupport, never()).countMembers();
+    }
+
+    @Test
+    @DisplayName("물류 담당자 시드: 시드 비밀번호가 없으면(운영 환경) 아무것도 하지 않는다")
+    void createSeedLogistics_noPassword() {
+        memberFacade.createSeedLogistics("logistics@palette.test", "");
+        memberFacade.createSeedLogistics("logistics@palette.test", null);
+
+        verify(memberCreateSeedLogisticsUseCase, never()).createSeedLogistics(anyString(), anyString());
     }
 }

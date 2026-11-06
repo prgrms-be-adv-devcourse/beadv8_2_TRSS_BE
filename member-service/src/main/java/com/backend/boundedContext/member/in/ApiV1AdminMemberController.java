@@ -34,7 +34,7 @@ public class ApiV1AdminMemberController {
     public RsData<PageResponse<AdminMemberDto>> getMembers(
             @Parameter(description = "이메일 부분 검색") @RequestParam(required = false) String email,
             @RequestParam(required = false) MemberStatus status,
-            @Parameter(description = "회원 유형: USER 일반 회원, SELLER 판매자(판매 중), ADMIN 관리자") @RequestParam(required = false) MemberType memberType,
+            @Parameter(description = "회원 유형: USER 일반 회원, SELLER 판매자(판매 중), ADMIN 관리자, LOGISTICS 물류 담당자") @RequestParam(required = false) MemberType memberType,
             @ParameterObject Pageable pageable
     ) {
         return RsData.of("200-1", "회원 목록을 조회했습니다.", memberFacade.getMembers(email, status, memberType, pageable));
