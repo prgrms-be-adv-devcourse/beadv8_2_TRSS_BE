@@ -14,6 +14,7 @@ COPY member-service/build.gradle.kts member-service/
 COPY market-service/build.gradle.kts market-service/
 COPY payment-service/build.gradle.kts payment-service/
 COPY settlement-service/build.gradle.kts settlement-service/
+COPY delivery-service/build.gradle.kts delivery-service/
 COPY ai-service/build.gradle.kts ai-service/
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon > /dev/null
 
