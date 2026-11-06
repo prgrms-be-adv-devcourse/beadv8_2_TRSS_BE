@@ -13,7 +13,7 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
-# Spring 앱(app·market·settlement) 기동 확인. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
+# Spring 앱(app·member·market·settlement) 기동 확인. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
 # 앱마다 컨테이너 안에서 로그인 없이 열리는 Swagger 문서(/v3/api-docs)가 200인지 본다.
 #   정산처럼 로그인 없이 열리는 API가 없는 앱도 같은 방식으로 확인하려고 nginx를 거치지 않는다.
 # 실행 이미지에 curl이 없어도 되게 bash로 HTTP 요청을 직접 보낸다. 포트만 앱마다 다르다(각 서비스의 test).
@@ -40,10 +40,11 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../../palette-web:/usr/share/nginx/html:ro
-    # nginx는 시작할 때 app·market·settlement의 이름을 찾으므로 셋이 먼저 떠 있어야 한다.
+    # nginx는 시작할 때 app·member·market·settlement의 이름을 찾으므로 먼저 떠 있어야 한다.
     # grafana는 요청할 때 찾으므로(nginx/default.conf의 resolver) 꺼져 있어도 nginx는 뜬다.
     depends_on:
       - app
+      - member
       - market
       - settlement
 
@@ -64,10 +65,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      # 회원이 주문 내부 API(/internal/v1/orders)를 부를 market-service 주소 (탈퇴 검사, 판매자 철회 승인, 관리자 회원 상세)
-      MARKET_SERVICE_URL: http://market:8082
-      # 회원이 정산 내부 API(/internal/v1/settlements)를 부를 settlement-service 주소 (판매자 철회 요청·승인, 판매자 회원 탈퇴의 미지급 금액 확인)
-      SETTLEMENT_SERVICE_URL: http://settlement:8084
+      # 결제가 회원 내부 API(/internal/v1/members·sellers)를 부를 member-service 주소
+      MEMBER_SERVICE_URL: http://member:8081
       # nginx가 넘긴 X-Forwarded-* 헤더로 원래 요청 주소·프로토콜을 판단한다.
       SERVER_FORWARD_HEADERS_STRATEGY: native
       # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
@@ -107,9 +106,9 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
       MARKET_DB_USERNAME: ${MARKET_DB_USERNAME:?MARKET_DB_USERNAME이 .env에 없습니다}
-      # 회원 내부 API(/internal/v1/members·sellers)를 부르는 주소. 회원 서비스 분리 전까지는 루트 모놀리스(app)
+      # 회원 내부 API(/internal/v1/members·sellers)를 부르는 member-service 주소
       # Docker 내부망으로 직접 부르고 nginx를 거치지 않는다. 키(INTERNAL_API_KEY)는 .env에서 읽는다
-      MEMBER_SERVICE_URL: http://app:8080
+      MEMBER_SERVICE_URL: http://member:8081
       SERVER_FORWARD_HEADERS_STRATEGY: native
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
       LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
@@ -120,6 +119,52 @@ services:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # 회원·인증·판매자(member-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 member 스키마에 member_user로 접속한다(app의 DB_USERNAME과 다른 계정).
+  # 처음 띄우기 전에 운영 DB의 회원 테이블을 public에서 member로 옮겨야 한다(member-service V1 파일 주석 참고).
+  #   옮기기 전에 뜨면 빈 member 스키마에 V1으로 빈 테이블을 만들어 버린다.
+  member:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: member-service
+    image: palette-member
+    container_name: palette-member
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      # 이메일 인증코드·로그인 실패 횟수·Refresh Token을 Redis에 둔다
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      MEMBER_DB_USERNAME: ${MEMBER_DB_USERNAME:?MEMBER_DB_USERNAME이 .env에 없습니다}
+      # 회원이 부르는 다른 서비스 내부 API 주소. Docker 내부망으로 직접 부른다
+      # 주문 내부 API(/internal/v1/orders): 탈퇴 검사, 판매자 철회 승인, 관리자 회원 상세
+      MARKET_SERVICE_URL: http://market:8082
+      # 정산 내부 API(/internal/v1/settlements): 판매자 철회 요청·승인, 판매자 회원 탈퇴의 미지급 금액 확인
+      SETTLEMENT_SERVICE_URL: http://settlement:8084
+      # 결제 내부 API(/internal/v1/payments): 탈퇴 검사, 관리자 회원 상세. 결제가 payment-service로 분리되면 그 주소로 바꾼다
+      PAYMENT_SERVICE_URL: http://app:8080
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # market·settlement와 같은 1g(힙 768MB)
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
