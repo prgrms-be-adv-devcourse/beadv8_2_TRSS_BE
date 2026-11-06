@@ -122,6 +122,18 @@ class MemberGetMembersIntegrationTest {
                 .extracting(AdminMemberDto::name, AdminMemberDto::memberType).containsExactly(tuple("회원B", MemberType.ADMIN));
     }
 
+    @Test
+    @DisplayName("회원 유형: 물류 담당자는 물류 담당자 필터에만 걸리고 일반 회원 필터에는 걸리지 않는다")
+    void filterByMemberType_logistics() {
+        Member logistics = memberRepository.save(Member.logistics(keyword + "-g@palette.test", "encoded", "회원G"));
+        saved.add(logistics);
+
+        assertThat(memberFacade.getMembers(keyword, null, MemberType.LOGISTICS, PageRequest.of(0, 20)).items())
+                .extracting(AdminMemberDto::name, AdminMemberDto::memberType).containsExactly(tuple("회원G", MemberType.LOGISTICS));
+        assertThat(memberFacade.getMembers(keyword, null, MemberType.USER, PageRequest.of(0, 20)).items())
+                .extracting(AdminMemberDto::name).doesNotContain("회원G");
+    }
+
     private Seller applySeller(Member member) {
         String businessNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
         return Seller.apply(member, member.getName() + " 상회", businessNumber, "홍길동",
