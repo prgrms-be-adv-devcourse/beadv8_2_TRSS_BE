@@ -27,8 +27,8 @@ import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.MemberPortUnavailableException;
 import com.backend.boundedContext.member.out.MemberSettlementPort;
 import com.backend.boundedContext.member.out.SellerRepository;
-import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.ErrorCode;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.payment.dto.WalletSummaryDto;
 
@@ -37,6 +37,8 @@ class MemberWithdrawalSupportTest {
 
     private static final Long MEMBER_ID = 3L;
     private static final Long SELLER_ID = 10L;
+    // 결제가 지갑 없음으로 응답했을 때 MemberInternalApiClient가 만드는 것과 같은 resultCode(404-WALLET_NOT_FOUND)
+    private static final ErrorCode WALLET_NOT_FOUND = new RemoteErrorCode(404, "WALLET_NOT_FOUND", "지갑을 찾을 수 없습니다.");
 
     @Mock
     private SellerRepository sellerRepository;
@@ -128,7 +130,7 @@ class MemberWithdrawalSupportTest {
     void walletNotFound_balanceZero() {
         given(sellerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
         given(memberOrderPort.hasActiveOrders(MEMBER_ID)).willReturn(false);
-        given(memberPaymentPort.getWallet(MEMBER_ID)).willThrow(new DomainException(PaymentErrorCode.WALLET_NOT_FOUND));
+        given(memberPaymentPort.getWallet(MEMBER_ID)).willThrow(new DomainException(WALLET_NOT_FOUND));
 
         WithdrawalCheckDto check = memberWithdrawalSupport.check(MEMBER_ID);
 
@@ -206,5 +208,8 @@ class MemberWithdrawalSupportTest {
         ReflectionTestUtils.setField(seller, "id", SELLER_ID);
         ReflectionTestUtils.setField(seller, "status", status);
         return seller;
+    }
+
+    private record RemoteErrorCode(int status, String name, String msg) implements ErrorCode {
     }
 }

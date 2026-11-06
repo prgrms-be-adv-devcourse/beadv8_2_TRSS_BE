@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,15 +14,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.member.out.MemberApi;
 
 /**
  * 충전 내역 조회·실패 기록을 실제 DB로 확인한다 (회원별 조회, 최신순, 페이징, 남의 충전 건 404).
@@ -40,10 +40,10 @@ class TopupHistoryIntegrationTest {
     @Autowired
     private TopupRepository topupRepository;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    // 회원은 member-service에 있어 회원 조회는 목으로 둔다. 활성 회원 확인(checkActiveMember)은 아무것도 하지 않아 통과한다
+    @MockitoBean
+    private MemberApi memberApi;
 
-    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
     private Long memberId;
     private Long otherMemberId;
 
@@ -51,8 +51,8 @@ class TopupHistoryIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
-        otherMemberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
+        otherMemberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
     }
 
     @AfterEach
@@ -61,7 +61,6 @@ class TopupHistoryIntegrationTest {
                 .filter(topup -> topup.getMemberId().equals(memberId) || topup.getMemberId().equals(otherMemberId))
                 .toList());
         walletRepository.deleteAll(wallets);
-        memberRepository.deleteAllById(List.of(memberId, otherMemberId));
     }
 
     @Test

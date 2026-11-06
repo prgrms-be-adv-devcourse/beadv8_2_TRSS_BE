@@ -7,11 +7,11 @@ import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -23,8 +23,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 import com.backend.boundedContext.payment.domain.Topup;
@@ -36,6 +34,7 @@ import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
 import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
 import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
+import com.backend.shared.member.out.MemberApi;
 
 /**
  * PROCESSING 결과 확인(대사)을 실제 DB로 확인한다 (토스 호출만 mock).
@@ -68,17 +67,17 @@ class TopupReconcileIntegrationTest {
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    // 회원은 member-service에 있어 회원 조회는 목으로 둔다. 활성 회원 확인(checkActiveMember)은 아무것도 하지 않아 통과한다
+    @MockitoBean
+    private MemberApi memberApi;
 
-    // 충전은 로그인 상태인 회원만 할 수 있어 실제 회원을 만든다
     private Long memberId;
 
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
-        memberId = memberRepository.save(Member.signUp("topup-it-" + UUID.randomUUID() + "@palette.com", "encoded", "회원")).getId();
+        memberId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
         wallet = walletRepository.save(Wallet.create(memberId));
     }
 
@@ -88,7 +87,6 @@ class TopupReconcileIntegrationTest {
         topupRepository.deleteAll(topupRepository.findAll().stream()
                 .filter(topup -> topup.getMemberId().equals(memberId)).toList());
         walletRepository.deleteById(wallet.getId());
-        memberRepository.deleteById(memberId);
     }
 
     @Test

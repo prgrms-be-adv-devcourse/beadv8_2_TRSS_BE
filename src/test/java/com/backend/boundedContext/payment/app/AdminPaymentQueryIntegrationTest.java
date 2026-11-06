@@ -2,11 +2,14 @@ package com.backend.boundedContext.payment.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.BDDMockito.given;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -17,9 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.AdminPaymentDto;
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
@@ -30,6 +32,10 @@ import com.backend.boundedContext.payment.out.PaymentRepository;
 import com.backend.boundedContext.payment.out.WalletHoldingRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.member.dto.MemberDto;
+import com.backend.shared.member.dto.MemberRole;
+import com.backend.shared.member.dto.MemberStatus;
+import com.backend.shared.member.out.MemberApi;
 
 /**
  * 관리자 결제 조회 결제 탭을 실제 DB로 확인한다 (이메일·보관 금액 상태 채우기, 검색어·기간).
@@ -41,8 +47,9 @@ class AdminPaymentQueryIntegrationTest {
     @Autowired
     private PaymentFacade paymentFacade;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    // 회원은 member-service에 있어 회원 조회는 목으로 둔다. 이메일 검색과 이메일 채우기는 이번 테스트의 회원을 돌려준다
+    @MockitoBean
+    private MemberApi memberApi;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -55,15 +62,17 @@ class AdminPaymentQueryIntegrationTest {
 
     private final String email = "admin-pay-" + UUID.randomUUID().toString().substring(0, 8) + "@palette.test";
 
-    private Member member;
+    private MemberDto member;
     private Wallet wallet;
     private final List<Payment> payments = new ArrayList<>();
     private final List<WalletHolding> holdings = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
-        member = memberRepository.save(Member.signUp(email, "encoded", "결제조회"));
-        wallet = walletRepository.save(Wallet.create(member.getId()));
+        member = new MemberDto(ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L), email, "결제조회", MemberRole.USER, MemberStatus.ACTIVE);
+        given(memberApi.findMemberByEmail(email)).willReturn(Optional.of(member));
+        given(memberApi.getMembers(anyCollection())).willReturn(List.of(member));
+        wallet = walletRepository.save(Wallet.create(member.id()));
     }
 
     @AfterEach
@@ -71,7 +80,6 @@ class AdminPaymentQueryIntegrationTest {
         walletHoldingRepository.deleteAll(holdings);
         paymentRepository.deleteAll(payments);
         walletRepository.delete(wallet);
-        memberRepository.delete(member);
     }
 
     @Test
