@@ -16,6 +16,7 @@ main() {
     # 서비스가 분리되어 컨테이너가 늘면 여기에 추가한다
     local health_containers=(
         "palette-app"
+        "palette-member"
         "palette-market"
         "palette-settlement"
     )
@@ -65,7 +66,7 @@ main() {
 
     echo "❌ 앱이 150초 안에 응답하지 않습니다. 최근 앱 로그:"
     "${compose[@]}" ps
-    "${compose[@]}" logs --tail 80 app market settlement
+    "${compose[@]}" logs --tail 80 app member market settlement
     return 1
 }
 

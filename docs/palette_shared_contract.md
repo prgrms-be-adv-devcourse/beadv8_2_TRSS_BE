@@ -123,10 +123,11 @@ public interface MemberApi {
 
 | 부르는 쪽 | 클라이언트 | 주소 설정 |
 | --- | --- | --- |
-| market-service (상품·주문) | `market.client.MemberApiClient` | `custom.member.baseUrl` (`MEMBER_SERVICE_URL`) |
+| market-service (상품·주문) | `market.client.MemberApiClient` | `custom.member.baseUrl` (`MEMBER_SERVICE_URL`, 기본 `http://localhost:8081`) |
 | 루트 모놀리스 (결제) | `monolith.client.MemberApiClient` | `custom.member.baseUrl` (`MEMBER_SERVICE_URL`, 기본 `http://localhost:8081`) |
 
-- 운영에서 다른 서비스가 member-service를 부르도록 주소를 바꾸는 작업과 member-service 배포는 #250에서 합니다.
+- 운영(`infra/compose.prod.yaml`)에서는 `MEMBER_SERVICE_URL: http://member:8081`로 Docker 내부망에서 직접 부르고 nginx를 거치지 않는다.
+- 외부 요청은 nginx가 회원 경로(`/api/v1/auth`·`users`·`sellers`·`seller/me`·`admin/users`·`admin/sellers`)를 member-service로 넘긴다. `seller/products`·`seller/order-items`(market), `seller/settlements`(정산)는 각 서비스로 간다.
 
 | MemberApi | 요청 | 없을 때·실패 |
 | --- | --- | --- |
