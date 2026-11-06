@@ -13,6 +13,7 @@
 | order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
 | settlement | 다은 | `SettlementApi` | - |
+| notification | 시연 | - | - |
 
 ### 이벤트 공통 규격
 
@@ -506,11 +507,38 @@ public interface SettlementApi {
 - 실패하면 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `order.events-dlt`로 보내고 ERROR 로그로 Slack에 알린다. 원인을 고친 뒤 `order.events`로 다시 보낸다 → [개발 가이드 6.5](palette_development_guide.md#65-outbox)
 - 구매 확정 후 후보가 생기기까지 릴레이 간격(최대 약 1초)과 Kafka 전달 시간만큼 늦어진다.
 
-## 7. 구현 주의사항
+## 7. notification
+
+알림은 `notification-service`(포트 8086, DB 스키마 `notification`)입니다. 주문·배송 이벤트를 받아 구매자 알림을 저장하고, 구매자가 알림을 조회·읽음 처리하는 API를 제공합니다. 다른 서비스를 부르지 않고, 이벤트도 발행하지 않습니다(TRSS-179).
+
+### 알림 API (프론트용)
+
+| 요청 | 응답 `data` | 비고 |
+| --- | --- | --- |
+| `GET /api/v1/notifications?cursor=&size=20` | `{ items: [{ id, type, message, orderId, read, createdAt }], nextCursor, hasNext }` | 최신순. 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. `size`는 1~100 |
+| `GET /api/v1/notifications/unread-count` | 안 읽은 알림 개수(숫자) | 헤더 종 아이콘 뱃지용. 실시간 전달(SSE) 전까지 프론트가 주기적으로 부른다 |
+| `PATCH /api/v1/notifications/{notificationId}/read` | 없음 | 이미 읽은 알림이면 그대로 성공. 없거나 다른 회원의 알림이면 404 `NOTIFICATION_NOT_FOUND` |
+| `PATCH /api/v1/notifications/read-all` | 없음 | 안 읽은 내 알림을 모두 읽음 처리 |
+
+- 목록은 다른 목록 API의 `PageResponse`(page·totalPages)가 아니라 커서 방식이다. 폴링 중 새 알림이 생겨도 다음 페이지가 밀리지 않게 하기 위해서다.
+- `type`은 `ORDER_PAID`(주문 완료)·`DELIVERY_STARTED`(배송 시작)·`DELIVERY_COMPLETED`(배송 완료)이고, `message`는 알림을 만들 때 완성해 저장한 문구다.
+
+### 받는 이벤트
+
+| 이벤트 | 처리 | 멱등 기준 |
+| --- | --- | --- |
+| `OrderPaidEvent` (주문, 미정) | 구매자에게 주문 완료 알림 저장 | `processed_event`(eventId, `notification`) |
+| 배송 시작 이벤트 (배송, 미정) | 구매자에게 배송 시작 알림 저장(택배사·송장번호 포함) | 위와 같음 |
+| 배송 완료 이벤트 (배송, 미정) | 구매자에게 배송 완료 알림 저장 | 위와 같음 |
+
+- 이벤트는 발행하는 쪽(주문·배송)이 정의하고 발행한다. 알림은 다른 서비스를 다시 부르지 않으므로 `orderId`·`buyerId`와 문구에 필요한 값(택배사·송장번호)을 payload에 담아야 한다. 계약이 정해지면 이 표를 채운다.
+- 알림 저장이 실패해도 주문·배송 처리는 되돌리지 않는다(별도 컨슈머, groupId `notification`).
+
+## 8. 구현 주의사항
 
 계약의 모양과는 별개로, 구현할 때 꼭 지켜야 하는 규칙입니다.
 
-### 7.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
+### 8.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
 
 결제와 15분 만료가 동시에 일어나도 둘 중 하나만 반영되게 하려면 주문 행을 먼저 잠가야 합니다.
 
@@ -521,13 +549,13 @@ public interface SettlementApi {
 
 주문 행을 먼저 잠그면 만료 스케줄러는 결제가 끝날 때까지 기다립니다. 순서를 거꾸로 하면 지갑은 잠갔는데 주문이 만료되는 경우를 따로 처리해야 합니다.
 
-### 7.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
+### 8.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
 
 - 주문 하나에 여러 상품이 들어 있으므로, 판매 중지 → 결제 대기 주문 취소 → 재고 복원 과정에서 다른 상품 행도 잠급니다.
 - `deductStock`과 `restoreStock`의 잠금 순서가 다르면 동시에 들어온 주문 생성과 데드락이 날 수 있습니다. 두 메서드 모두 상품 ID 오름차순으로 잠급니다.
 - 판매 중지 → 주문 취소 → 재고 복원은 한 트랜잭션 안에서 같은 상품을 다시 수정합니다. 한 트랜잭션 안에서 **벌크 UPDATE 쿼리와 엔티티 수정을 섞지 않습니다**(영속성 컨텍스트 값이 DB와 달라짐).
 
-### 7.3 구매 확정 경로 3개 모두 `OrderConfirmedEvent`를 발행한다 (주문)
+### 8.3 구매 확정 경로 3개 모두 `OrderConfirmedEvent`를 발행한다 (주문)
 
 | 경로 | `ConfirmType` |
 | --- | --- |
@@ -540,13 +568,13 @@ public interface SettlementApi {
 - 7일 자동 확정은 벌크 UPDATE를 쓰지 않고, 대상 주문을 조회해 한 건씩 위 메서드로 확정합니다(이벤트·상태 이력 누락 방지).
 - 세 경로의 UseCase 테스트에서 이벤트 발행을 검증합니다.
 
-## 8. 진행 순서
+## 9. 진행 순서
 
 1. 각 담당자가 이 문서에서 자기 컨텍스트 부분을 검토하고, 고칠 점을 PR 코멘트나 팀 채널에 남깁니다.
 2. 확정되면 `shared/<ctx>/dto·event·out`에 코드로 옮기고, 자기 컨텍스트에 `<Ctx>ApiAdapter` 임시 구현을 함께 올립니다.
 3. 다섯 명의 계약 PR을 한 번에 `develop`에 머지한 뒤 각자 구현을 시작합니다.
 
-## 9. 정할 것
+## 10. 정할 것
 
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
