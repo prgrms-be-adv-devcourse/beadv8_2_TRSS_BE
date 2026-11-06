@@ -1,12 +1,16 @@
 package com.backend.boundedContext.payment.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.BDDMockito.given;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,15 +20,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-import com.backend.boundedContext.member.domain.Member;
-import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.payment.app.dto.AdminTopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.member.dto.MemberDto;
+import com.backend.shared.member.dto.MemberRole;
+import com.backend.shared.member.dto.MemberStatus;
+import com.backend.shared.member.out.MemberApi;
 
 /**
  * 관리자 결제 조회 충전 탭을 실제 DB로 확인한다 (이메일·충전번호 앞부분·기간 검색, 최신순, 이메일 채우기).
@@ -36,8 +43,9 @@ class AdminTopupQueryIntegrationTest {
     @Autowired
     private PaymentFacade paymentFacade;
 
-    @Autowired
-    private MemberRepository memberRepository;
+    // 회원은 member-service에 있어 회원 조회는 목으로 둔다. 이메일 검색과 이메일 채우기는 이번 테스트의 회원을 돌려준다
+    @MockitoBean
+    private MemberApi memberApi;
 
     @Autowired
     private WalletRepository walletRepository;
@@ -51,20 +59,21 @@ class AdminTopupQueryIntegrationTest {
     private final String email = "admin-topup-" + UUID.randomUUID().toString().substring(0, 8) + "@palette.test";
     private final List<Long> topupIds = new ArrayList<>();
 
-    private Member member;
+    private MemberDto member;
     private Wallet wallet;
 
     @BeforeEach
     void setUp() {
-        member = memberRepository.save(Member.signUp(email, "encoded", "충전조회"));
-        wallet = walletRepository.save(Wallet.create(member.getId()));
+        member = new MemberDto(ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L), email, "충전조회", MemberRole.USER, MemberStatus.ACTIVE);
+        given(memberApi.findMemberByEmail(email)).willReturn(Optional.of(member));
+        given(memberApi.getMembers(anyCollection())).willReturn(List.of(member));
+        wallet = walletRepository.save(Wallet.create(member.id()));
     }
 
     @AfterEach
     void cleanUp() {
         topupRepository.deleteAllById(topupIds);
         walletRepository.delete(wallet);
-        memberRepository.delete(member);
     }
 
     @Test
@@ -155,7 +164,7 @@ class AdminTopupQueryIntegrationTest {
     }
 
     private TopupPrepareDto prepare(long amount) {
-        TopupPrepareDto prepared = paymentFacade.prepareTopup(member.getId(), amount);
+        TopupPrepareDto prepared = paymentFacade.prepareTopup(member.id(), amount);
         topupIds.add(prepared.topupId());
         return prepared;
     }
