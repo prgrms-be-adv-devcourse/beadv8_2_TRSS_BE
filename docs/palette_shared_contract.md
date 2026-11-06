@@ -10,9 +10,10 @@
 | --- | --- | --- | --- |
 | member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent`, `SellerSanctionedEvent`, `SellerWithdrawalRequestedEvent`, `SellerWithdrawalRejectedEvent` |
 | product | 유진 | `ProductApi` | `WishAddedEvent`, `WishRemovedEvent` |
-| order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
+| order | 은정 | `OrderApi` | `OrderPaidEvent`, `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
 | settlement | 다은 | `SettlementApi` | - |
+| delivery | 은정 | `DeliveryApi` | `DeliveryCompletedEvent` |
 
 ### 이벤트 공통 규격
 
@@ -64,10 +65,13 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
 | 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
+| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
+| 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록 | 이벤트, 별도 Tx |
+| 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
 | 주문 취소·15분 만료 | order | `ProductApi.lockProductsForOrderChange(productIds)` → 주문 잠금·상태 다시 확인 → 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
 | 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
 | 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) (미구현) | 이벤트 |
-| 구매 확정 (수동·7일 자동·반품 거절 시 즉시) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
+| 구매 확정 (수동·7일 자동·반품 거절 시 즉시, 배송지 있는 주문은 배송 완료 뒤) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
@@ -353,6 +357,10 @@ public interface OrderApi {
 ```java
 package com.backend.shared.order.event;
 
+/** 결제 완료. 배송지가 있는 주문만 발행한다. 배송 컨텍스트가 배송(READY)을 만든다. aggregate: ORDER / orderId */
+public record OrderPaidEvent(Long orderId, String orderNumber, Long buyerId, LocalDateTime paidAt,
+                             ShippingAddressDto shippingAddress, List<PaidOrderItemDto> items) implements DomainEvent { }
+
 /** 구매 확정. 정산 컨텍스트가 주문 항목별 정산 후보를 만든다. aggregate: ORDER / orderId */
 public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime confirmedAt,
                                   ConfirmType confirmType, List<ConfirmedOrderItemDto> items) implements DomainEvent { }
@@ -368,6 +376,14 @@ package com.backend.shared.order.dto;
 
 public record ConfirmedOrderItemDto(Long orderItemId, Long productId, Long sellerId,
                                     long unitPrice, int quantity, long lineAmount) { }
+
+/** 주문 배송지 스냅샷 (주문할 때 받은 값 그대로). 로그에 남기지 않는다 */
+public record ShippingAddressDto(String receiverName, String receiverPhone, String zipCode,
+                                 String address, String addressDetail, String requestMessage) { }
+
+/** 결제된 주문 항목 (배송 피킹 목록용). 주문 항목에 저장된 스냅샷 값 */
+public record PaidOrderItemDto(Long orderItemId, Long productId, Long optionId, Long sellerId, String sellerName,
+                               String productName, String optionName, int quantity) { }
 
 public enum OrderCancelType { USER, EXPIRED, PRODUCT_STOPPED, SELLER_SANCTIONED }
 public enum ConfirmType { MANUAL, AUTO, RETURN_REJECTED }
@@ -508,18 +524,84 @@ public interface SettlementApi {
 | `OrderConfirmedEvent` | 주문 항목마다 정산 후보 생성(수수료 = 판매가 × 10 ÷ 100 버림, 정산월 = 확정일 KST 기준 월) | `processed_event`(eventId, `settlement`)로 재전달을 거르고, `settlement_candidate.order_item_id` 유니크로 한 번 더 막음 |
 | `SellerSanctionedEvent` | `holdSeller(sellerId, reason)`와 같은 처리, 처리 이력 trigger `EVENT` | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
 
-- Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다.
+- Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다. `order.events`의 `OrderPaidEvent`도 `eventType` 헤더로 거른다(정산 코드 변경 없음).
 - `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(`SettlementSellerEventListener`). 같은 토픽의 다른 판매자 이벤트(철회 요청·철회 거절)는 정산이 할 일이 없어 무시한다. 회원은 `holdSeller`를 부르지 않는다(TRSS-161).
 - 이벤트가 오기 전에 지급이 도는 틈은 지급 직전 확인으로 막는다. 정산서를 지급하기 직전에 판매자 상태가 `SANCTIONED`이면 지급하지 않고 HOLD로 바꾼다(처리 이력 trigger는 지급을 시작한 경로). 제재 뒤에 새로 만들어지는 정산서는 월 정산 집계가 판매자 상태를 보고 처음부터 HOLD로 만든다.
 - 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
 - 실패하면 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `order.events-dlt`로 보내고 ERROR 로그로 Slack에 알린다. 원인을 고친 뒤 `order.events`로 다시 보낸다 → [개발 가이드 6.5](palette_development_guide.md#65-outbox)
 - 구매 확정 후 후보가 생기기까지 릴레이 간격(최대 약 1초)과 Kafka 전달 시간만큼 늦어진다.
 
-## 7. 구현 주의사항
+## 7. delivery
+
+배송은 `delivery-service`(포트 8085, DB 스키마 `delivery`)가 맡습니다. 주문 하나에 배송 1건이고, 플랫폼이 통합 출고합니다(물류 담당 `LOGISTICS` 역할).
+
+### DeliveryApi
+
+```java
+package com.backend.shared.delivery.out;
+
+public interface DeliveryApi {
+
+    /**
+     * 주문의 배송 건. 아직 없으면(결제 직후·배송지 없는 주문) empty.
+     * HTTP 구현은 응답을 받지 못하면 502 EXTERNAL_SERVICE_ERROR(DomainException)를 던진다. 부르는 쪽이 잡아서 처리한다.
+     */
+    Optional<DeliveryDto> findByOrderId(Long orderId);
+}
+```
+
+### 내부 API (HTTP)
+
+market은 `DeliveryApi` 대신 아래 내부 API를 HTTP로 부릅니다(`market.client.DeliveryApiClient`, `custom.delivery.baseUrl`).
+
+| DeliveryApi | 요청 | 없을 때·실패 |
+| --- | --- | --- |
+| `findByOrderId` | `GET /internal/v1/deliveries?orderId={orderId}` | 200 + `data: null` (배송 건 없음) |
+
+- 응답은 다른 API와 같은 `RsData`이고 성공은 `200-1`, `data`에 `DeliveryDto`를 담습니다.
+- 부르는 쪽(주문 상세)은 실패해도 주문 상세를 200으로 응답하고 `deliveryUnavailable: true`로 알립니다.
+- Swagger에는 나오지 않습니다(`@Hidden`). 호출할 때는 `X-Internal-Key` 헤더가 필요합니다 → [내부 API 공통 규칙](#내부-api-공통-규칙)
+
+### DTO
+
+```java
+package com.backend.shared.delivery.dto;
+
+public enum DeliveryStatus { READY, SHIPPED, DELIVERED }
+
+/** 주문 상세에 붙이는 배송 정보. READY면 carrierName·trackingNumber·shippedAt은 null */
+public record DeliveryDto(Long deliveryId, DeliveryStatus status, String carrierName, String trackingNumber,
+                          LocalDateTime shippedAt, LocalDateTime deliveredAt) { }
+```
+
+- `carrierName`은 택배사 표시 이름(예: "CJ대한통운")입니다.
+
+### 받는 이벤트
+
+| 이벤트 | 처리 | 멱등 기준 |
+| --- | --- | --- |
+| `OrderPaidEvent` | 주문당 배송 1건(READY)과 주문 항목별 배송 항목 생성 | `processed_event`(eventId, `delivery`)로 재전달을 거르고, `delivery.order_id` 유니크로 한 번 더 막음 |
+
+- Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `delivery`)로 받는다. 같은 토픽의 다른 주문 이벤트(`OrderConfirmedEvent` 등)는 `eventType` 헤더로 거른다.
+- 배송지·연락처는 로그에 남기지 않는다(`deliveryId`, `orderId`, `eventId`만).
+
+### 발행하는 이벤트
+
+```java
+package com.backend.shared.delivery.event;
+
+/** 배송 완료. 주문 컨텍스트가 주문의 배송 완료 시각(deliveredAt)을 기록한다(구매 확정 기준). aggregate: DELIVERY / deliveryId */
+public record DeliveryCompletedEvent(Long deliveryId, Long orderId, LocalDateTime deliveredAt) implements DomainEvent { }
+```
+
+- 배송 완료와 같은 트랜잭션에서 outbox에 저장하고, 릴레이가 Kafka 토픽 `delivery.events`로 발행한다(키 `deliveryId`).
+- market이 groupId `market`으로 받는다.
+
+## 8. 구현 주의사항
 
 계약의 모양과는 별개로, 구현할 때 꼭 지켜야 하는 규칙입니다.
 
-### 7.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
+### 8.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
 
 결제와 15분 만료가 동시에 일어나도 둘 중 하나만 반영되게 하려면 주문 행을 먼저 잠가야 합니다.
 
@@ -530,32 +612,34 @@ public interface SettlementApi {
 
 주문 행을 먼저 잠그면 만료 스케줄러는 결제가 끝날 때까지 기다립니다. 순서를 거꾸로 하면 지갑은 잠갔는데 주문이 만료되는 경우를 따로 처리해야 합니다.
 
-### 7.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
+### 8.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
 
 - 주문 하나에 여러 상품이 들어 있으므로, 판매 중지 → 결제 대기 주문 취소 → 재고 복원 과정에서 다른 상품 행도 잠급니다.
 - `deductStock`과 `restoreStock`의 잠금 순서가 다르면 동시에 들어온 주문 생성과 데드락이 날 수 있습니다. 두 메서드 모두 상품 ID 오름차순으로 잠급니다.
 - 판매 중지 → 주문 취소 → 재고 복원은 한 트랜잭션 안에서 같은 상품을 다시 수정합니다. 한 트랜잭션 안에서 **벌크 UPDATE 쿼리와 엔티티 수정을 섞지 않습니다**(영속성 컨텍스트 값이 DB와 달라짐).
 
-### 7.3 구매 확정 경로 3개 모두 `OrderConfirmedEvent`를 발행한다 (주문)
+### 8.3 구매 확정은 배송 완료 뒤에만, 경로 3개 모두 `OrderConfirmedEvent`를 발행한다 (주문)
+
+구매 확정은 배송 완료 뒤에만 할 수 있습니다(배송지 없는 기존 주문은 결제 기준). 배송지 있는 주문이 배송 완료 전이면 409 `ORDER_NOT_DELIVERED`.
 
 | 경로 | `ConfirmType` |
 | --- | --- |
-| 구매자 수동 확정 | `MANUAL` |
-| 결제 후 7일 자동 확정 (RETURN_REQUESTED 제외) | `AUTO` |
-| 반품 거절 시 결제 후 7일이 이미 지났으면 즉시 확정 | `RETURN_REJECTED` |
+| 구매자 수동 확정 (배송 완료 뒤) | `MANUAL` |
+| 배송 완료 후 7일 자동 확정 (배송지 없는 주문은 결제 후 7일, RETURN_REQUESTED 제외) | `AUTO` |
+| 반품 거절 시 배송 완료 후 7일이 이미 지났으면(배송지 없는 주문은 결제 후 7일) 즉시 확정 | `RETURN_REJECTED` |
 
 한 경로라도 이벤트를 빠뜨리면 정산 후보가 만들어지지 않아 판매자에게 정산되지 않습니다. 구매 확정(`order.confirm(type)`)과 `OrderConfirmedEvent` 발행(`EventPublisher.publish`)은 주문 컨텍스트의 메서드 하나로 묶고, 세 경로 모두 그 메서드를 호출합니다.
 
 - 7일 자동 확정은 벌크 UPDATE를 쓰지 않고, 대상 주문을 조회해 한 건씩 위 메서드로 확정합니다(이벤트·상태 이력 누락 방지).
 - 세 경로의 UseCase 테스트에서 이벤트 발행을 검증합니다.
 
-## 8. 진행 순서
+## 9. 진행 순서
 
 1. 각 담당자가 이 문서에서 자기 컨텍스트 부분을 검토하고, 고칠 점을 PR 코멘트나 팀 채널에 남깁니다.
 2. 확정되면 `shared/<ctx>/dto·event·out`에 코드로 옮기고, 자기 컨텍스트에 `<Ctx>ApiAdapter` 임시 구현을 함께 올립니다.
 3. 다섯 명의 계약 PR을 한 번에 `develop`에 머지한 뒤 각자 구현을 시작합니다.
 
-## 9. 정할 것
+## 10. 정할 것
 
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
