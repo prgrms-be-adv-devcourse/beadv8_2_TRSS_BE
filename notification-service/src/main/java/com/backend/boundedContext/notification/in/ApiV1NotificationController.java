@@ -6,17 +6,20 @@ import com.backend.global.rsData.RsData;
 import com.backend.global.security.AuthMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "알림", description = "내 알림 목록, 안 읽은 알림 개수")
+@Tag(name = "알림", description = "내 알림 목록, 안 읽은 알림 개수, 읽음 처리")
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
@@ -40,5 +43,24 @@ public class ApiV1NotificationController {
     @GetMapping("/unread-count")
     public RsData<Long> getUnreadCount(@AuthenticationPrincipal AuthMember authMember) {
         return RsData.of("200-1", "안 읽은 알림 개수를 조회했습니다.", notificationFacade.getUnreadCount(authMember.memberId()));
+    }
+
+    @Operation(summary = "알림 읽음 처리", description = "이미 읽은 알림이면 그대로 성공합니다.")
+    @ApiResponse(responseCode = "200", description = "200-1 읽음 처리")
+    @ApiResponse(responseCode = "404", description = "404-NOTIFICATION_NOT_FOUND 없거나 다른 회원의 알림")
+    @PatchMapping("/{notificationId}/read")
+    public RsData<Void> read(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long notificationId
+    ) {
+        notificationFacade.read(authMember.memberId(), notificationId);
+        return RsData.of("200-1", "알림을 읽음 처리했습니다.");
+    }
+
+    @Operation(summary = "알림 모두 읽음 처리", description = "안 읽은 내 알림을 모두 읽음 처리합니다. 안 읽은 알림이 없어도 성공합니다.")
+    @PatchMapping("/read-all")
+    public RsData<Void> readAll(@AuthenticationPrincipal AuthMember authMember) {
+        notificationFacade.readAll(authMember.memberId());
+        return RsData.of("200-1", "알림을 모두 읽음 처리했습니다.");
     }
 }

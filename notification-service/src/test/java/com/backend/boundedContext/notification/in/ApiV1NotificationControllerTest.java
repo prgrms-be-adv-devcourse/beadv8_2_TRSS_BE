@@ -2,6 +2,8 @@ package com.backend.boundedContext.notification.in;
 
 import com.backend.boundedContext.notification.app.NotificationFacade;
 import com.backend.boundedContext.notification.app.dto.NotificationListDto;
+import com.backend.boundedContext.notification.domain.NotificationErrorCode;
+import com.backend.global.exception.DomainException;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
 import com.backend.global.security.JwtTokenProvider;
@@ -21,9 +23,11 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -87,6 +91,37 @@ class ApiV1NotificationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
                 .andExpect(jsonPath("$.data").value(4));
+    }
+
+    @Test
+    @DisplayName("읽음 처리: 로그인 회원과 알림 id로 처리하고 200-1로 응답함")
+    void read() throws Exception {
+        mockMvc.perform(patch("/api/v1/notifications/7/read").header("Authorization", bearer(3L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"));
+
+        verify(notificationFacade).read(3L, 7L);
+    }
+
+    @Test
+    @DisplayName("읽음 처리: 없거나 다른 회원의 알림이면 404 NOTIFICATION_NOT_FOUND")
+    void read_notFound() throws Exception {
+        willThrow(new DomainException(NotificationErrorCode.NOTIFICATION_NOT_FOUND))
+                .given(notificationFacade).read(3L, 7L);
+
+        mockMvc.perform(patch("/api/v1/notifications/7/read").header("Authorization", bearer(3L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.resultCode").value("404-NOTIFICATION_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("모두 읽음: 로그인 회원 기준으로 처리하고 200-1로 응답함")
+    void readAll() throws Exception {
+        mockMvc.perform(patch("/api/v1/notifications/read-all").header("Authorization", bearer(3L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"));
+
+        verify(notificationFacade).readAll(3L);
     }
 
     @Test

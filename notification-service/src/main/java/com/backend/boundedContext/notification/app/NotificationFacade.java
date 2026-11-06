@@ -17,6 +17,7 @@ public class NotificationFacade {
 
     private final NotificationGetNotificationsUseCase notificationGetNotificationsUseCase;
     private final NotificationGetUnreadCountUseCase notificationGetUnreadCountUseCase;
+    private final NotificationReadUseCase notificationReadUseCase;
 
     @Transactional(readOnly = true)
     public NotificationListDto getNotifications(Long memberId, Long cursor, int size) {
@@ -26,5 +27,15 @@ public class NotificationFacade {
     @Transactional(readOnly = true)
     public long getUnreadCount(Long memberId) {
         return notificationGetUnreadCountUseCase.getUnreadCount(memberId);
+    }
+
+    @Transactional
+    public void read(Long memberId, Long notificationId) {
+        notificationReadUseCase.read(memberId, notificationId);
+    }
+
+    @Transactional
+    public void readAll(Long memberId) {
+        notificationReadUseCase.readAll(memberId);
     }
 }
