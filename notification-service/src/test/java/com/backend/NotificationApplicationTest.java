@@ -17,12 +17,12 @@ class NotificationApplicationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    @DisplayName("앱이 뜨면 Flyway V1이 notification 스키마에 outbox_event·processed_event를 만든다")
+    @DisplayName("앱이 뜨면 Flyway V1이 notification 스키마에 outbox_event·processed_event·notification을 만든다")
     void migratesBaselineIntoNotificationSchema() {
         List<String> tables = jdbcTemplate.queryForList(
                 "select table_name from information_schema.tables where table_schema = 'notification'",
                 String.class);
 
-        assertThat(tables).contains("outbox_event", "processed_event", "flyway_schema_history");
+        assertThat(tables).contains("outbox_event", "processed_event", "notification", "flyway_schema_history");
     }
 }
