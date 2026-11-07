@@ -313,6 +313,8 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-SETTLEMENT_AMOUNT_MISMATCH | 정산 금액이 일치하지 않아서 정산할 수 없는 상태 |
 | | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
 | | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
+| | 409-SETTLEMENT_CANDIDATE_AMOUNT_TAMPERED | 판별 단계: 정산 후보 금액 스냅샷(판매가·수수료·지급액)이 서로 맞지 않아 확정하지 않음 (처리 이력에만 남음) |
+| | 409-SETTLEMENT_LEDGER_MISSING / 409-SETTLEMENT_LEDGER_REPLACED / 409-SETTLEMENT_LEDGER_AMOUNT_CHANGED | 원장 재대조: 지급된 정산서의 원장 기록 없음 / 원장 행 교체 / 금액 변경 (처리 이력에만 남고, 그 판매자의 다음 지급을 보류) |
 
 
 ## 9. 로그 규칙

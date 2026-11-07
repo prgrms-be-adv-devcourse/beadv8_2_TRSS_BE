@@ -1,6 +1,8 @@
 package com.backend.boundedContext.settlement.app;
 
 import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
+import com.backend.boundedContext.settlement.domain.SettlementJudgement;
+import com.backend.boundedContext.settlement.domain.SettlementLedgerCheckResult;
 import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 정산 컨텍스트의 유일한 입구
@@ -52,6 +55,9 @@ public class SettlementFacade {
     private final SettlementReleaseUseCase settlementReleaseUseCase;
     private final SettlementHoldSellerUseCase settlementHoldSellerUseCase;
     private final SettlementExcludeCandidateUseCase settlementExcludeCandidateUseCase;
+    private final SettlementJudgeUseCase settlementJudgeUseCase;
+    private final SettlementLedgerRecheckUseCase settlementLedgerRecheckUseCase;
+    private final SettlementRecoverJobUseCase settlementRecoverJobUseCase;
 
     // ================= 정산 후보 생성 (구매 확정 이벤트) =================
 
@@ -66,17 +72,65 @@ public class SettlementFacade {
         return settlementSupport.hasAnyCandidate();
     }
 
-    // ================= 월 정산 Job: 집계 Step =================
+    // ================= 원장 재대조 스케줄러 (매일 03:35) =================
+
+    @Transactional(readOnly = true)
+    public List<Long> findLedgerRecheckTargetIds(LocalDateTime since, Long afterSettlementId, int limit) {
+        return settlementLedgerRecheckUseCase.findTargetIds(since, afterSettlementId, limit);
+    }
+
+    /** 원장 불일치 보류 정리 대상(원장 불일치 사유로 보류된 정산서가 있는 판매자) */
+    @Transactional(readOnly = true)
+    public List<Long> findSellerIdsWithLedgerMismatchHolds() {
+        return settlementLedgerRecheckUseCase.findSellerIdsWithLedgerMismatchHolds();
+    }
+
+    /** 판매자 1명 = 트랜잭션 1개. 불일치가 없으면 원장 불일치 보류를 해제한다 */
+    @Transactional
+    public int releaseLedgerMismatchHoldsIfResolved(Long sellerId, SettlementTrigger trigger) {
+        return settlementLedgerRecheckUseCase.releaseLedgerMismatchHoldsIfResolved(sellerId, trigger);
+    }
+
+    /** 원장 재대조 대상(지급일과 상관없이 불일치가 아직 풀리지 않은 정산서) */
+    @Transactional(readOnly = true)
+    public List<Long> findUnresolvedLedgerRecheckTargetIds() {
+        return settlementLedgerRecheckUseCase.findUnresolvedTargetIds();
+    }
+
+    /** 정산서 1건 = 트랜잭션 1개. 재대조 이력을 남긴다 */
+    @Transactional
+    public SettlementLedgerCheckResult recheckLedger(Long settlementId, SettlementTrigger trigger,
+                                                     Long batchExecutionId) {
+        return settlementLedgerRecheckUseCase.recheck(settlementId, trigger, batchExecutionId);
+    }
+
+    // ================= 월 정산 Job: 판별 Step =================
+
+    @Transactional(readOnly = true)
+    public Set<Long> findLedgerMismatchSellerIds() {
+        return settlementJudgeUseCase.findLedgerMismatchSellerIds();
+    }
+
+    /** 판매자 1명 = 트랜잭션 1개. 판정 이력을 남긴다 */
+    @Transactional
+    public SettlementJudgement judgeSeller(Long sellerId, YearMonth targetMonth, Set<Long> ledgerMismatchSellerIds,
+                                           SettlementTrigger trigger, Long batchExecutionId) {
+        return settlementJudgeUseCase.judgeSeller(sellerId, targetMonth, ledgerMismatchSellerIds, trigger,
+                batchExecutionId);
+    }
+
+    // ================= 월 정산 Job: 확정(집계) Step =================
 
     @Transactional(readOnly = true)
     public List<Long> findAggregatableSellerIds(YearMonth targetMonth, Long afterSellerId, int limit) {
         return settlementSupport.findAggregatableSellerIds(targetMonth, afterSellerId, limit);
     }
 
-    /** 판매자 1명 = 트랜잭션 1개 */
+    /** 판매자 1명 = 트랜잭션 1개. judgement가 null이면 판정 없이(제재 여부만 보고) 확정 */
     @Transactional
-    public int aggregateSeller(Long sellerId, YearMonth targetMonth, Long batchExecutionId, SettlementTrigger trigger) {
-        return settlementAggregateUseCase.aggregateSeller(sellerId, targetMonth, batchExecutionId, trigger);
+    public int aggregateSeller(Long sellerId, YearMonth targetMonth, Long batchExecutionId, SettlementTrigger trigger,
+                               SettlementJudgement judgement) {
+        return settlementAggregateUseCase.aggregateSeller(sellerId, targetMonth, batchExecutionId, trigger, judgement);
     }
 
     /** 집계가 롤백된 뒤 새 트랜잭션에서 실패 이력만 남긴다 */
@@ -121,6 +175,11 @@ public class SettlementFacade {
 
     public boolean isMonthlyJobRunning() {
         return settlementGetRunsUseCase.isRunning();
+    }
+
+    /** 앱 기동 시 강제 종료로 STARTED에 멈춘 실행을 FAILED로 정리한다. 트랜잭션은 Spring Batch JobRepository가 관리한다 */
+    public int recoverInterruptedJobs() {
+        return settlementRecoverJobUseCase.recoverInterruptedJobs();
     }
 
     // ================= 관리자 조회 =================

@@ -27,35 +27,36 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SettlementCandidate extends BaseIdAndTime {
 
-    @Column(nullable = false)
+    // 원장 무결성 1단계: 만들 때 정해진 식별값·금액은 UPDATE 문에서 빠진다(updatable = false). 상태만 바뀐다
+    @Column(nullable = false, updatable = false)
     private Long orderId;
 
     /** 같은 확정 이벤트를 두 번 받아도 후보가 하나만 생기도록 유니크 */
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private Long orderItemId;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private Long sellerId;
 
     /** 판매 금액 = 주문 항목 금액(단가 × 수량) */
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private long salePrice;
 
     /** 생성 당시 수수료율. 정책이 바뀌어도 과거 후보는 이 값으로 계산된 금액을 유지한다 */
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private int feeRate;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private long fee;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private long payoutAmount;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime confirmedAt;
 
     @JdbcTypeCode(SqlTypes.CHAR)   // CHAR(7) 컬럼과 맞춤 (없으면 ddl-auto validate가 VARCHAR를 기대해 실패)
-    @Column(nullable = false, columnDefinition = "CHAR(7)")
+    @Column(nullable = false, updatable = false, columnDefinition = "CHAR(7)")
     private String settlementMonth;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -109,6 +110,21 @@ public class SettlementCandidate extends BaseIdAndTime {
         requireReady();
         this.status = SettlementCandidateStatus.EXCLUDED;
         this.excludedReason = reason != null && reason.length() > 300 ? reason.substring(0, 300) : reason;
+    }
+
+    /**
+     * 금액 스냅샷이 서로 맞는지(판별 단계 CandidateAmountIntegrityRule)
+     * 판매가 > 0, 수수료 = 판매가 × 수수료율 ÷ 100(버림), 지급액 = 판매가 − 수수료
+     */
+    public boolean hasConsistentAmounts() {
+        if (salePrice <= 0 || feeRate < 0 || feeRate > 100) return false;
+        return fee == SettlementPolicy.calculateFee(salePrice, feeRate) && payoutAmount == salePrice - fee;
+    }
+
+    /** 원장 무결성 1단계: 정산 후보는 지우지 않는다(정정은 조정 후보 추가로) */
+    @PreRemove
+    private void denyRemove() {
+        throw new IllegalStateException("정산 후보는 삭제할 수 없습니다. 제외(EXCLUDED)나 조정으로 정정하세요.");
     }
 
     /** 연관된 정산서 ID. 지연 로딩 프록시여도 ID만 꺼내므로 추가 조회가 없다 */

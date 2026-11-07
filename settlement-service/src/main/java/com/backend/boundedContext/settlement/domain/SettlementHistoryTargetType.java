@@ -5,5 +5,7 @@ public enum SettlementHistoryTargetType {
     /** 정산 후보 */
     CANDIDATE,
     /** 정산서 */
-    SETTLEMENT
+    SETTLEMENT,
+    /** 판매자 (판별 단계의 판매자 단위 판정. target_id = 판매자 ID) */
+    SELLER
 }

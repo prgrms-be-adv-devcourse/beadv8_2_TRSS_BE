@@ -13,5 +13,7 @@ public enum SettlementTrigger {
     /** 재시도 스케줄러 */
     RETRY_SCHEDULER,
     /** 관리자 수동 실행·재처리·보류·제외 */
-    ADMIN
+    ADMIN,
+    /** 매일 새벽 원장 재대조 스케줄러 */
+    LEDGER_RECHECK
 }

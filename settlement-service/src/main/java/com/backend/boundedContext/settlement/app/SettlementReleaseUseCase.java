@@ -19,8 +19,10 @@ import java.time.LocalDateTime;
  * 관리자 보류 해제: HOLD 정산서를 READY로 되돌리고 처리 이력을 남긴다
  *
  * 지급은 여기서 하지 않는다. READY가 되면 10분마다 도는 재시도 스케줄러가 지급한다(정책 "보류").
- * 판매자가 제재(SANCTIONED) 중이면 409 SETTLEMENT_SELLER_SANCTIONED로 거절한다.
- * 지급 직전에 판매자가 제재 상태면 다시 HOLD가 되므로(SettlementPayoutUseCase), 해제해도 지급되지 않고 보류만 되풀이된다.
+ * 판매자가 제재(SANCTIONED) 중이면 409 SETTLEMENT_SELLER_SANCTIONED,
+ * 판매자의 지난 지급 원장 재대조 불일치가 풀리지 않았으면 409 SETTLEMENT_LEDGER_MISMATCH_UNRESOLVED로 거절한다.
+ * 지급 직전에 같은 조건으로 다시 HOLD가 되므로(SettlementPayoutUseCase), 해제해도 지급되지 않고 보류만 되풀이된다.
+ * 원장 불일치로 보류된 정산서는 불일치가 풀리면 원장 재대조가 자동 해제한다(SettlementLedgerRecheckUseCase).
  * 제재 중인 판매자의 정산서는 판매자 제재가 해지될 때 함께 READY로 바꾼다(제재 해지 작업에서 추가 예정).
  * HOLD가 아니면 엔티티가 409 SETTLEMENT_STATE_INVALID를 던진다.
  */
@@ -35,9 +37,13 @@ public class SettlementReleaseUseCase {
 
     public SettlementResponse release(Long settlementId) {
         Settlement settlement = settlementSupport.getSettlementWithLock(settlementId);
-        if (settlement.getStatus() == SettlementStatus.HOLD
-                && settlementMemberPort.getSeller(settlement.getSellerId()).status() == SellerStatus.SANCTIONED) {
-            throw new DomainException(SettlementErrorCode.SETTLEMENT_SELLER_SANCTIONED);
+        if (settlement.getStatus() == SettlementStatus.HOLD) {
+            if (settlementSupport.hasUnresolvedLedgerMismatch(settlement.getSellerId())) {
+                throw new DomainException(SettlementErrorCode.SETTLEMENT_LEDGER_MISMATCH_UNRESOLVED);
+            }
+            if (settlementMemberPort.getSeller(settlement.getSellerId()).status() == SellerStatus.SANCTIONED) {
+                throw new DomainException(SettlementErrorCode.SETTLEMENT_SELLER_SANCTIONED);
+            }
         }
         settlement.release();   // HOLD가 아니면 409
         settlementProcessHistoryRepository.save(SettlementProcessHistory.released(settlementId, LocalDateTime.now()));

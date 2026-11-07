@@ -80,6 +80,11 @@ public class SettlementSupport {
         return findBusinessNames(List.of(sellerId)).get(sellerId);
     }
 
+    /** 이 판매자의 지난 정산서에 원장 재대조 불일치가 아직 풀리지 않고 남아 있는지 */
+    public boolean hasUnresolvedLedgerMismatch(Long sellerId) {
+        return settlementRepository.existsUnresolvedLedgerMismatchBySellerId(sellerId);
+    }
+
     /** 상태를 바꾸기 전에 쓰는 잠금 조회 */
     public Settlement getSettlementWithLock(Long settlementId) {
         return settlementRepository.findWithLockById(settlementId)

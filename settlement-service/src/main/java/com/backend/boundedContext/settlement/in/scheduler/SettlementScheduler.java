@@ -11,11 +11,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * 정산 스케줄러 2개
+ * 정산 스케줄러 3개
+ *   매일 03:35 KST: 원장 재대조(지난 lookbackDays(2)일 동안 지급된 정산서 = T+1 + 풀리지 않은 불일치 정산서) 후 원장 불일치 보류 정리.
+ *                   custom.settlement.ledgerRecheck.enabled일 때만
  *   매월 payDayOfMonth(10)일 00:00 KST: 지난달 월 정산 Job 실행
  *   10분마다: 다음 재시도 일시가 지난 FAILED + READY(보류 해제·지급 전에 멈춘 건) 정산서를 최대 retryBatchSize(50)건 지급
  *
@@ -52,6 +57,73 @@ public class SettlementScheduler {
         } catch (Exception e) {
             // 관리자 화면(실행 결과)에서 실패를 보고 POST /admin/settlements/runs로 수동 실행한다
             log.error("월 정산 스케줄 실행 실패 targetMonth={}", targetMonth, e);
+        }
+    }
+
+    /**
+     * 원장 무결성 2단계 ②: 매일 새벽 지급 영수증 재대조(T+1)
+     * ① 지난 lookbackDays일 동안 지급된 정산서 ② 지급일과 상관없이 불일치가 아직 풀리지 않은 정산서(①에서 본 것은 빼고)
+     * ②를 매일 다시 봐야 원장이 고쳐졌을 때 불일치가 풀리고, 그 사유로 보류된 정산서가 자동 해제된다
+     * ③ 정리: 불일치가 없는 판매자인데 원장 불일치 사유로 남은 보류를 푼다(재시작한 Job의 예전 판정, 해소와 동시에 생긴 보류)
+     * 재시도 스케줄러(10분마다 정각 0·10·20…분)와 같은 시각에 돌면 지급 직전 보류와 해소가 엇갈리므로 35분에 돈다
+     * 월 정산 Job 안에서는 재대조하지 않는다. 불일치 이력은 다음 Job의 판별 Step(LedgerMismatchRule)이 읽어 지급을 보류한다
+     * 원장을 읽고 이력만 남기며 정산서 상태는 바꾸지 않으므로, 월 정산 Job이 실행 중이어도 건너뛰지 않는다
+     */
+    @Scheduled(cron = "0 35 3 * * *", zone = "Asia/Seoul")
+    public void recheckLedgers() {
+        if (!settlementPolicy.isLedgerRecheckEnabled()) return;
+        LocalDateTime since = LocalDateTime.now().minusDays(settlementPolicy.getLedgerRecheckLookbackDays());
+        long afterId = 0L;
+        int checked = 0;
+        int mismatched = 0;
+        int errors = 0;
+        Set<Long> seen = new HashSet<>();
+        while (true) {
+            List<Long> settlementIds = settlementFacade.findLedgerRecheckTargetIds(since, afterId,
+                    settlementPolicy.getBatchChunkSize());
+            if (settlementIds.isEmpty()) break;
+            for (Long settlementId : settlementIds) {
+                seen.add(settlementId);
+                Boolean mismatch = recheckLedger(settlementId);
+                if (mismatch == null) errors++;
+                else {
+                    checked++;
+                    if (mismatch) mismatched++;
+                }
+            }
+            afterId = settlementIds.get(settlementIds.size() - 1);
+        }
+        int unresolvedChecked = 0;
+        for (Long settlementId : settlementFacade.findUnresolvedLedgerRecheckTargetIds()) {
+            if (!seen.add(settlementId)) continue;
+            Boolean mismatch = recheckLedger(settlementId);
+            if (mismatch == null) errors++;
+            else {
+                unresolvedChecked++;
+                if (mismatch) mismatched++;
+            }
+        }
+        int released = 0;
+        for (Long sellerId : settlementFacade.findSellerIdsWithLedgerMismatchHolds()) {
+            try {
+                released += settlementFacade.releaseLedgerMismatchHoldsIfResolved(sellerId,
+                        SettlementTrigger.LEDGER_RECHECK);
+            } catch (Exception e) {
+                errors++;
+                log.error("원장 불일치 보류 정리 오류 sellerId={}", sellerId, e);
+            }
+        }
+        log.info("원장 재대조 스케줄 checked={} unresolvedChecked={} mismatched={} released={} errors={}", checked,
+                unresolvedChecked, mismatched, released, errors);
+    }
+
+    /** 정산서 1건 재대조. 불일치면 true, 같으면 false, 오류면 null(다음 회차에 다시 본다) */
+    private Boolean recheckLedger(Long settlementId) {
+        try {
+            return settlementFacade.recheckLedger(settlementId, SettlementTrigger.LEDGER_RECHECK, null).isMismatch();
+        } catch (Exception e) {
+            log.error("원장 재대조 스케줄 오류 settlementId={}", settlementId, e);
+            return null;
         }
     }
 

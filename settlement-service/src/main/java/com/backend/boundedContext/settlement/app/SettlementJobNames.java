@@ -8,6 +8,9 @@ package com.backend.boundedContext.settlement.app;
 public final class SettlementJobNames {
 
     public static final String JOB_NAME = "settlementMonthlyJob";
+    /** 1단계 판별: 지급 직전 자격 판정 */
+    public static final String JUDGE_STEP = "settlementJudgeStep";
+    /** 2단계 확정: 정산서 집계 (Step 이름은 실행 기록 조회 호환을 위해 그대로 둔다) */
     public static final String AGGREGATE_STEP = "settlementAggregateStep";
     public static final String PAYOUT_STEP = "settlementPayoutStep";
 
@@ -33,6 +36,14 @@ public final class SettlementJobNames {
     public static final String SKIPPED_COUNT = "skippedCount";
     public static final String PAYOUT_TOTAL = "payoutTotal";
     public static final String FEE_TOTAL = "feeTotal";
+
+    /** 판별 Step 건수와 판정 (판정은 Job 실행 컨텍스트로 올려 확정 Step이 읽는다) */
+    public static final String JUDGED_SELLER_COUNT = "judgedSellerCount";
+    public static final String JUDGE_HOLD_COUNT = "judgeHoldCount";
+    public static final String JUDGE_BLOCK_COUNT = "judgeBlockCount";
+    public static final String JUDGE_FAILED_COUNT = "judgeFailedCount";
+    /** 판매자 ID → SettlementJudgement.encode(). HashMap이라 Job 실행 컨텍스트에 직렬화된다 */
+    public static final String JUDGEMENTS = "judgements";
 
     private SettlementJobNames() {
     }
