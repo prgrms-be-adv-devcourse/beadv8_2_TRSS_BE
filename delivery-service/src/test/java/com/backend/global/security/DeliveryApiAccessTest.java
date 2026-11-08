@@ -26,7 +26,9 @@ import com.backend.shared.member.dto.MemberRole;
  * - /api/v1/logistics/** : LOGISTICS만. 관리자·구매자는 403, 익명은 401
  * - POST /webhooks/delivery-tracker/** : 인증 없음 (GET은 인증 필요)
  * - LOGISTICS는 구매·판매·운영 경로에서 403
- * 실제 컨트롤러가 아직 없어 테스트 전용 컨트롤러로 확인한다
+ * 경로 규칙만 보려고 테스트 전용 컨트롤러(/api/v1/logistics/ping, 웹훅 경로)를 쓴다. 실제 경로와 겹치지 않는다.
+ * 실제 물류 API(/api/v1/logistics/deliveries/**)의 권한은 ApiV1LogisticsDeliveryControllerTest,
+ * 내부 API(/internal/v1/deliveries)는 InternalV1DeliveryControllerTest에서 확인한다. 웹훅 컨트롤러는 PR 3-B
  */
 @WebMvcTest(DeliveryApiAccessTest.StubController.class)
 @Import({SecurityConfig.class, JwtTokenProvider.class, JwtAuthenticationEntryPoint.class,
