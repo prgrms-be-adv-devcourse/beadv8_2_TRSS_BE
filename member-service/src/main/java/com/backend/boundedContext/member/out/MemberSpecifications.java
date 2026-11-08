@@ -38,6 +38,7 @@ public final class MemberSpecifications {
         if (memberType == null) return Specification.unrestricted();
         return switch (memberType) {
             case ADMIN -> (root, query, cb) -> cb.equal(root.get("role"), MemberRole.ADMIN);
+            case LOGISTICS -> (root, query, cb) -> cb.equal(root.get("role"), MemberRole.LOGISTICS);
             case SELLER -> (root, query, cb) -> cb.and(isUser(root, cb), cb.exists(approvedSeller(root, query, cb)));
             case USER -> (root, query, cb) -> cb.and(isUser(root, cb), cb.not(cb.exists(approvedSeller(root, query, cb))));
         };
