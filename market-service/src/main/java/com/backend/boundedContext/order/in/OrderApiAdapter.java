@@ -42,4 +42,9 @@ public class OrderApiAdapter implements OrderApi {
     public List<OrderSummaryDto> getRecentOrders(Long buyerId, int limit) {
         return orderFacade.getRecentOrders(buyerId, limit);
     }
+
+    @Override
+    public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
+        return orderFacade.getCartItemsAmount(buyerId, cartItemIds);
+    }
 }
