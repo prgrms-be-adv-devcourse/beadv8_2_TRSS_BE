@@ -18,7 +18,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.global.outbox.OutboxEvent;
 import com.backend.global.outbox.OutboxEventRepository;
 import com.backend.global.outbox.OutboxEventStatus;
@@ -75,9 +74,6 @@ class EventPublisherTest {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
-    @Autowired
-    private WalletRepository walletRepository;
-
     // 다른 테스트와 겹치지 않는 집합 ID
     private final Long testId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
 
@@ -87,7 +83,6 @@ class EventPublisherTest {
         outboxEventRepository.deleteAll(outboxEventRepository.findAll().stream()
                 .filter(outbox -> outbox.getAggregateType().equals("MEMBER") && outbox.getAggregateId().equals(testId))
                 .toList());
-        walletRepository.findByMemberId(testId).ifPresent(walletRepository::delete);
         testEventListener.received.clear();
     }
 
@@ -109,12 +104,11 @@ class EventPublisherTest {
     }
 
     @Test
-    @DisplayName("가입 이벤트는 outbox에 PENDING으로 저장만 되고, Kafka 컨슈머가 받기 전까지 지갑은 생기지 않는다")
+    @DisplayName("가입 이벤트는 outbox에 PENDING으로 저장만 되고 바로 발행하지 않는다(릴레이가 Kafka로 보내면 payment-service 컨슈머가 지갑을 만든다)")
     void publishSignUpEvent_waitsForConsumer() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 eventPublisher.publish(new MemberSignedUpEvent(testId)));
 
-        assertThat(walletRepository.findByMemberId(testId)).isEmpty();
         assertThat(outboxEventRepository.findAll().stream()
                 .filter(outbox -> outbox.getAggregateType().equals("MEMBER") && outbox.getAggregateId().equals(testId)))
                 .singleElement()

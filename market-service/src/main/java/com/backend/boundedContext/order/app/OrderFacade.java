@@ -5,6 +5,7 @@ import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderSummaryDto;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.order.dto.ReviewableOrderItemDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 주문 컨텍스트 진입점
@@ -40,6 +42,7 @@ public class OrderFacade {
     private final OrderGetSellerOrderItemsUseCase orderGetSellerOrderItemsUseCase;
     private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
     private final OrderMarkDeliveredUseCase orderMarkDeliveredUseCase;
+    private final OrderFindConfirmedOrderItemUseCase orderFindConfirmedOrderItemUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -154,6 +157,12 @@ public class OrderFacade {
     @Transactional(readOnly = true)
     public boolean hasActiveSales(Long sellerId) {
         return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
+    }
+
+    // 구매자 본인의 구매 확정 주문 항목 (OrderApi)
+    @Transactional(readOnly = true)
+    public Optional<ReviewableOrderItemDto> findConfirmedOrderItem(Long buyerId, Long orderItemId) {
+        return orderFindConfirmedOrderItemUseCase.find(buyerId, orderItemId);
     }
 
     // 판매자 주문 항목 조회
