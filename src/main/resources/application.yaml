@@ -66,10 +66,6 @@ custom:
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
-    # 회원(member-service) 주소. 결제가 회원 내부 API(/internal/v1/members·sellers)를 부를 때 쓴다 (MemberApiClient)
-    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
-    connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
-    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
     seedPassword: ${MEMBER_SEED_PASSWORD:}   # 개발용 시드 회원 비밀번호. 비어 있으면 결제 시드를 넣지 않는다(운영 환경). 회원 시드는 member-service가 넣는다
   product:
     image:
@@ -90,11 +86,6 @@ custom:
     schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
-  # 결제 서비스(payment-service). 루트 앱은 결제 내부 API를 HTTP로 부른다(PaymentApiHttpAdapter)
-  paymentService:
-    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}   # 결제 서비스 주소
-    connectTimeoutSeconds: 2   # 결제 서비스 접속 제한 시간(초)
-    readTimeoutSeconds: 10     # 요청 후 결제 서비스 응답 대기 제한 시간(초). 결제는 지갑 잠금을 기다릴 수 있어 회원 조회보다 길게
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다

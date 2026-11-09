@@ -146,6 +146,17 @@ class PaymentMemberHttpAdapterTest {
     }
 
     @Test
+    @DisplayName("성공 응답이어도 본문을 읽지 못하면(예: HTML) 502 EXTERNAL_SERVICE_ERROR")
+    void successButUnreadableBody() {
+        server.expect(requestTo(BASE_URL + "/internal/v1/members?ids=1"))
+                .andRespond(withSuccess("<html>maintenance</html>", MediaType.TEXT_HTML));
+
+        assertThatThrownBy(() -> adapter.getMembers(List.of(1L)))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo("502-EXTERNAL_SERVICE_ERROR"));
+    }
+
+    @Test
     @DisplayName("회원 서비스에 닿지 못하면(시간 초과) 502 EXTERNAL_SERVICE_ERROR")
     void timeout() {
         server.expect(requestTo(BASE_URL + "/internal/v1/members/3/active"))

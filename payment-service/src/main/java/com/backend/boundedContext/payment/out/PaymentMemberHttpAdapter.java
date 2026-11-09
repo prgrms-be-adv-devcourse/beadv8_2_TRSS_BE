@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.support.RestClientAdapter;
 import org.springframework.web.service.annotation.GetExchange;
@@ -90,6 +91,9 @@ public class PaymentMemberHttpAdapter implements PaymentMemberPort {
             throw convertMemberServiceError(e);
         } catch (ResourceAccessException e) {
             // 회원 서비스에 접속 실패, 응답 대기 시간 초과인 경우
+            throw new DomainException(GlobalErrorCode.EXTERNAL_SERVICE_ERROR, e);
+        } catch (RestClientException e) {
+            // 성공 응답(2xx)이지만 본문을 RsData로 읽지 못한 경우 (예: HTML·형식이 다른 JSON)
             throw new DomainException(GlobalErrorCode.EXTERNAL_SERVICE_ERROR, e);
         }
     }
