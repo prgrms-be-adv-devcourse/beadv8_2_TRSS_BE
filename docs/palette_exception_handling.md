@@ -293,6 +293,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
 | | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
+| | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정 |
 | payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족. API 응답은 주문 결제가 order의 `OrderErrorCode.INSUFFICIENT_BALANCE`로 던진다(`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`). payment 코드는 `Wallet` 출금 안전장치 |
 | | 400-PAYMENT_PERIOD_INVALID | 조회 시작일 > 종료일 (거래 내역, 관리자 결제·충전 조회) |
 | | 400-TOPUP_AMOUNT_INVALID | 1만 원 단위·1만~100만 원 위반 |
