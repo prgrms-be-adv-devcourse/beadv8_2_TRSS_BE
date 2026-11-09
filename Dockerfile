@@ -26,6 +26,7 @@ COPY common/src common/src
 COPY src src
 COPY member-service/src member-service/src
 COPY market-service/src market-service/src
+COPY payment-service/src payment-service/src
 COPY settlement-service/src settlement-service/src
 RUN if [ -z "$MODULE" ]; then \
         ./gradlew :bootJar -x test --no-daemon && cp build/libs/*.jar app.jar; \
@@ -47,6 +48,7 @@ RUN groupadd --system app && useradd --system --gid app app
 COPY --from=build --chown=app:app /workspace/app.jar app.jar
 USER app
 
-# 루트 모놀리스 8080, market-service 8082, settlement-service 8084 (각 application.yaml의 server.port)
-EXPOSE 8080 8082 8084
+# 루트 모놀리스 8080, member-service 8081, market-service 8082, payment-service 8083, settlement-service 8084
+# (각 application.yaml의 server.port)
+EXPOSE 8080 8081 8082 8083 8084
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -127,8 +127,8 @@ custom:
     connectTimeoutMillis: 1000
     readTimeoutMillis: 3000
   payment:
-    # 결제. 결제 내부 API(/internal/v1/payments): 탈퇴 검사, 관리자 회원 상세. 결제가 payment-service로 분리되기 전에는 루트 앱(8080)
-    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8080}
+    # 결제(payment-service). 결제 내부 API(/internal/v1/payments): 탈퇴 검사, 관리자 회원 상세
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}
     connectTimeoutMillis: 1000
     readTimeoutMillis: 3000
   outbox:
