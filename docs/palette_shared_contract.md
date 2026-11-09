@@ -375,6 +375,13 @@ public interface OrderApi {
      * 판매자 철회 승인·회원 탈퇴 검사용. 있으면 회원 컨텍스트가 409로 승인·탈퇴를 거절한다.
      */
     boolean hasActiveSales(Long sellerId);
+
+    /**
+     * 내 장바구니 항목들의 현재 상품 금액 합계 (판매 가능한 항목의 현재 가격 x 수량, 배송비 제외).
+     * 쿠폰 컨텍스트가 사용 가능한 장바구니 쿠폰의 예상 할인액을 보여 줄 때 CouponOrderPort를 거쳐 부른다.
+     * 판매 중지, 삭제된 옵션은 0원으로 센다. 내 장바구니 항목이 아니면 404-CART_ITEM_NOT_FOUND.
+     */
+    long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds);
 }
 ```
 

@@ -313,6 +313,15 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-SETTLEMENT_AMOUNT_MISMATCH | 정산 금액이 일치하지 않아서 정산할 수 없는 상태 |
 | | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
 | | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
+| coupon (다은) | 404-COUPON_NOT_FOUND | 없는 쿠폰 (관리자 상세, 강제 중지, 예약) |
+| | 400-COUPON_PERIOD_INVALID | 쿠폰 등록 시 시작이 종료보다 늦거나 같음, 종료가 현재 이전 |
+| | 400-COUPON_TIER_INVALID | 장바구니 쿠폰 구간 없음, 할인액이 최소 주문 금액 이상, 구간이 올라가도 최소 주문 금액이나 할인액이 커지지 않음 |
+| | 409-COUPON_STATE_INVALID | 이미 중지됐거나 유효 기간이 끝난 쿠폰을 중지 |
+| | 409-COUPON_NOT_ACTIVE | 사용 기간 밖이거나 중지된 쿠폰을 예약, 또는 예약 뒤 중지됐거나 기간이 끝난 쿠폰으로 결제 (결제와 함께 롤백) |
+| | 409-COUPON_SOLD_OUT | 수량 제한 쿠폰의 남은 수량 없음 (조건부 UPDATE로 판단) |
+| | 409-COUPON_ALREADY_USED | 같은 회원이 같은 쿠폰을 이미 예약했거나 사용함 (1인 1회, 동시 요청은 부분 유니크 인덱스 위반을 이 코드로 바꿈) |
+| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등) |
+| | 400-COUPON_MIN_ORDER_NOT_MET | 장바구니 쿠폰의 가장 낮은 구간 최소 주문 금액에 못 미침 |
 
 
 ## 9. 로그 규칙
