@@ -12,13 +12,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
+ * 옵션의 판매 가능 여부와 옵션 재고(OptionStock)의 재고 변경 규칙.
  * 판매 중지·삭제 기능은 아직 없으므로 상태는 ReflectionTestUtils로 바꿔서 준비한다.
  */
 class ProductOptionTest {
 
+    /** 옵션 재고는 저장된 옵션(ID 있음)에만 만들 수 있으므로 ID를 넣어 둔다 */
+    private static ProductOption savedOption(Product product) {
+        ProductOption option = ProductOption.createDefault(product);
+        ReflectionTestUtils.setField(option, "id", 1L);
+        return option;
+    }
+
     private final Category skincare = Category.createChild(Category.createRoot("뷰티", 0), "스킨케어", 0);
     private final Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
-    private final ProductOption option = ProductOption.createDefault(product, 5);
+    private final ProductOption option = savedOption(product);
+    private final OptionStock stock = OptionStock.init(option, 5);
 
     @Test
     @DisplayName("판매 불가 이유는 상품 삭제 > 옵션 삭제 > 상품 중지 > 카테고리 사용 중지 순으로 하나만 나온다")
@@ -42,23 +51,23 @@ class ProductOptionTest {
     @Test
     @DisplayName("차감하면 재고가 줄고, 남은 재고를 모두 차감할 수 있다")
     void deductStock() {
-        option.deductStock(2);
-        assertThat(option.getStock()).isEqualTo(3);
+        stock.deductStock(2);
+        assertThat(stock.getStock()).isEqualTo(3);
 
-        option.deductStock(3);
-        assertThat(option.getStock()).isZero();
+        stock.deductStock(3);
+        assertThat(stock.getStock()).isZero();
     }
 
     @Test
     @DisplayName("재고보다 많이 차감하거나 재고가 0이면 OUT_OF_STOCK, 재고는 그대로다")
     void deductStockOverStock() {
-        assertThatThrownBy(() -> option.deductStock(6))
+        assertThatThrownBy(() -> stock.deductStock(6))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-OUT_OF_STOCK");
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(stock.getStock()).isEqualTo(5);
 
-        option.deductStock(5);
-        assertThatThrownBy(() -> option.deductStock(1))
+        stock.deductStock(5);
+        assertThatThrownBy(() -> stock.deductStock(1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-OUT_OF_STOCK");
     }
@@ -68,122 +77,122 @@ class ProductOptionTest {
     void deductStockNotSaleable() {
         stopProduct();
 
-        assertThatThrownBy(() -> option.deductStock(1))
+        assertThatThrownBy(() -> stock.deductStock(1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_ON_SALE");
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(stock.getStock()).isEqualTo(5);
     }
 
     @Test
     @DisplayName("주문 취소 복원은 중지·삭제된 상품이어도 재고를 늘린다")
     void orderRestore() {
         stopProduct();
-        option.restoreStock(2, StockChangeType.ORDER_RESTORE);
-        assertThat(option.getStock()).isEqualTo(7);
+        stock.restoreStock(2, StockChangeType.ORDER_RESTORE);
+        assertThat(stock.getStock()).isEqualTo(7);
 
         deleteProduct();
-        option.restoreStock(1, StockChangeType.ORDER_RESTORE);
-        assertThat(option.getStock()).isEqualTo(8);
+        stock.restoreStock(1, StockChangeType.ORDER_RESTORE);
+        assertThat(stock.getStock()).isEqualTo(8);
         assertThat(product.getStatus()).isEqualTo(ProductSaleStatus.DELETED);   // 상태는 바꾸지 않는다
     }
 
     @Test
     @DisplayName("복원 결과가 최대 재고를 넘으면 STOCK_LIMIT_EXCEEDED, 최대 재고까지는 늘릴 수 있다")
     void restoreStockLimitExceeded() {
-        option.restoreStock(ProductOption.MAX_STOCK - 5, StockChangeType.ORDER_RESTORE);
-        assertThat(option.getStock()).isEqualTo(ProductOption.MAX_STOCK);
+        stock.restoreStock(OptionStock.MAX_STOCK - 5, StockChangeType.ORDER_RESTORE);
+        assertThat(stock.getStock()).isEqualTo(OptionStock.MAX_STOCK);
 
-        assertThatThrownBy(() -> option.restoreStock(1, StockChangeType.ORDER_RESTORE))
+        assertThatThrownBy(() -> stock.restoreStock(1, StockChangeType.ORDER_RESTORE))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
-        assertThatThrownBy(() -> option.restoreStock(Integer.MAX_VALUE, StockChangeType.RETURN_RESTORE))   // int가 넘쳐 음수가 되지 않는다
+        assertThatThrownBy(() -> stock.restoreStock(Integer.MAX_VALUE, StockChangeType.RETURN_RESTORE))   // int가 넘쳐 음수가 되지 않는다
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
-        assertThat(option.getStock()).isEqualTo(ProductOption.MAX_STOCK);
+        assertThat(stock.getStock()).isEqualTo(OptionStock.MAX_STOCK);
     }
 
     @Test
     @DisplayName("반품 복원은 삭제된 상품이면 PRODUCT_DELETED, 삭제된 옵션이면 OPTION_DELETED (상품을 먼저 본다)")
     void returnRestoreDeleted() {
         deleteOption();
-        assertThatThrownBy(() -> option.restoreStock(1, StockChangeType.RETURN_RESTORE))
+        assertThatThrownBy(() -> stock.restoreStock(1, StockChangeType.RETURN_RESTORE))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-OPTION_DELETED");
 
         deleteProduct();
-        assertThatThrownBy(() -> option.restoreStock(1, StockChangeType.RETURN_RESTORE))
+        assertThatThrownBy(() -> stock.restoreStock(1, StockChangeType.RETURN_RESTORE))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_DELETED");
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(stock.getStock()).isEqualTo(5);
     }
 
     @Test
     @DisplayName("수량이 1보다 작으면 IllegalArgumentException")
     void invalidQuantity() {
-        assertThatThrownBy(() -> option.deductStock(0)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> option.restoreStock(-1, StockChangeType.ORDER_RESTORE))
+        assertThatThrownBy(() -> stock.deductStock(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> stock.restoreStock(-1, StockChangeType.ORDER_RESTORE))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("재고 조정: 증감량만큼 늘리거나 줄이고, 0까지 줄일 수 있다")
     void adjustStock() {
-        option.adjustStock(10);
-        assertThat(option.getStock()).isEqualTo(15);
+        stock.adjustStock(10);
+        assertThat(stock.getStock()).isEqualTo(15);
 
-        option.adjustStock(-15);
-        assertThat(option.getStock()).isZero();
+        stock.adjustStock(-15);
+        assertThat(stock.getStock()).isZero();
     }
 
     @Test
     @DisplayName("재고 조정: 결과가 0 미만이면 STOCK_NEGATIVE, 재고는 그대로다")
     void adjustStockNegative() {
-        assertThatThrownBy(() -> option.adjustStock(-6))
+        assertThatThrownBy(() -> stock.adjustStock(-6))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_NEGATIVE");
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(stock.getStock()).isEqualTo(5);
     }
 
     @Test
     @DisplayName("재고 조정: 결과가 최대 재고를 넘으면 STOCK_LIMIT_EXCEEDED, 재고는 그대로다")
     void adjustStockLimitExceeded() {
-        assertThatThrownBy(() -> option.adjustStock(ProductOption.MAX_STOCK - 4))
+        assertThatThrownBy(() -> stock.adjustStock(OptionStock.MAX_STOCK - 4))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
-        assertThatThrownBy(() -> option.adjustStock(Integer.MAX_VALUE))   // int가 넘쳐 음수로 판단되지 않는다
+        assertThatThrownBy(() -> stock.adjustStock(Integer.MAX_VALUE))   // int가 넘쳐 음수로 판단되지 않는다
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_LIMIT_EXCEEDED");
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(stock.getStock()).isEqualTo(5);
 
-        option.adjustStock(ProductOption.MAX_STOCK - 5);
-        assertThat(option.getStock()).isEqualTo(ProductOption.MAX_STOCK);
+        stock.adjustStock(OptionStock.MAX_STOCK - 5);
+        assertThat(stock.getStock()).isEqualTo(OptionStock.MAX_STOCK);
     }
 
     @Test
     @DisplayName("재고 조정: 판매 중지·삭제된 상품이면 PRODUCT_NOT_EDITABLE")
     void adjustStockNotEditableProduct() {
         stopProduct();
-        assertThatThrownBy(() -> option.adjustStock(1))
+        assertThatThrownBy(() -> stock.adjustStock(1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
 
         deleteProduct();
-        assertThatThrownBy(() -> option.adjustStock(1))
+        assertThatThrownBy(() -> stock.adjustStock(1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(stock.getStock()).isEqualTo(5);
     }
 
     @Test
     @DisplayName("재고 조정: 삭제된 옵션이면 OPTION_DELETED, 상품도 삭제됐으면 상품을 먼저 본다")
     void adjustStockDeletedOption() {
         deleteOption();
-        assertThatThrownBy(() -> option.adjustStock(1))
+        assertThatThrownBy(() -> stock.adjustStock(1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-OPTION_DELETED");
 
         deleteProduct();
-        assertThatThrownBy(() -> option.adjustStock(1))
+        assertThatThrownBy(() -> stock.adjustStock(1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_EDITABLE");
     }
@@ -193,28 +202,28 @@ class ProductOptionTest {
     void adjustStockInactiveCategory() {
         skincare.modify(null, false);
 
-        option.adjustStock(3);
-        assertThat(option.getStock()).isEqualTo(8);
+        stock.adjustStock(3);
+        assertThat(stock.getStock()).isEqualTo(8);
     }
 
     @Test
     @DisplayName("재고 조정: 증감량이 0이면 IllegalArgumentException")
     void adjustStockZero() {
-        assertThatThrownBy(() -> option.adjustStock(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> stock.adjustStock(0)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     @DisplayName("남은 수량은 재고가 1 ~ 5개일 때만 주고, 0이면 품절이다")
     void lowStockRemaining() {
-        assertThat(option.getLowStockRemaining()).isEqualTo(5);
-        assertThat(option.isSoldOut()).isFalse();
+        assertThat(stock.getLowStockRemaining()).isEqualTo(5);
+        assertThat(stock.isSoldOut()).isFalse();
 
-        option.adjustStock(1);
-        assertThat(option.getLowStockRemaining()).isNull();
+        stock.adjustStock(1);
+        assertThat(stock.getLowStockRemaining()).isNull();
 
-        option.adjustStock(-6);
-        assertThat(option.getLowStockRemaining()).isNull();
-        assertThat(option.isSoldOut()).isTrue();
+        stock.adjustStock(-6);
+        assertThat(stock.getLowStockRemaining()).isNull();
+        assertThat(stock.isSoldOut()).isTrue();
     }
 
     @Test

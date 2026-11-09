@@ -1,8 +1,10 @@
 package com.backend.boundedContext.product.out;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
@@ -44,11 +46,12 @@ public final class ProductSpecifications {
     public static Specification<Product> inStock() {
         return (root, q, cb) -> {
             Subquery<Long> sub = q.subquery(Long.class);
-            Root<ProductOption> option = sub.from(ProductOption.class);
-            sub.select(option.get("id")).where(
+            Root<OptionStock> stock = sub.from(OptionStock.class);
+            Join<OptionStock, ProductOption> option = stock.join("option");
+            sub.select(stock.get("id")).where(
                     cb.equal(option.get("product"), root),
                     cb.isNull(option.get("deletedAt")),
-                    cb.greaterThan(option.get("stock"), 0));
+                    cb.greaterThan(stock.get("stock"), 0));
             return cb.exists(sub);
         };
     }

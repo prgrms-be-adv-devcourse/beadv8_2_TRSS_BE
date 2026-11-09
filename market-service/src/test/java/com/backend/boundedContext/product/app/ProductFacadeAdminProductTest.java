@@ -5,12 +5,14 @@ import com.backend.boundedContext.product.app.dto.AdminProductSummaryDto;
 import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
 import com.backend.boundedContext.product.domain.AdminProductDisplayStatus;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.domain.ProductStoppedBy;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.ProductStopRequestRepository;
@@ -67,6 +69,9 @@ class ProductFacadeAdminProductTest {
 
     @Autowired
     private ProductOptionRepository productOptionRepository;
+
+    @Autowired
+    private OptionStockRepository optionStockRepository;
 
     @Autowired
     private ProductStopRequestRepository productStopRequestRepository;
@@ -268,8 +273,8 @@ class ProductFacadeAdminProductTest {
 
     private Product create(Long sellerId, Category category, String name, int stock) {
         Product product = productRepository.save(Product.create(sellerId, category, name, "설명", 25_000));
-        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product, Math.max(stock, 1)));
-        ReflectionTestUtils.setField(option, "stock", stock);
+        ProductOption option = saveOption(product, Math.max(stock, 1));
+        ReflectionTestUtils.setField(optionStock(option), "stock", stock);
         productRepository.flush();   // 잠금 조회가 DB 값을 다시 읽으므로 먼저 반영한다
         return product;
     }
@@ -287,5 +292,17 @@ class ProductFacadeAdminProductTest {
         return productFacade.getStopRequestsForAdmin(status, PageRequest.of(0, 100)).items().stream()
                 .filter(request -> request.sellerId().equals(SELLER_ID))
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

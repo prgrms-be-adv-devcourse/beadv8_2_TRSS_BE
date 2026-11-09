@@ -49,33 +49,33 @@ public class StockHistory extends BaseIdAndTime {
     private Long orderItemId;
 
     /** 상품 등록 시 초기 재고 이력 */
-    public static StockHistory ofInit(ProductOption option) {
+    public static StockHistory ofInit(OptionStock stock) {
         StockHistory history = new StockHistory();
-        history.option = option;
+        history.option = stock.getOption();
         history.changeType = StockChangeType.INIT;
-        history.changeQty = option.getStock();
-        history.stockAfter = option.getStock();
+        history.changeQty = stock.getStock();
+        history.stockAfter = stock.getStock();
         return history;
     }
 
     /** 판매자 재고 조정 이력. 재고를 바꾼 뒤에 만든다. 줄였으면 changeQty가 음수다. */
-    public static StockHistory ofAdjust(ProductOption option, int changeQty) {
+    public static StockHistory ofAdjust(OptionStock stock, int changeQty) {
         StockHistory history = new StockHistory();
-        history.option = option;
+        history.option = stock.getOption();
         history.changeType = StockChangeType.ADJUST;
         history.changeQty = changeQty;
-        history.stockAfter = option.getStock();
+        history.stockAfter = stock.getStock();
         return history;
     }
 
     /** 주문으로 인한 재고 변경 이력. 재고를 바꾼 뒤에 만든다. 차감이면 changeQty가 음수다. */
-    public static StockHistory ofOrder(ProductOption option, StockChangeType changeType, int changeQty,
+    public static StockHistory ofOrder(OptionStock stock, StockChangeType changeType, int changeQty,
                                        Long orderId, Long orderItemId) {
         StockHistory history = new StockHistory();
-        history.option = option;
+        history.option = stock.getOption();
         history.changeType = changeType;
         history.changeQty = changeQty;
-        history.stockAfter = option.getStock();
+        history.stockAfter = stock.getStock();
         history.orderId = orderId;
         history.orderItemId = orderItemId;
         return history;

@@ -1,11 +1,13 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -51,6 +53,9 @@ class ProductFacadeStockTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     private Product product;
@@ -60,7 +65,7 @@ class ProductFacadeStockTest {
     void setUp() {
         product = productRepository.save(Product.create(
                 10L, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "수분 크림", "설명", 25_000));
-        option = productOptionRepository.save(ProductOption.createDefault(product, 5));
+        option = saveOption(product, 5);
     }
 
     @Test
@@ -98,7 +103,7 @@ class ProductFacadeStockTest {
         productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));
         productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));   // 중복 호출
 
-        assertThat(option.getStock()).isEqualTo(3);
+        assertThat(optionStock(option).getStock()).isEqualTo(3);
         assertThat(histories(StockChangeType.ORDER_DEDUCT)).singleElement().satisfies(history -> {
             assertThat(history.getChangeQty()).isEqualTo(-2);
             assertThat(history.getStockAfter()).isEqualTo(3);
@@ -131,7 +136,7 @@ class ProductFacadeStockTest {
         productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE);
         productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE);   // 중복 호출
 
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(optionStock(option).getStock()).isEqualTo(5);
         assertThat(histories(StockChangeType.ORDER_RESTORE)).singleElement().satisfies(history -> {
             assertThat(history.getChangeQty()).isEqualTo(2);
             assertThat(history.getStockAfter()).isEqualTo(5);
@@ -165,5 +170,17 @@ class ProductFacadeStockTest {
         return stockHistoryRepository.findAll().stream()
                 .filter(h -> h.getOption().getId().equals(option.getId()) && h.getChangeType() == changeType)
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

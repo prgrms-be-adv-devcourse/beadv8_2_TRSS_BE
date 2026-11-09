@@ -1,13 +1,13 @@
 package com.backend.boundedContext.product.app.dto;
 
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 
 /** 옵션의 현재 재고 */
 public record OptionStockDto(
         Long optionId,
         int stock
 ) {
-    public static OptionStockDto from(ProductOption option) {
-        return new OptionStockDto(option.getId(), option.getStock());
+    public static OptionStockDto from(OptionStock stock) {
+        return new OptionStockDto(stock.getId(), stock.getStock());
     }
 }

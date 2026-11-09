@@ -1,6 +1,6 @@
 package com.backend.boundedContext.product.app;
 
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -29,7 +29,7 @@ public class ProductRestoreStockUseCase {
         StockChangeType changeType = toChangeType(reason);
         List<Long> orderItemIds = items.stream().map(StockChangeDto::orderItemId).toList();
 
-        Map<Long, ProductOption> options = productSupport.lockOptions(
+        Map<Long, OptionStock> stocks = productSupport.lockStocks(
                 items.stream().map(StockChangeDto::optionId).toList());
         Set<Long> restored = productSupport.findProcessedOrderItemIds(orderItemIds, changeType);
         Set<Long> deducted = productSupport.findProcessedOrderItemIds(orderItemIds, StockChangeType.ORDER_DEDUCT);
@@ -40,10 +40,10 @@ public class ProductRestoreStockUseCase {
                 throw new IllegalStateException("차감한 적 없는 주문 항목은 복원할 수 없습니다. orderItemId=" + item.orderItemId());
             }
 
-            ProductOption option = options.get(item.optionId());
-            option.restoreStock(item.quantity(), changeType);   // 반품 복원인데 삭제된 상품·옵션이면 409
+            OptionStock stock = stocks.get(item.optionId());
+            stock.restoreStock(item.quantity(), changeType);   // 반품 복원인데 삭제된 상품·옵션이면 409
             stockHistoryRepository.save(StockHistory.ofOrder(
-                    option, changeType, item.quantity(), item.orderId(), item.orderItemId()));
+                    stock, changeType, item.quantity(), item.orderId(), item.orderItemId()));
         }
     }
 
