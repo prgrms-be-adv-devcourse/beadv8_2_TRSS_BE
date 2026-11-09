@@ -199,6 +199,9 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
       SETTLEMENT_DB_USERNAME: ${SETTLEMENT_DB_USERNAME:?SETTLEMENT_DB_USERNAME이 .env에 없습니다}
+      # 회원 내부 API(/internal/v1/members·sellers)를 부르는 member-service 주소 (판매자 조회, 제재 여부 확인)
+      # 지금은 회원 클라이언트가 임시 구현이라 읽지 않는다. HTTP로 바꿀 때 이 이름으로 읽는다
+      MEMBER_SERVICE_URL: http://member:8081
       # 결제 내부 API(/internal/v1/payments)를 부르는 payment-service 주소 (정산금 지급, 지급 결과 조회)
       # 지금은 결제 클라이언트가 임시 구현이라 읽지 않는다. HTTP로 바꿀 때 이 이름으로 읽는다
       PAYMENT_SERVICE_URL: http://payment:8083
