@@ -10,6 +10,7 @@
 | --- | --- | --- | --- |
 | member | 시연·지은 | `MemberApi` | `MemberSignedUpEvent`, `SellerSanctionedEvent`, `SellerWithdrawalRequestedEvent`, `SellerWithdrawalRejectedEvent` |
 | product | 유진 | `ProductApi` | `WishAddedEvent`, `WishRemovedEvent` |
+| review | 유진 | - | `ReviewCreatedEvent`, `ReviewModifiedEvent`, `ReviewDeletedEvent` |
 | order | 은정 | `OrderApi` | `OrderConfirmedEvent`, `OrderReturnedEvent` |
 | payment | 지은·시연 | `PaymentApi` | - |
 | settlement | 다은 | `SettlementApi` | - |
@@ -306,7 +307,7 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 - Kafka 토픽 `seller.events`를 market-service의 `ProductSellerEventListener`(`@KafkaListener` groupId `market`)로 받는다. 한 메시지를 한 트랜잭션에서 처리하고, 실패하면 재시도 후 `seller.events-dlt`로 보낸다.
 - 회원은 `stopAllBySeller`·`resumeAllBySeller`를 부르지 않는다(TRSS-160). 두 메서드는 market 안에서 컨슈머가 쓴다.
 
-현### 발행하는 이벤트
+### 발행하는 이벤트
 
 ```java
 package com.backend.shared.product.event;
@@ -320,6 +321,35 @@ public record WishRemovedEvent(Long memberId, Long productId) implements DomainE
 
 - 찜 추가·해제와 같은 트랜잭션에서 outbox에 저장하고, 릴레이가 Kafka 토픽 `product.events`로 발행한다(키 `productId`, 같은 상품의 찜 이벤트는 순서대로 전달된다).
 - 아직 받는 쪽은 없다. 상품 검색 색인(ES)의 찜 수 반영에 쓸 예정이다(TRSS-167).
+
+## 3.1 review
+
+리뷰는 market-service 안의 별도 컨텍스트(`boundedContext/review`)다. 다른 컨텍스트에 Api를 제공하지 않고, 아래 공유 Api만 부른다.
+
+| 부르는 Api | 용도 |
+| --- | --- |
+| `OrderApi.findConfirmedOrderItem(buyerId, orderItemId)` | 리뷰 작성 자격 확인(본인 주문 + 구매 확정). 상품·옵션 ID와 주문 시점 옵션명도 여기서 가져온다 (TRSS-177) |
+| `MemberApi.getMember(memberId)` | 작성자 이름(가운데 글자를 가려 리뷰에 저장)과 탈퇴 여부 |
+| `ProductApi.getOptions(optionIds)` | 내 리뷰 목록의 상품명·대표 이미지 |
+
+### 발행하는 이벤트
+
+```java
+package com.backend.shared.review.event;
+
+/** 구매자가 리뷰를 작성함 */
+public record ReviewCreatedEvent(Long reviewId, Long productId, int rating) implements DomainEvent { }                 // aggregateType REVIEW, aggregateId productId
+
+/** 구매자가 리뷰를 수정함. 별점이 그대로여도(내용만 바뀌어도) 발행한다 */
+public record ReviewModifiedEvent(Long reviewId, Long productId, int oldRating, int rating) implements DomainEvent { }  // aggregateType REVIEW, aggregateId productId
+
+/** 구매자가 리뷰를 삭제함(소프트 삭제). rating은 삭제 직전 별점 */
+public record ReviewDeletedEvent(Long reviewId, Long productId, int rating) implements DomainEvent { }                 // aggregateType REVIEW, aggregateId productId
+```
+
+- 리뷰 작성·수정·삭제와 같은 트랜잭션에서 outbox에 저장하고, 릴레이가 Kafka 토픽 `review.events`로 발행한다(키 `productId`, 같은 상품의 리뷰 이벤트는 순서대로 전달된다).
+- 별점을 함께 실어서, 받는 쪽은 리뷰를 다시 조회하지 않고 상품별 평점 합계·리뷰 수를 증감할 수 있다.
+- 아직 받는 쪽은 없다. 상품 검색 색인(ES)의 평점·리뷰 수 반영에 쓸 예정이다(TRSS-186).
 
 ## 4. order
 
