@@ -39,6 +39,7 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_STATUS_INVALID(400, "조회할 수 없는 주문 상태입니다."),
     ORDER_NOT_CANCELABLE(409, "결제 전 주문만 취소할 수 있습니다."),
     ORDER_NOT_CONFIRMABLE(409, "결제 완료된 주문만 구매 확정할 수 있습니다."),
+    ORDER_NOT_DELIVERED(409, "배송이 완료된 뒤에 구매 확정할 수 있습니다."),
 
     // 결제
     INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다.");

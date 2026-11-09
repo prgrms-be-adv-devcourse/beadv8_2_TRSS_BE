@@ -62,7 +62,9 @@ templates:
 
       {{/* 원인 예외 이름(근본 원인 + 맨 위 예외)으로 먼저 확인할 것을 고른다. 서버 명령은 레포 루트(~/palette)에서 실행한다 */}}
       {{ define "palette.slack.hint" -}}
-      {{ if match `UnknownHostException` . -}}
+      {{ if match `DeliveryTrackerUnauthenticated` . -}}
+      Delivery Tracker 인증 키가 만료됐을 수 있습니다(무료 플랜 21일). 콘솔에서 재발급해 infra/.env의 DELIVERY_TRACKER_CLIENT_ID·SECRET을 바꾸고 `docker compose -f infra/compose.prod.yaml up -d delivery`
+      {{- else if match `UnknownHostException` . -}}
       다른 컨테이너 이름을 찾지 못했습니다. `docker compose -f infra/compose.prod.yaml ps -a`로 대상(postgres·kafka·market 등)이 떠 있는지 확인하세요
       {{- else if match `Kafka|ConfigException` . -}}
       Kafka 연결 문제입니다. `docker compose -f infra/compose.prod.yaml ps kafka`·`logs --tail 50 kafka`를 확인하고, 복구 뒤 outbox_event의 FAILED 이벤트를 다시 PENDING으로 돌리세요

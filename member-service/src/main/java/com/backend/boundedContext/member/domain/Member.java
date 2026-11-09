@@ -68,6 +68,10 @@ public class Member extends BaseIdAndTime {
         return new Member(email, encodedPassword, name, MemberRole.ADMIN);
     }
 
+    public static Member logistics(String email, String encodedPassword, String name) {
+        return new Member(email, encodedPassword, name, MemberRole.LOGISTICS);
+    }
+
     // 탈퇴: DELETED로 바꾸고 개인정보를 비식별화한다.
     // 이메일은 회원 ID로 만든 값으로 바꿔 원래 이메일로 다시 가입할 수 있게 하고, 비밀번호는 어떤 입력과도 맞지 않는 값으로 바꾼다
     public void withdraw() {

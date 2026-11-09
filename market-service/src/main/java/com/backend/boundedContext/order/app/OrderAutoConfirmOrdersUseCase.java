@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 결제 완료 후 7일 자동 구매 확정
+ * 자동 구매 확정: 배송 완료 후(배송지 없는 주문은 결제 완료 후) 7일
  */
 @Component
 @RequiredArgsConstructor
@@ -24,10 +24,10 @@ public class OrderAutoConfirmOrdersUseCase {
     private final OrderPolicy orderPolicy;
     private final OrderConfirmSupport orderConfirmSupport;
 
-    // 결제 완료 후 autoConfirmDays일이 지난 PAID 주문 id (afterId 다음부터 최대 limit건, id 순)
+    // 배송 완료 후(배송지 없는 주문은 결제 완료 후) autoConfirmDays일이 지난 PAID 주문 id (afterId 다음부터 최대 limit건, id 순)
     public List<Long> findTargetIds(LocalDateTime now, Long afterId, int limit) {
-        LocalDateTime paidBefore = now.minusDays(orderPolicy.getAutoConfirmDays());
-        return orderRepository.findAutoConfirmTargetIds(OrderStatus.PAID, paidBefore, afterId, PageRequest.of(0, limit));
+        LocalDateTime before = now.minusDays(orderPolicy.getAutoConfirmDays());
+        return orderRepository.findAutoConfirmTargetIds(OrderStatus.PAID, before, afterId, PageRequest.of(0, limit));
     }
 
     /**

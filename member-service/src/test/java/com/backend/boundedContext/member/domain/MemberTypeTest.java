@@ -20,6 +20,12 @@ class MemberTypeTest {
         assertThat(MemberType.of(MemberRole.USER, null)).isEqualTo(MemberType.USER);
     }
 
+    @Test
+    @DisplayName("물류 담당자 역할은 물류 담당자 (일반 회원으로 보이지 않음)")
+    void of_logistics() {
+        assertThat(MemberType.of(MemberRole.LOGISTICS, null)).isEqualTo(MemberType.LOGISTICS);
+    }
+
     @ParameterizedTest
     @EnumSource(value = SellerStatus.class, names = "APPROVED", mode = EnumSource.Mode.EXCLUDE)
     @DisplayName("판매 중이 아닌 판매자 상태(심사 중·반려·철회 심사 중·철회·제재)는 일반 회원")

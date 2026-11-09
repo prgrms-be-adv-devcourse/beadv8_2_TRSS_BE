@@ -20,7 +20,7 @@ import com.backend.shared.member.dto.MemberRole;
 
 /**
  * 구매자 API(장바구니·주문) 권한
- * 관리자는 403, 구매자·판매자는 통과한다. 응답 내용은 각 컨트롤러 테스트에서 확인한다
+ * 관리자·물류 담당자는 403, 구매자·판매자는 통과한다. 응답 내용은 각 컨트롤러 테스트에서 확인한다
  */
 @WebMvcTest({ApiV1CartController.class, ApiV1OrderController.class})
 @Import({SecurityConfig.class, JwtTokenProvider.class, JwtAuthenticationEntryPoint.class,
@@ -41,6 +41,15 @@ class MarketBuyerApiAccessTest {
     @DisplayName("관리자가 구매자 API를 조회하면 403 FORBIDDEN")
     void admin_forbidden(String url) throws Exception {
         mockMvc.perform(get(url).header("Authorization", "Bearer " + token(MemberRole.ADMIN)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/cart", "/api/v1/orders"})
+    @DisplayName("물류 담당자(LOGISTICS)가 구매자 API를 조회하면 403 FORBIDDEN")
+    void logistics_forbidden(String url) throws Exception {
+        mockMvc.perform(get(url).header("Authorization", "Bearer " + token(MemberRole.LOGISTICS)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
     }
