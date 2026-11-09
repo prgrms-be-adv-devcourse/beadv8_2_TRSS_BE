@@ -103,7 +103,8 @@ public class OrderGetOrdersUseCase {
                 order.getCreatedAt(),
                 order.getExpiresAt(),
                 order.remainingPaymentSeconds(now),
-                order.getPaidAt()
+                order.getPaidAt(),
+                order.getDeliveredAt()
         );
     }
 }
