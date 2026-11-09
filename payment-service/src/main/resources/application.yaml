@@ -1,5 +1,5 @@
 server:
-  port: ${PAYMENT_PORT:8083}   # 로컬에서 루트 모놀리스(8080)·market(8082)과 같이 띄울 수 있게 다른 포트를 쓴다
+  port: ${PAYMENT_PORT:8083}   # 로컬에서 member(8081)·market(8082)·settlement(8084)와 같이 띄울 수 있게 서비스마다 다른 포트를 쓴다
 
 spring:
   application:
@@ -83,7 +83,7 @@ custom:
     topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
     # 회원 기능은 회원 내부 API(/internal/v1/members)를 HTTP로 부른다
-    memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8080}   # 회원 서비스 주소. 회원은 아직 루트 앱(8080)에 있다
+    memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}   # 회원 서비스(member-service) 주소. 개발 서버는 compose의 MEMBER_SERVICE_URL을 쓴다
     memberConnectTimeoutSeconds: 2   # 회원 서비스 접속 제한 시간(초)
     memberReadTimeoutSeconds: 5      # 요청 후 회원 서비스 응답 대기 제한 시간(초)
   member:
