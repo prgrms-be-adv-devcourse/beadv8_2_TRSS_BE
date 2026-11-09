@@ -6,3 +6,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+custom:
+  deliveryTracker:
+    # 로컬은 http 콜백 주소(http://localhost:8085/...)를 허용한다.
+    allowInsecureCallback: true

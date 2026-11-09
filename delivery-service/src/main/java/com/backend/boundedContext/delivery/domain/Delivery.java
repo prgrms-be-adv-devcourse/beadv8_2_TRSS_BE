@@ -1,5 +1,6 @@
 package com.backend.boundedContext.delivery.domain;
 
+import static com.backend.shared.delivery.dto.DeliveryStatus.DELIVERED;
 import static com.backend.shared.delivery.dto.DeliveryStatus.READY;
 import static com.backend.shared.delivery.dto.DeliveryStatus.SHIPPED;
 
@@ -142,7 +143,7 @@ public class Delivery extends BaseIdAndTime {
     }
 
     /**
-     * 송장 수정: SHIPPED에서만. 같은 값이면 아무것도 바꾸지 않는다.
+     * 송장 수정: SHIPPED에서만
      * 바뀌면 새 송장으로 웹훅을 다시 등록하도록 웹훅·조회 상태를 비운다.
      *
      * @return 바뀌었으면 true
@@ -160,6 +161,35 @@ public class Delivery extends BaseIdAndTime {
         this.trackingCheckRequestedAt = null;
         this.lastTrackingStatus = null;
         return true;
+    }
+
+    /** 지금 송장이 조회한 송장과 같은지. 조회하는 동안 송장이 바뀌었으면 조회 결과를 버린다 */
+    public boolean hasTracking(Courier courier, String trackingNumber) {
+        return this.courier == courier && Objects.equals(this.trackingNumber, trackingNumber);
+    }
+
+    /** Delivery Tracker가 알려 준 마지막 상태 코드를 기록한다(물류 상세 화면에 보인다). SHIPPED에서만 */
+    public void recordTrackingStatus(String statusCode) {
+        if (status != SHIPPED) {
+            throw new DomainException(DeliveryErrorCode.DELIVERY_STATE_INVALID);
+        }
+        this.lastTrackingStatus = statusCode;
+    }
+
+    /** 배송 완료: SHIPPED → DELIVERED. 완료는 택배사 조회 결과로만 정한다(확인 워커) */
+    public void complete(LocalDateTime deliveredAt) {
+        if (status != SHIPPED) {
+            throw new DomainException(DeliveryErrorCode.DELIVERY_STATE_INVALID);
+        }
+        this.status = DELIVERED;
+        this.deliveredAt = deliveredAt;
+    }
+
+    /** 확인 요청을 지운다. 조회를 시작한 뒤(startedAt 이후)에 온 콜백의 요청은 남겨 다음 회차에 다시 조회한다 */
+    public void clearTrackingCheckRequest(LocalDateTime startedAt) {
+        if (trackingCheckRequestedAt != null && !trackingCheckRequestedAt.isAfter(startedAt)) {
+            this.trackingCheckRequestedAt = null;
+        }
     }
 
     // 주문 상세에 붙이는 배송 정보
