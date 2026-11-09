@@ -85,6 +85,7 @@ jobs:
           MARKET_DB_PASSWORD: market_user
           PAYMENT_DB_PASSWORD: payment_user
           SETTLEMENT_DB_PASSWORD: settlement_user
+          DELIVERY_DB_PASSWORD: delivery_user
           AI_DB_PASSWORD: ai_user
           READONLY_DB_PASSWORD: readonly_user
         run: bash infra/postgres/init/01-init-schemas.sh
@@ -101,6 +102,7 @@ jobs:
           MARKET_DB_PASSWORD: market_user
           PAYMENT_DB_PASSWORD: payment_user
           SETTLEMENT_DB_PASSWORD: settlement_user
+          DELIVERY_DB_PASSWORD: delivery_user
           AI_DB_PASSWORD: ai_user
           READONLY_DB_PASSWORD: readonly_user
         run: bash infra/postgres/init/01-init-schemas.sh

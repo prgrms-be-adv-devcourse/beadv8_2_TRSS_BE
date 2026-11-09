@@ -15,10 +15,11 @@ main() {
     # 앱마다 compose healthcheck 상태가 healthy인지 본다(compose.prod.yaml의 x-app-healthcheck).
     # 서비스가 분리되어 컨테이너가 늘면 여기에 추가한다
     local health_containers=(
-        "palette-app"
         "palette-member"
         "palette-market"
+        "palette-payment"
         "palette-settlement"
+        "palette-delivery"
     )
     # 앱과 별개로, 재시작한 nginx(80)가 요청을 앱으로 넘기는지 본다. 로그인 없이 열리는 경로를 쓴다
     local nginx_url="http://localhost/v3/api-docs"
@@ -66,7 +67,7 @@ main() {
 
     echo "❌ 앱이 150초 안에 응답하지 않습니다. 최근 앱 로그:"
     "${compose[@]}" ps
-    "${compose[@]}" logs --tail 80 app member market settlement
+    "${compose[@]}" logs --tail 80 member market payment settlement delivery
     return 1
 }
 

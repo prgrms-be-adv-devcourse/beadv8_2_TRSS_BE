@@ -41,6 +41,7 @@ public class OrderFacade {
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
     private final OrderGetSellerOrderItemsUseCase orderGetSellerOrderItemsUseCase;
     private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
+    private final OrderMarkDeliveredUseCase orderMarkDeliveredUseCase;
     private final OrderFindConfirmedOrderItemUseCase orderFindConfirmedOrderItemUseCase;
     private final OrderGetCartItemsAmountUseCase orderGetCartItemsAmountUseCase;
 
@@ -76,8 +77,9 @@ public class OrderFacade {
 
     // 주문생성
     @Transactional
-    public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice) {
-        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice);
+    public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
+                                           ShippingAddressRequest shippingAddress) {
+        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice, shippingAddress);
     }
 
     // 주문목록 조회
@@ -120,6 +122,12 @@ public class OrderFacade {
     @Transactional
     public boolean autoConfirmOrder(Long orderId, LocalDateTime now) {
         return orderAutoConfirmOrdersUseCase.autoConfirm(orderId, now);
+    }
+
+    // 배송 완료 반영 (delivery.events 컨슈머)
+    @Transactional
+    public void markDelivered(Long orderId, LocalDateTime deliveredAt) {
+        orderMarkDeliveredUseCase.markDelivered(orderId, deliveredAt);
     }
 
     // 결제 만료 대상 주문 id 조회 (스케줄러)

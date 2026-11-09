@@ -29,6 +29,14 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    @DisplayName("물류 담당자(LOGISTICS) 토큰도 발급·검증하면 역할이 그대로 나온다")
+    void createAndParse_logistics() {
+        String token = jwtTokenProvider.createAccessToken(9L, MemberRole.LOGISTICS);
+
+        assertThat(jwtTokenProvider.parseAccessToken(token)).isEqualTo(new AuthMember(9L, MemberRole.LOGISTICS));
+    }
+
+    @Test
     @DisplayName("만료된 토큰은 401 AUTH_TOKEN_EXPIRED")
     void expired() {
         String token = new JwtTokenProvider(SECRET, -1).createAccessToken(7L, MemberRole.USER);

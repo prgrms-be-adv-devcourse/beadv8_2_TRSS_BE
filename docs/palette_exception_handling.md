@@ -293,6 +293,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
 | | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
+| | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정 |
 | payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족. API 응답은 주문 결제가 order의 `OrderErrorCode.INSUFFICIENT_BALANCE`로 던진다(`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`). payment 코드는 `Wallet` 출금 안전장치 |
 | | 400-PAYMENT_PERIOD_INVALID | 조회 시작일 > 종료일 (거래 내역, 관리자 결제·충전 조회) |
 | | 400-TOPUP_AMOUNT_INVALID | 1만 원 단위·1만~100만 원 위반 |
@@ -313,6 +314,10 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-SETTLEMENT_AMOUNT_MISMATCH | 정산 금액이 일치하지 않아서 정산할 수 없는 상태 |
 | | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
 | | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
+| delivery (은정) | 404-DELIVERY_NOT_FOUND | 없는 배송 건 (물류 상세·송장 등록·수정) |
+| | 409-DELIVERY_STATE_INVALID | READY가 아닌 배송에 송장 등록, SHIPPED가 아닌 배송의 송장 수정 |
+| | 409-DELIVERY_TRACKING_DUPLICATED | 같은 택배사·송장번호(정규화 후)가 다른 배송 건에 이미 있음. 동시에 등록해 DB 유니크에 걸리면 409-DATA_CONFLICT |
+| | 400-DELIVERY_TRACKING_NUMBER_INVALID | 공백·하이픈을 지운 송장번호가 영문·숫자 8~30자가 아님 |
 | coupon (다은) | 404-COUPON_NOT_FOUND | 없는 쿠폰 (관리자 상세, 강제 중지, 예약) |
 | | 400-COUPON_PERIOD_INVALID | 쿠폰 등록 시 시작이 종료보다 늦거나 같음, 종료가 현재 이전 |
 | | 400-COUPON_TIER_INVALID | 장바구니 쿠폰 구간 없음, 할인액이 최소 주문 금액 이상, 구간이 올라가도 최소 주문 금액이나 할인액이 커지지 않음 |

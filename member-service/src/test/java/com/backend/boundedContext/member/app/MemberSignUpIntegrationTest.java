@@ -20,8 +20,8 @@ import com.backend.global.outbox.OutboxEventStatus;
 
 /**
  * 회원 가입 → 가입 완료 이벤트(outbox) 저장을 확인한다. 로컬 Docker PostgreSQL·Redis가 필요하다.
- * 지갑은 가입 트랜잭션에서 만들지 않는다. 릴레이가 Kafka(member.events)로 보내면 결제 컨슈머가 만든다
- * (PaymentEventListenerKafkaIntegrationTest에서 확인).
+ * 지갑은 가입 트랜잭션에서 만들지 않는다. 릴레이가 Kafka(member.events)로 보내면 payment-service의 결제 컨슈머가 만든다
+ * (payment-service의 PaymentEventListenerKafkaIntegrationTest에서 확인).
  */
 @SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
 class MemberSignUpIntegrationTest {

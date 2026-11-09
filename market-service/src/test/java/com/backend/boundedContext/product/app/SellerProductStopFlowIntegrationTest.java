@@ -151,7 +151,7 @@ class SellerProductStopFlowIntegrationTest {
     private Long createPendingOrder() {
         orderFacade.addCartItem(buyerId, optionId, ORDER_QUANTITY);
         Long cartItemId = orderFacade.getCart(buyerId).items().getFirst().itemId();
-        return orderFacade.createOrder(buyerId, null, List.of(cartItemId), PRICE * ORDER_QUANTITY).orderId();
+        return orderFacade.createOrder(buyerId, null, List.of(cartItemId), PRICE * ORDER_QUANTITY, null).orderId();
     }
 
     private int stock() {

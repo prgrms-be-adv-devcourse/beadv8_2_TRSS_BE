@@ -3,6 +3,7 @@ package com.backend.boundedContext.order.domain;
 import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import com.backend.shared.order.dto.ConfirmedOrderItemDto;
+import com.backend.shared.order.dto.PaidOrderItemDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -84,5 +85,10 @@ public class OrderItem extends BaseIdAndTime {
     // 구매 확정 이벤트 항목으로 변환 (정산 후보 생성용)
     public ConfirmedOrderItemDto toConfirmedOrderItemDto() {
         return new ConfirmedOrderItemDto(getId(), productId, sellerId, unitPrice, quantity, lineAmount);
+    }
+
+    // 결제 완료 이벤트 항목으로 변환 (배송 피킹 목록용)
+    public PaidOrderItemDto toPaidOrderItemDto() {
+        return new PaidOrderItemDto(getId(), productId, optionId, sellerId, sellerName, productName, optionName, quantity);
     }
 }
