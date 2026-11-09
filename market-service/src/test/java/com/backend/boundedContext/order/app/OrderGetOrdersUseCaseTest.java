@@ -86,6 +86,7 @@ class OrderGetOrdersUseCaseTest {
         // 결제 만료 시각이 지난 결제 대기 주문은 남은 시간 0, 결제 전이라 결제일 없음
         assertThat(summary.remainingSeconds()).isZero();
         assertThat(summary.paidAt()).isNull();
+        assertThat(summary.deliveredAt()).isNull();
     }
 
     @Test
@@ -117,6 +118,22 @@ class OrderGetOrdersUseCaseTest {
         assertThat(summary.status()).isEqualTo(OrderStatus.PAID);
         assertThat(summary.paidAt()).isEqualTo(now);
         assertThat(summary.remainingSeconds()).isZero();
+    }
+
+    @Test
+    @DisplayName("배송 완료가 기록된 주문은 배송 완료일을 담는다 (목록은 delivery를 부르지 않는다)")
+    @SuppressWarnings("unchecked")
+    void deliveredAt() {
+        LocalDateTime now = LocalDateTime.now();
+        Order order = orderAt(now, 503L, "립스틱");
+        order.pay(now);
+        order.markDelivered(now.plusDays(2));
+        given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(order), PAGE, 1));
+
+        OrderSummaryResponse summary = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items().get(0);
+
+        assertThat(summary.deliveredAt()).isEqualTo(now.plusDays(2));
     }
 
     @Test

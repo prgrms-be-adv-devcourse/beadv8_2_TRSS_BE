@@ -252,4 +252,118 @@ class OrderTest {
         assertThat(order.getStatusHistories()).last()
                 .extracting(OrderStatusHistory::getReason).isEqualTo("결제 시간 만료");
     }
+
+    // ===== 배송지·배송 완료 (PR 4) =====
+
+    private static ShippingAddress address() {
+        return ShippingAddress.of("홍길동", "01012345678", "06236", "서울 강남구 테헤란로 1", "101호", "문 앞");
+    }
+
+    /** 배송지가 있는 주문을 NOW + 1분에 결제 */
+    private Order paidOrderWithAddress() {
+        Order order = Order.create(1L, null, List.of(spec(10L, 10_000, 1)), address(), NOW, EXPIRE_MINUTES);
+        order.pay(NOW.plusMinutes(1));
+        return order;
+    }
+
+    @Test
+    @DisplayName("배송지와 함께 만든 주문은 배송지를 갖고, 배송지 없이 만든 주문은 갖지 않는다")
+    void create_withShippingAddress() {
+        Order withAddress = Order.create(1L, null, List.of(spec(10L, 10_000, 1)), address(), NOW, EXPIRE_MINUTES);
+        Order withoutAddress = createOrder();
+
+        assertThat(withAddress.hasShippingAddress()).isTrue();
+        assertThat(withAddress.getShippingAddress().toDto().receiverPhone()).isEqualTo("01012345678");
+        assertThat(withoutAddress.hasShippingAddress()).isFalse();
+        assertThat(withoutAddress.getShippingAddress()).isNull();
+    }
+
+    @Test
+    @DisplayName("배송지 컬럼이 모두 null이라 빈 객체로 읽힌 경우도 배송지 없는 주문이다")
+    void hasShippingAddress_emptyEmbeddable() {
+        Order order = createOrder();
+        ReflectionTestUtils.setField(order, "shippingAddress", ShippingAddress.of(null, null, null, null, null, null));
+
+        assertThat(order.hasShippingAddress()).isFalse();
+    }
+
+    @Test
+    @DisplayName("배송지가 있고 배송 완료 전이면 구매 확정은 409 ORDER_NOT_DELIVERED, 상태는 PAID 그대로")
+    void confirm_withAddress_notDelivered() {
+        Order order = paidOrderWithAddress();
+
+        assertThatThrownBy(() -> order.confirm(ConfirmType.MANUAL, NOW.plusDays(1)))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_DELIVERED");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getConfirmedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("배송지가 있고 배송 완료됐으면 구매 확정된다")
+    void confirm_withAddress_delivered() {
+        Order order = paidOrderWithAddress();
+        order.markDelivered(NOW.plusDays(2));
+
+        order.confirm(ConfirmType.MANUAL, NOW.plusDays(3));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(order.getConfirmedAt()).isEqualTo(NOW.plusDays(3));
+    }
+
+    @Test
+    @DisplayName("배송지 없는 주문(기존 주문)은 배송 완료 없이도 PAID면 지금처럼 확정된다")
+    void confirm_withoutAddress() {
+        Order order = createOrder();
+        order.pay(NOW.plusMinutes(1));
+
+        order.confirm(ConfirmType.MANUAL, NOW.plusMinutes(2));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("결제 전 주문은 배송지가 있어도 ORDER_NOT_CONFIRMABLE이 먼저다")
+    void confirm_withAddress_notPaid() {
+        Order order = Order.create(1L, null, List.of(spec(10L, 10_000, 1)), address(), NOW, EXPIRE_MINUTES);
+
+        assertThatThrownBy(() -> order.confirm(ConfirmType.MANUAL, NOW))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CONFIRMABLE");
+    }
+
+    @Test
+    @DisplayName("배송지가 있는 주문의 자동 확정은 배송 완료 + 7일 기준, 배송 완료 전이면 결제 후 며칠이 지나도 대상이 아니다")
+    void isAutoConfirmable_withAddress() {
+        Order order = paidOrderWithAddress();
+        assertThat(order.isAutoConfirmable(NOW.plusDays(30), 7)).isFalse();
+
+        LocalDateTime deliveredAt = NOW.plusDays(3);
+        order.markDelivered(deliveredAt);
+
+        assertThat(order.isAutoConfirmable(deliveredAt.plusDays(7).minusSeconds(1), 7)).isFalse();
+        assertThat(order.isAutoConfirmable(deliveredAt.plusDays(7), 7)).isTrue();
+    }
+
+    @Test
+    @DisplayName("배송지 없는 주문의 자동 확정은 지금처럼 결제 + 7일 기준이다 (배송 완료 기록과 무관)")
+    void isAutoConfirmable_withoutAddress() {
+        Order order = createOrder();
+        LocalDateTime paidAt = NOW.plusMinutes(1);
+        order.pay(paidAt);
+
+        assertThat(order.isAutoConfirmable(paidAt.plusDays(7), 7)).isTrue();
+    }
+
+    @Test
+    @DisplayName("배송 완료가 두 번 기록돼도 처음 값을 유지한다")
+    void markDelivered_twice_keepsFirst() {
+        Order order = paidOrderWithAddress();
+        LocalDateTime first = NOW.plusDays(2);
+
+        order.markDelivered(first);
+        order.markDelivered(NOW.plusDays(5));
+
+        assertThat(order.getDeliveredAt()).isEqualTo(first);
+    }
 }
