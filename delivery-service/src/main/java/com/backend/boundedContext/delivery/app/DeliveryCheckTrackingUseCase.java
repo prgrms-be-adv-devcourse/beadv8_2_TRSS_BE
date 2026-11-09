@@ -97,7 +97,8 @@ public class DeliveryCheckTrackingUseCase {
         if (result.delivered()) {
             LocalDateTime deliveredAt = deliveredAt(result.eventTime());
             delivery.complete(deliveredAt);
-            eventPublisher.publish(new DeliveryCompletedEvent(delivery.getId(), delivery.getOrderId(), deliveredAt));
+            eventPublisher.publish(new DeliveryCompletedEvent(
+                    delivery.getId(), delivery.getOrderId(), delivery.getBuyerId(), deliveredAt));
             log.info("배송 완료: deliveryId={}, orderId={}, deliveredAt={}", delivery.getId(), delivery.getOrderId(), deliveredAt);
             return DeliveryTaskResult.DONE;
         }
