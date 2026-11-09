@@ -43,6 +43,7 @@ public class OrderFacade {
     private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
     private final OrderMarkDeliveredUseCase orderMarkDeliveredUseCase;
     private final OrderFindConfirmedOrderItemUseCase orderFindConfirmedOrderItemUseCase;
+    private final OrderGetCartItemsAmountUseCase orderGetCartItemsAmountUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -177,5 +178,11 @@ public class OrderFacade {
     @Transactional
     public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
         return orderCancelPendingOrdersUseCase.cancel(productIds, cancelType, LocalDateTime.now());
+    }
+
+    // 장바구니 항목들의 현재 상품 금액 합계 (OrderApi, 장바구니 쿠폰 예상 할인액 계산용)
+    @Transactional(readOnly = true)
+    public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
+        return orderGetCartItemsAmountUseCase.getAmount(buyerId, cartItemIds);
     }
 }

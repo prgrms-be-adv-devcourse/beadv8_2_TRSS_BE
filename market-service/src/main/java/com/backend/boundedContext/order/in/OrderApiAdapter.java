@@ -49,4 +49,9 @@ public class OrderApiAdapter implements OrderApi {
     public Optional<ReviewableOrderItemDto> findConfirmedOrderItem(Long buyerId, Long orderItemId) {
         return orderFacade.findConfirmedOrderItem(buyerId, orderItemId);
     }
+
+    @Override
+    public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
+        return orderFacade.getCartItemsAmount(buyerId, cartItemIds);
+    }
 }
