@@ -3,11 +3,17 @@ package com.backend.boundedContext.order.app;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
+import com.backend.boundedContext.order.domain.ShippingAddress;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
 import com.backend.boundedContext.order.in.dto.OrderItemResponse;
 import com.backend.boundedContext.order.in.dto.OrderPaymentResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.GlobalErrorCode;
+import com.backend.shared.delivery.dto.DeliveryDto;
+import com.backend.shared.delivery.dto.DeliveryStatus;
+import com.backend.shared.delivery.out.DeliveryApi;
+import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.payment.dto.PaymentAttemptDto;
 import com.backend.shared.payment.dto.PaymentAttemptStatus;
 import com.backend.shared.payment.out.PaymentApi;
@@ -17,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -28,13 +36,15 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class OrderGetOrderDetailUseCaseTest {
 
     @Mock
     OrderRepository orderRepository;
     @Mock
     PaymentApi paymentApi;
+    @Mock
+    DeliveryApi deliveryApi;
     @InjectMocks
     OrderGetOrderDetailUseCase useCase;
 
@@ -63,6 +73,10 @@ class OrderGetOrderDetailUseCaseTest {
                 .containsExactly("립스틱", "블러셔");
         assertThat(response.remainingSeconds()).isPositive();
         assertThat(response.payments()).isEmpty();   // 결제 시도가 없으면 빈 목록
+        assertThat(response.shippingAddress()).isNull();
+        assertThat(response.delivery()).isNull();
+        assertThat(response.deliveryUnavailable()).isFalse();
+        verifyNoInteractions(deliveryApi);   // 배송지 없는 주문은 delivery를 부르지 않는다
     }
 
     @Test
@@ -99,5 +113,104 @@ class OrderGetOrderDetailUseCaseTest {
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo(OrderErrorCode.ORDER_NOT_FOUND.resultCode());
         verifyNoInteractions(paymentApi);   // 내 주문이 아니면 결제 내역을 조회하지 않는다
+    }
+
+    // ===== 배송 정보 (PR 4) =====
+
+    /** 배송지가 있고 결제된 주문 */
+    private Order paidOrderWithAddress(Long orderId) {
+        Order order = Order.create(BUYER_ID, null, List.of(
+                        new OrderItemSpec(null, 10L, 100L, 2L, "립스틱", "기본", "상점", 10_000, 2)),
+                ShippingAddress.of("홍길동", "01012345678", "06236", "서울 강남구 테헤란로 1", "101호", "문 앞"),
+                LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(order, "id", orderId);
+        order.pay(LocalDateTime.now());
+        return order;
+    }
+
+    @Test
+    @DisplayName("배송 건이 있으면 delivery를 채우고, 배송지도 함께 담는다")
+    void delivery_found() {
+        LocalDateTime shippedAt = LocalDateTime.of(2026, 11, 2, 9, 0);
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
+                .willReturn(Optional.of(paidOrderWithAddress(500L)));
+        given(deliveryApi.findByOrderId(500L)).willReturn(Optional.of(
+                new DeliveryDto(70L, DeliveryStatus.SHIPPED, "CJ대한통운", "123456789012", shippedAt, null)));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.delivery()).isNotNull();
+        assertThat(response.delivery().status()).isEqualTo(DeliveryStatus.SHIPPED);
+        assertThat(response.delivery().carrierName()).isEqualTo("CJ대한통운");
+        assertThat(response.delivery().trackingNumber()).isEqualTo("123456789012");
+        assertThat(response.delivery().shippedAt()).isEqualTo(shippedAt);
+        assertThat(response.deliveryUnavailable()).isFalse();
+        assertThat(response.shippingAddress().receiverName()).isEqualTo("홍길동");
+        assertThat(response.shippingAddress().zipCode()).isEqualTo("06236");
+        assertThat(response.deliveredAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("배송 건이 아직 없으면(결제 직후, data: null) delivery: null, deliveryUnavailable: false")
+    void delivery_notYet() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
+                .willReturn(Optional.of(paidOrderWithAddress(500L)));
+        given(deliveryApi.findByOrderId(500L)).willReturn(Optional.empty());
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.delivery()).isNull();
+        assertThat(response.deliveryUnavailable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("delivery가 응답하지 못하면(502) 주문 상세는 그대로 응답하고 deliveryUnavailable: true, WARN 로그를 남긴다")
+    void delivery_unavailable(CapturedOutput output) {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
+                .willReturn(Optional.of(paidOrderWithAddress(500L)));
+        given(deliveryApi.findByOrderId(500L)).willThrow(new DomainException(GlobalErrorCode.EXTERNAL_SERVICE_ERROR));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.orderId()).isEqualTo(500L);
+        assertThat(response.status()).isEqualTo(OrderStatus.PAID);
+        assertThat(response.delivery()).isNull();
+        assertThat(response.deliveryUnavailable()).isTrue();
+        assertThat(response.shippingAddress()).isNotNull();
+        assertThat(output).contains("배송 정보 조회에 실패해 주문 상세를 배송 정보 없이 응답합니다: orderId=500");
+    }
+
+    @Test
+    @DisplayName("배송지가 있어도 결제 전 주문은 delivery를 부르지 않는다")
+    void delivery_notPaid() {
+        Order order = Order.create(BUYER_ID, null, List.of(
+                        new OrderItemSpec(null, 10L, 100L, 2L, "립스틱", "기본", "상점", 10_000, 2)),
+                ShippingAddress.of("홍길동", "01012345678", "06236", "서울 강남구 테헤란로 1", null, null),
+                LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(order, "id", 500L);
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.delivery()).isNull();
+        assertThat(response.deliveryUnavailable()).isFalse();
+        assertThat(response.shippingAddress()).isNotNull();
+        verifyNoInteractions(deliveryApi);
+    }
+
+    @Test
+    @DisplayName("배송 완료가 기록된 주문은 deliveredAt을 담는다")
+    void deliveredAt() {
+        Order order = paidOrderWithAddress(500L);
+        LocalDateTime deliveredAt = LocalDateTime.of(2026, 11, 3, 15, 0);
+        order.markDelivered(deliveredAt);
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
+        given(deliveryApi.findByOrderId(500L)).willReturn(Optional.of(
+                new DeliveryDto(70L, DeliveryStatus.DELIVERED, "CJ대한통운", "123456789012", deliveredAt.minusDays(1), deliveredAt)));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.deliveredAt()).isEqualTo(deliveredAt);
+        assertThat(response.delivery().deliveredAt()).isEqualTo(deliveredAt);
     }
 }
