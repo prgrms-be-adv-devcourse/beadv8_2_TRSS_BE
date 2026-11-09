@@ -39,6 +39,7 @@ import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.outbox.EventMessages;
 import com.backend.global.outbox.OutboxEvent;
 import com.backend.shared.delivery.event.DeliveryCompletedEvent;
+import com.backend.shared.delivery.event.DeliveryShippedEvent;
 import com.backend.shared.event.DomainEvent;
 import com.backend.shared.event.EventEnvelope;
 import com.backend.shared.order.dto.OrderStatus;
@@ -89,10 +90,26 @@ class OrderDeliveryEventListenerKafkaIntegrationTest {
         long orderId = savePaidOrderWithAddress();
         LocalDateTime deliveredAt = LocalDateTime.of(2026, 11, 3, 15, 0);
 
-        UUID eventId = send(new DeliveryCompletedEvent(70L, orderId, deliveredAt));
+        UUID eventId = send(new DeliveryCompletedEvent(70L, orderId, 3L, deliveredAt));
 
         await().atMost(WAIT).until(() -> processed(eventId));
         assertThat(deliveredAt(orderId)).isEqualTo(deliveredAt);
+    }
+
+    @Test
+    @DisplayName("같은 토픽의 배송 시작 이벤트는 무시한다: 처리 기록 없음, 주문 배송 완료 시각 그대로")
+    void shippedEvent_ignored() {
+        long orderId = savePaidOrderWithAddress();
+        UUID shipped = send(new DeliveryShippedEvent(70L, orderId, buyerId, "CJ대한통운", "123456789012",
+                LocalDateTime.of(2026, 11, 2, 10, 0)));
+        // 같은 키(deliveryId)로 뒤에 보낸 배송 완료가 처리되면 앞의 배송 시작 메시지도 이미 받은 것이다
+        UUID marker = send(new DeliveryCompletedEvent(70L, orderId, buyerId, LocalDateTime.of(2026, 11, 3, 15, 0)));
+
+        await().atMost(WAIT).until(() -> processed(marker));
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from processed_event where event_id = ?", Integer.class, shipped);
+        assertThat(count).isZero();
+        assertThat(deliveredAt(orderId)).isEqualTo(LocalDateTime.of(2026, 11, 3, 15, 0));
     }
 
     @Test
@@ -100,11 +117,11 @@ class OrderDeliveryEventListenerKafkaIntegrationTest {
     void duplicateMessage_handledOnce() {
         long orderId = savePaidOrderWithAddress();
         EventEnvelope<DomainEvent> envelope = EventEnvelope.wrap(
-                new DeliveryCompletedEvent(70L, orderId, LocalDateTime.of(2026, 11, 3, 15, 0)));
+                new DeliveryCompletedEvent(70L, orderId, 3L, LocalDateTime.of(2026, 11, 3, 15, 0)));
         send(envelope);
         send(envelope);
         // 같은 키로 뒤에 보낸 이벤트가 처리되면 앞의 중복 메시지도 이미 받은 것이다
-        UUID marker = send(new DeliveryCompletedEvent(70L, orderId, LocalDateTime.of(2026, 11, 9, 9, 0)));
+        UUID marker = send(new DeliveryCompletedEvent(70L, orderId, 3L, LocalDateTime.of(2026, 11, 9, 9, 0)));
 
         await().atMost(WAIT).until(() -> processed(marker));
         Integer count = jdbcTemplate.queryForObject(
@@ -119,8 +136,8 @@ class OrderDeliveryEventListenerKafkaIntegrationTest {
         long orderId = savePaidOrderWithAddress();
         LocalDateTime first = LocalDateTime.of(2026, 11, 3, 15, 0);
 
-        send(new DeliveryCompletedEvent(70L, orderId, first));
-        UUID second = send(new DeliveryCompletedEvent(70L, orderId, first.plusDays(1)));
+        send(new DeliveryCompletedEvent(70L, orderId, 3L, first));
+        UUID second = send(new DeliveryCompletedEvent(70L, orderId, 3L, first.plusDays(1)));
 
         await().atMost(WAIT).until(() -> processed(second));
         assertThat(deliveredAt(orderId)).isEqualTo(first);
@@ -131,7 +148,7 @@ class OrderDeliveryEventListenerKafkaIntegrationTest {
     void unknownOrder_warnsWithoutDlt(CapturedOutput output) {
         long unknownOrderId = ThreadLocalRandom.current().nextLong(8_000_000_000L, 9_000_000_000L);
 
-        UUID eventId = send(new DeliveryCompletedEvent(71L, unknownOrderId, LocalDateTime.of(2026, 11, 3, 15, 0)));
+        UUID eventId = send(new DeliveryCompletedEvent(71L, unknownOrderId, 3L, LocalDateTime.of(2026, 11, 3, 15, 0)));
 
         // 처리 중 예외가 나면 processed_event 기록도 롤백되므로, 기록이 남았다는 것은 재시도·DLT 없이 끝났다는 뜻이다
         await().atMost(WAIT).until(() -> processed(eventId));

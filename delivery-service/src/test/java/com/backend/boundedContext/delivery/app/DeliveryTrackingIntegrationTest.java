@@ -75,7 +75,7 @@ class DeliveryTrackingIntegrationTest {
     // ---- 확인 워커 ----
 
     @Test
-    @DisplayName("DELIVERED + time 2026-11-05T01:00Z → DELIVERED, deliveredAt 10:00(KST), DeliveryCompletedEvent 1건, 요청 시각 null")
+    @DisplayName("DELIVERED + time 2026-11-05T01:00Z → DELIVERED, deliveredAt 10:00(KST), DeliveryCompletedEvent 1건(buyerId 포함), 요청 시각 null")
     void delivered(CapturedOutput output) {
         long id = shippedWithRequest(0);
         tracker.onTrack(tracking(0), () -> TrackResult.of("DELIVERED", OffsetDateTime.of(2026, 11, 5, 1, 0, 0, 0, ZoneOffset.UTC)));
@@ -92,7 +92,10 @@ class DeliveryTrackingIntegrationTest {
         List<Map<String, Object>> events = completedEvents(id);
         assertThat(events).hasSize(1);
         assertThat(events.get(0).get("aggregate_type")).isEqualTo("DELIVERY");
-        assertThat((String) events.get(0).get("payload")).contains("\"orderId\": " + orderId(0)).contains("2026-11-05T10:00");
+        assertThat((String) events.get(0).get("payload"))
+                .contains("\"orderId\": " + orderId(0))
+                .contains("\"buyerId\": 77")
+                .contains("2026-11-05T10:00");
         assertThat(output).contains("배송 완료: deliveryId=" + id);
     }
 

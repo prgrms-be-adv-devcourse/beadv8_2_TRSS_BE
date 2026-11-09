@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
@@ -46,6 +48,9 @@ class DeliveryFacadeIntegrationTest {
     @AfterEach
     void cleanUp() {
         for (Long orderId : orderIds) {
+            jdbcTemplate.update("""
+                    delete from outbox_event where aggregate_type = 'DELIVERY'
+                    and aggregate_id in (select id from delivery where order_id = ?)""", orderId);
             jdbcTemplate.update("delete from delivery_item where delivery_id in (select id from delivery where order_id = ?)", orderId);
             jdbcTemplate.update("delete from delivery where order_id = ?", orderId);
         }
@@ -147,6 +152,60 @@ class DeliveryFacadeIntegrationTest {
     }
 
     @Test
+    @DisplayName("송장 등록 → outbox에 DeliveryShippedEvent 1건(DELIVERY/배송 ID), 알림용 값이 실리고 배송지·연락처는 없다")
+    void ship_publishesShippedEvent() {
+        long orderId = create(0, LocalDateTime.now());
+        long deliveryId = deliveryIdOf(orderId);
+
+        LogisticsDeliveryResponse shipped = deliveryFacade.ship(deliveryId, Courier.CJ, tracking(1, "-"));
+
+        List<Map<String, Object>> events = shippedEvents(deliveryId);
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).get("aggregate_type")).isEqualTo("DELIVERY");
+        assertThat(events.get(0).get("status")).isEqualTo("PENDING");
+        String payload = (String) events.get(0).get("payload");
+        assertThat(payload)
+                .contains("\"deliveryId\": " + deliveryId)
+                .contains("\"orderId\": " + orderId)
+                .contains("\"buyerId\": 77")
+                .contains("\"carrierName\": \"CJ대한통운\"")
+                .contains("\"trackingNumber\": \"" + tracking(1, "") + "\"")
+                .contains("\"shippedAt\": \"" + shipped.shippedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+        assertThat(payload).doesNotContain("홍길동", "010-1234-5678", "테헤란로", "receiver", "address");
+    }
+
+    @Test
+    @DisplayName("송장 등록이 실패하면(READY 아님·송장 중복·송장 형식) 배송 시작 이벤트가 더 쌓이지 않는다")
+    void ship_failure_noEvent() {
+        long first = deliveryIdOf(create(0, LocalDateTime.now()));
+        long second = deliveryIdOf(create(1, LocalDateTime.now()));
+        deliveryFacade.ship(first, Courier.CJ, tracking(1, ""));
+
+        assertError(() -> deliveryFacade.ship(first, Courier.POST, tracking(2, "")), "409-DELIVERY_STATE_INVALID");
+        assertError(() -> deliveryFacade.ship(second, Courier.CJ, tracking(1, "")), "409-DELIVERY_TRACKING_DUPLICATED");
+        assertError(() -> deliveryFacade.ship(second, Courier.CJ, "123-4567"), "400-DELIVERY_TRACKING_NUMBER_INVALID");
+
+        assertThat(shippedEvents(first)).hasSize(1);
+        assertThat(shippedEvents(second)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("송장 수정은 배송 시작 이벤트를 다시 내지 않는다 (등록 때 1건 그대로, 처음 송장 값 유지)")
+    void changeTracking_noEvent() {
+        long deliveryId = deliveryIdOf(create(0, LocalDateTime.now()));
+        deliveryFacade.ship(deliveryId, Courier.CJ, tracking(1, ""));
+
+        deliveryFacade.changeTracking(deliveryId, Courier.POST, tracking(2, ""));
+
+        List<Map<String, Object>> events = shippedEvents(deliveryId);
+        assertThat(events).hasSize(1);
+        assertThat((String) events.get(0).get("payload")).contains(tracking(1, "")).doesNotContain(tracking(2, ""));
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from outbox_event where aggregate_type = 'DELIVERY' and aggregate_id = ?", Integer.class, deliveryId))
+                .isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("목록: status로 거르고, READY는 결제가 오래된 순, SHIPPED는 최신순. 항목을 포함한다")
     void getDeliveries() {
         LocalDateTime old = LocalDateTime.of(2000, 1, 1, 0, 0);   // 로컬 데이터보다 먼저 오게 아주 오래된 결제
@@ -210,6 +269,12 @@ class DeliveryFacadeIntegrationTest {
 
     private long deliveryIdOf(long orderId) {
         return deliveryRepository.findByOrderId(orderId).orElseThrow().getId();
+    }
+
+    private List<Map<String, Object>> shippedEvents(long deliveryId) {
+        return jdbcTemplate.queryForList("""
+                select aggregate_type, status, payload::text as payload from outbox_event
+                where event_type = 'DeliveryShippedEvent' and aggregate_id = ?""", deliveryId);
     }
 
     private LogisticsDeliveryResponse getByOrder(long orderId) {

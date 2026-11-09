@@ -13,6 +13,8 @@ import com.backend.global.outbox.OutboxEvent;
 import com.backend.global.outbox.OutboxEventTypes;
 import com.backend.shared.delivery.dto.DeliveryDto;
 import com.backend.shared.delivery.dto.DeliveryStatus;
+import com.backend.shared.delivery.event.DeliveryCompletedEvent;
+import com.backend.shared.delivery.event.DeliveryShippedEvent;
 import com.backend.shared.event.DomainEvent;
 import com.backend.shared.event.EventEnvelope;
 import com.backend.shared.order.dto.PaidOrderItemDto;
@@ -83,13 +85,48 @@ class DeliveryContractJsonTest {
     @Test
     @DisplayName("배송 완료 이벤트 envelope의 aggregateType은 DELIVERY, aggregateId는 배송 ID(주문 ID 아님)")
     void deliveryCompletedEvent_aggregate() {
-        var event = new com.backend.shared.delivery.event.DeliveryCompletedEvent(30L, 10L, LocalDateTime.of(2026, 11, 8, 9, 5));
+        var event = new DeliveryCompletedEvent(30L, 10L, 3L, LocalDateTime.of(2026, 11, 8, 9, 5));
 
         EventEnvelope<DomainEvent> read = roundTrip(event);
 
         assertThat(read.aggregateType()).isEqualTo("DELIVERY");
         assertThat(read.aggregateId()).isEqualTo(30L);
         assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("delivery.events");
+    }
+
+    @Test
+    @DisplayName("배송 완료 payload: buyerId가 실리고 날짜는 ISO 문자열")
+    void deliveryCompletedEvent_jsonShape() {
+        JsonNode payload = payloadOf(new DeliveryCompletedEvent(30L, 10L, 3L, LocalDateTime.of(2026, 11, 8, 9, 5, 30)));
+
+        assertThat(payload.get("deliveryId").asLong()).isEqualTo(30L);
+        assertThat(payload.get("orderId").asLong()).isEqualTo(10L);
+        assertThat(payload.get("buyerId").asLong()).isEqualTo(3L);
+        assertThat(payload.get("deliveredAt").asString()).isEqualTo("2026-11-08T09:05:30");
+    }
+
+    @Test
+    @DisplayName("배송 시작 payload: 알림에 필요한 값만 싣고 배송지·연락처는 없다. aggregate는 DELIVERY/배송 ID")
+    void deliveryShippedEvent_jsonShape() {
+        DeliveryShippedEvent event = new DeliveryShippedEvent(30L, 10L, 3L, "CJ대한통운", "123456789012",
+                LocalDateTime.of(2026, 11, 7, 11, 20, 30));
+
+        JsonNode payload = payloadOf(event);
+
+        assertThat(payload.get("deliveryId").asLong()).isEqualTo(30L);
+        assertThat(payload.get("orderId").asLong()).isEqualTo(10L);
+        assertThat(payload.get("buyerId").asLong()).isEqualTo(3L);
+        assertThat(payload.get("carrierName").asString()).isEqualTo("CJ대한통운");
+        assertThat(payload.get("trackingNumber").asString()).isEqualTo("123456789012");
+        assertThat(payload.get("shippedAt").asString()).isEqualTo("2026-11-07T11:20:30");
+        assertThat(payload.has("receiverName")).isFalse();
+        assertThat(payload.has("receiverPhone")).isFalse();
+        assertThat(payload.has("address")).isFalse();
+
+        EventEnvelope<DomainEvent> read = roundTrip(event);
+        assertThat(read.aggregateType()).isEqualTo("DELIVERY");
+        assertThat(read.aggregateId()).isEqualTo(30L);
+        assertThat(read.payload()).isEqualTo(event);
     }
 
     private JsonNode payloadOf(DomainEvent event) {
