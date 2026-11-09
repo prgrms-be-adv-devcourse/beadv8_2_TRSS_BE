@@ -51,7 +51,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 4          # 스케줄 작업 4개(충전 2, 주문 2)가 서로 기다리지 않게 작업 수만큼. 정산 스케줄러는 settlement-service로 옮김
+        size: 1          # 루트에 남은 스케줄 작업은 outbox 릴레이 1개. 충전은 payment-service, 정산은 settlement-service, 주문은 market-service로 옮김
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
@@ -66,10 +66,6 @@ custom:
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
   member:
-    # 회원(member-service) 주소. 결제가 회원 내부 API(/internal/v1/members·sellers)를 부를 때 쓴다 (MemberApiClient)
-    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
-    connectTimeoutMillis: 1000   # 접속 제한 시간(밀리초)
-    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 사용자 요청 안에서 부르므로 짧게 둔다
     seedPassword: ${MEMBER_SEED_PASSWORD:}   # 개발용 시드 회원 비밀번호. 비어 있으면 결제 시드를 넣지 않는다(운영 환경). 회원 시드는 member-service가 넣는다
   product:
     image:
@@ -90,21 +86,6 @@ custom:
     schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
-  payment:
-    topupUnit: 10000           # 충전 단위·최소 금액(원)
-    topupMax: 1000000          # 1회 최대 충전 금액(원)
-    topupReadyExpireMinutes: 15   # 결제창 진행 전(READY) 충전 건 만료 시간(분)
-    topupExpireIntervalSeconds: 60      # READY 만료 스케줄러 실행 간격(초)
-    topupReconcileIntervalSeconds: 300  # PROCESSING 결과 확인 스케줄러 실행 간격(초)
-    topupReconcileDelayMinutes: 5       # PROCESSING이 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
-    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
-    adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
-  # 토스페이먼츠 결제 API. 시크릿 키는 환경변수로 주입하고, 없으면 토스 호출할 때만 실패한다.
-  toss:
-    baseUrl: https://api.tosspayments.com
-    secretKey: ${TOSS_SECRET_KEY:}
-    connectTimeoutSeconds: 5   # 토스 서버 접속 제한 시간(초)
-    readTimeoutSeconds: 30     # 요청 후 토스 응답 대기 제한 시간(초). 넘으면 충전 건을 PROCESSING으로 두고, 스케줄러가 토스 조회로 최종 결과를 반영
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다

@@ -20,6 +20,11 @@ public class DomainException extends RuntimeException {
         this(errorCode.resultCode(), errorCode.msg(), null, cause);
     }
 
+    // 다른 서비스가 보낸 실패 응답(resultCode·msg·data)을 그대로 다시 던질 때 사용 (예: HTTP 클라이언트)
+    public DomainException(String resultCode, String msg, Object data) {
+        this(resultCode, msg, data, null);
+    }
+
     private DomainException(String resultCode, String msg, Object data, Throwable cause) {
         super(resultCode + " : " + msg, cause);
         this.resultCode = resultCode;
