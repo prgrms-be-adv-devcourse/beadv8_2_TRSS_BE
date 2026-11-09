@@ -66,6 +66,9 @@ class DeliveryConcurrencyIntegrationTest {
     void cleanUp() {
         executor.shutdownNow();
         for (Long orderId : orderIds) {
+            jdbcTemplate.update("""
+                    delete from outbox_event where aggregate_type = 'DELIVERY'
+                    and aggregate_id in (select id from delivery where order_id = ?)""", orderId);
             jdbcTemplate.update("delete from delivery_item where delivery_id in (select id from delivery where order_id = ?)", orderId);
             jdbcTemplate.update("delete from delivery where order_id = ?", orderId);
         }

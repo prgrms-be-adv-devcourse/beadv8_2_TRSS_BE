@@ -10,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.backend.shared.delivery.event.DeliveryCompletedEvent;
+import com.backend.shared.delivery.event.DeliveryShippedEvent;
 import com.backend.shared.event.DomainEvent;
 import com.backend.shared.event.EventEnvelope;
 import com.backend.shared.event.OutboxTestEvent;
@@ -54,13 +55,27 @@ class EventMessagesTest {
     @Test
     @DisplayName("배송 완료 이벤트는 delivery.events로 가고, JSON으로 보냈다 읽으면 값이 그대로다")
     void deliveryCompletedEventRoundTrip() {
-        DeliveryCompletedEvent event = new DeliveryCompletedEvent(30L, 10L,
+        DeliveryCompletedEvent event = new DeliveryCompletedEvent(30L, 10L, 3L,
                 LocalDateTime.of(2026, 11, 8, 9, 5, 0, 456_000_000));
 
         EventEnvelope<DomainEvent> read = roundTrip(event);
 
         assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("delivery.events");
         assertThat(read.eventType()).isEqualTo("DeliveryCompletedEvent");
+        assertThat(read.aggregateId()).isEqualTo(30L);
+        assertThat(read.payload()).isEqualTo(event);
+    }
+
+    @Test
+    @DisplayName("배송 시작 이벤트는 delivery.events로 가고, JSON으로 보냈다 읽으면 값이 그대로다")
+    void deliveryShippedEventRoundTrip() {
+        DeliveryShippedEvent event = new DeliveryShippedEvent(30L, 10L, 3L, "CJ대한통운", "123456789012",
+                LocalDateTime.of(2026, 11, 7, 11, 20, 0, 789_000_000));
+
+        EventEnvelope<DomainEvent> read = roundTrip(event);
+
+        assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("delivery.events");
+        assertThat(read.eventType()).isEqualTo("DeliveryShippedEvent");
         assertThat(read.aggregateId()).isEqualTo(30L);
         assertThat(read.payload()).isEqualTo(event);
     }
