@@ -78,8 +78,13 @@ main() {
     if $RESTART_NGINX; then
         echo "▶ nginx 설정 다시 읽기"
         "${compose[@]}" restart nginx
+    elif [ "${#BUILD_SERVICES[@]}" -gt 0 ]; then
+        # 다시 만든 앱 컨테이너는 내부 IP가 바뀔 수 있다. nginx는 upstream 주소(member:8081 등)를 시작할 때 한 번만 찾아 두므로,
+        # 그대로 두면 옛 IP로 보내 502가 난다. reload는 접속을 끊지 않고 주소를 다시 찾는다
+        echo "▶ nginx: 다시 만든 앱 주소를 다시 찾기 (reload)"
+        "${compose[@]}" exec -T nginx nginx -s reload
     else
-        echo "▶ nginx: 설정이 그대로라 재시작하지 않습니다"
+        echo "▶ nginx: 설정·앱이 그대로라 건드리지 않습니다"
     fi
 
     # 시간이 아니라 상태로 판단한다(compose.prod.yaml의 x-app-healthcheck).
