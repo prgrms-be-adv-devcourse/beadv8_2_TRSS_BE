@@ -123,7 +123,7 @@ class ProductFacadeSellerStopTest {
     @DisplayName("중지된 상품은 구매자 상세에서 404, 주문 쪽 옵션 조회에서는 판매 불가(PRODUCT_STOPPED)다")
     void stoppedProductIsNotSaleable() {
         Product product = create(SELLER_ID);
-        ProductOption option = productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(product.getId())).getFirst();
+        ProductOption option = optionStockRepository.findAllWithOptionByProductIdIn(List.of(product.getId())).getFirst().getOption();
 
         productApi.stopAllBySeller(SELLER_ID, "판매자 철회 요청");
 

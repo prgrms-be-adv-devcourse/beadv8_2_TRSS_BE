@@ -269,7 +269,7 @@ class ProductFacadeSellerFinishTest {
     }
 
     private ProductOption option(Product product) {
-        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(product.getId())).getFirst();
+        return optionStockRepository.findAllWithOptionByProductIdIn(List.of(product.getId())).getFirst().getOption();
     }
 
     private List<SellerProductSummaryDto> sellerList() {

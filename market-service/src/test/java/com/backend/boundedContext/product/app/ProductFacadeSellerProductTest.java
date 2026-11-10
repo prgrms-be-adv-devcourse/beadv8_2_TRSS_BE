@@ -226,7 +226,7 @@ class ProductFacadeSellerProductTest {
     }
 
     private ProductOption option(Product product) {
-        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(product.getId())).getFirst();
+        return optionStockRepository.findAllWithOptionByProductIdIn(List.of(product.getId())).getFirst().getOption();
     }
 
     /** 판매 중지 기능 전이라 필드를 직접 바꾼다 */
