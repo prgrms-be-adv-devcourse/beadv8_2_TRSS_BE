@@ -32,8 +32,9 @@ public interface ProductCouponRepository extends JpaRepository<ProductCoupon, Lo
     Optional<Long> findPartnershipIdByCouponId(Long couponId);
 
     /**
-     * 같은 인플루언서, 같은 상품으로 유효 기간이 겹치는 운영 중(중지되지 않은) 쿠폰 수. excludeCouponId는 수정 중인 자기 자신
+     * 같은 인플루언서, 같은 상품으로 유효 기간이 겹치는 운영 중(중지되지 않고 아직 끝나지 않은) 쿠폰 수. excludeCouponId는 수정 중인 자기 자신
      * 기간은 시작 포함, 종료 미포함이라 [a, b)와 [c, d)는 a &lt; d 이고 c &lt; b일 때 겹친다
+     * 이미 끝난 쿠폰(validUntil &lt;= now)은 빼서, 시작을 과거로 잡은 새 쿠폰이 끝난 쿠폰과 겹친다고 막히지 않게 한다
      */
     @Query("""
             select count(pc) from ProductCoupon pc join pc.coupon c
@@ -42,8 +43,9 @@ public interface ProductCouponRepository extends JpaRepository<ProductCoupon, Lo
                and c.status = :active
                and c.validFrom < :validUntil
                and c.validUntil > :validFrom
+               and c.validUntil > :now
                and c.id <> :excludeCouponId
             """)
     long countOverlapping(Long influencerId, Long productId, LocalDateTime validFrom, LocalDateTime validUntil,
-                          Long excludeCouponId, CouponStatus active);
+                          Long excludeCouponId, CouponStatus active, LocalDateTime now);
 }

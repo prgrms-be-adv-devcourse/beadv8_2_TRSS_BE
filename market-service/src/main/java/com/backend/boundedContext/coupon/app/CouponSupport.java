@@ -137,13 +137,13 @@ public class CouponSupport {
 
     /**
      * 같은 인플루언서, 같은 상품으로 기간이 겹치는 운영 중 쿠폰이 있으면 409-COUPON_PERIOD_OVERLAPPED.
-     * 중지된 쿠폰은 보지 않는다. excludeCouponId는 수정할 때 자기 자신을 빼려고 쓴다(발행이면 null).
+     * 중지됐거나 이미 끝난 쿠폰은 보지 않는다. excludeCouponId는 수정할 때 자기 자신을 빼려고 쓴다(발행이면 null).
      * 협약을 잠근 상태에서 불러야 동시에 발행되는 쿠폰과 겹치지 않는다.
      */
     public void checkNotOverlapped(Long influencerId, Long productId, LocalDateTime validFrom, LocalDateTime validUntil,
                                    Long excludeCouponId) {
         long overlapped = productCouponRepository.countOverlapping(influencerId, productId, validFrom, validUntil,
-                excludeCouponId == null ? -1L : excludeCouponId, CouponStatus.ACTIVE);
+                excludeCouponId == null ? -1L : excludeCouponId, CouponStatus.ACTIVE, LocalDateTime.now());
         if (overlapped > 0) {
             throw new DomainException(CouponErrorCode.COUPON_PERIOD_OVERLAPPED);
         }

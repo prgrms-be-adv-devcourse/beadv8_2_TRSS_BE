@@ -40,7 +40,6 @@ public class CouponUpdateProductCouponUseCase {
     private final ProductCouponRepository productCouponRepository;
 
     public void update(Long memberId, Long couponId, ProductCouponUpdateCommand command) {
-        LocalDateTime now = LocalDateTime.now();
         Long sellerId = couponSellerPort.getApprovedSellerId(memberId);
 
         Long partnershipId = productCouponRepository.findPartnershipIdByCouponId(couponId)
@@ -54,6 +53,9 @@ public class CouponUpdateProductCouponUseCase {
         ProductCoupon productCoupon = productCouponRepository.findWithCouponByCouponId(couponId)
                 .orElseThrow(() -> new DomainException(CouponErrorCode.COUPON_NOT_FOUND));
 
+        // 시작 전·후 판단은 잠금을 잡은 뒤의 시각으로 한다. 잠금을 기다리는 사이 시작 시각이 지나면
+        // 이미 예약이 들어왔을 수 있으므로 시작 전 수정(남은 수량을 총 수량으로 다시 맞춤)을 하면 안 된다
+        LocalDateTime now = LocalDateTime.now();
         if (coupon.displayStatus(now) == CouponDisplayStatus.SCHEDULED) {
             updateBeforeStart(coupon, productCoupon, command, now);
         } else {
