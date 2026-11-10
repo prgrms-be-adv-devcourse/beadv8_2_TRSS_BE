@@ -7,6 +7,7 @@ import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.shared.product.out.ProductApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class OrderCancelSupportTest {
 
     @Mock ProductApi productApi;
+    @Mock OrderCouponPort orderCouponPort;
     @InjectMocks
     OrderCancelSupport cancelSupport;
 
@@ -59,6 +61,8 @@ class OrderCancelSupportTest {
 
         cancelSupport.cancel(order, OrderCancelType.EXPIRED, "결제 시간 만료", now);
 
+        // 취소·만료·상품 판매 중지 모두 이 메서드를 거치므로 주문의 쿠폰 예약도 여기서 해제한다(수량 제한 쿠폰은 남은 수량 복원)
+        verify(orderCouponPort).releaseReservedCoupons(order.getId(), now);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
         assertThat(order.getCancelType()).isEqualTo(OrderCancelType.EXPIRED);
         assertThat(order.getCanceledAt()).isEqualTo(now);
@@ -81,7 +85,7 @@ class OrderCancelSupportTest {
         assertThatThrownBy(() -> cancelSupport.cancel(order, OrderCancelType.EXPIRED, "결제 시간 만료", NOW.plusMinutes(16)))
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "409-ORDER_NOT_CANCELABLE");
-        verifyNoInteractions(productApi);
+        verifyNoInteractions(productApi, orderCouponPort);   // 결제된 주문의 쿠폰은 해제하지 않는다
     }
 
     @Test

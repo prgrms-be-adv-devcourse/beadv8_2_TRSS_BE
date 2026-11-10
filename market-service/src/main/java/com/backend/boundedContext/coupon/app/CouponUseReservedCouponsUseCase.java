@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
 /**
- * 결제 성공 → 주문에 예약된 쿠폰을 모두 사용 처리 (주문 연동은 다음 이슈)
+ * 결제 성공 → 주문에 예약된 쿠폰을 모두 사용 처리 (OrderPayOrderUseCase가 결제 요청 전에 부름)
  * 예약이 없거나 이미 처리됐으면 아무것도 하지 않는다. 처리한 수를 돌려준다.
  * 상태가 아직 RESERVED인 행만 바꾸는 조건부 UPDATE라, 동시에 해제(취소·만료)가 먼저 처리한 기록은 USED로 덮어쓰지 않는다.
  *

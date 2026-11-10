@@ -96,7 +96,7 @@ public class OrderGetOrdersUseCase {
                 order.getId(),
                 order.getOrderNumber(),
                 order.getStatus(),
-                order.getTotalPrice(),
+                order.getPayAmount(),   // 쿠폰 할인 후 결제 금액
                 first.getProductName(),
                 thumbnails.get(first.getOptionId()),
                 items.size(),

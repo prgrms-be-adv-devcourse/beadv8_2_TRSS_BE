@@ -12,6 +12,7 @@ public record OrderItemResponse(
         String sellerName,
         long unitPrice,
         int quantity,
-        long lineAmount
+        long lineAmount,
+        long discountAmount   // 상품 쿠폰 할인액 (쿠폰이 붙지 않은 항목은 0)
 ) {
 }

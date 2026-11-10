@@ -41,6 +41,7 @@ public class CouponFacade {
     private final CouponReserveCartCouponUseCase couponReserveCartCouponUseCase;
     private final CouponUseReservedCouponsUseCase couponUseReservedCouponsUseCase;
     private final CouponReleaseReservedCouponsUseCase couponReleaseReservedCouponsUseCase;
+    private final CouponReserveProductCouponUseCase couponReserveProductCouponUseCase;
     private final PartnershipRequestUseCase partnershipRequestUseCase;
     private final PartnershipChangeStatusUseCase partnershipChangeStatusUseCase;
     private final PartnershipGetPartnershipsUseCase partnershipGetPartnershipsUseCase;
@@ -89,19 +90,26 @@ public class CouponFacade {
         return couponGetMyUsagesUseCase.getUsages(memberId, pageable);
     }
 
-    // 장바구니 쿠폰 예약 → 할인액 (주문 생성, 다음 이슈에서 연결)
+    // 장바구니 쿠폰 예약 → 할인액 (주문 생성)
+    // 상품 쿠폰 예약 → 할인액 (주문 생성)
+    @Transactional
+    public long reserveProductCoupon(Long memberId, String code, Long orderId, Long orderItemId, Long productId,
+                                     long lineAmount, LocalDateTime now) {
+        return couponReserveProductCouponUseCase.reserve(memberId, code, orderId, orderItemId, productId, lineAmount, now);
+    }
+
     @Transactional
     public long reserveCartCoupon(Long memberId, Long couponId, Long orderId, long orderAmount, LocalDateTime now) {
         return couponReserveCartCouponUseCase.reserve(memberId, couponId, orderId, orderAmount, now);
     }
 
-    // 주문의 예약 쿠폰 사용 처리 (결제 성공, 다음 이슈에서 연결). 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE로 결제와 함께 롤백
+    // 주문의 예약 쿠폰 사용 처리 (결제 성공). 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE로 결제와 함께 롤백
     @Transactional
     public int useReservedCoupons(Long orderId, LocalDateTime now) {
         return couponUseReservedCouponsUseCase.use(orderId, now);
     }
 
-    // 주문의 예약 쿠폰 해제와 수량 복원 (결제 전 취소, 만료. 다음 이슈에서 연결)
+    // 주문의 예약 쿠폰 해제와 수량 복원 (결제 전 취소, 만료)
     @Transactional
     public int releaseReservedCoupons(Long orderId, LocalDateTime now) {
         return couponReleaseReservedCouponsUseCase.release(orderId, now);

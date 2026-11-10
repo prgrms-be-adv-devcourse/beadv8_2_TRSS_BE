@@ -90,6 +90,20 @@ class OrderGetOrdersUseCaseTest {
     }
 
     @Test
+    @DisplayName("주문 금액은 쿠폰 할인 후 결제 금액이다(상세의 payAmount와 같다)")
+    @SuppressWarnings("unchecked")
+    void summaryUsesPayAmount() {
+        Order order = orderWith(501L, "립스틱", "아이섀도");   // 20,000원
+        order.applyProductCouponDiscount(1L, 3_000);
+        given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(order), PAGE, 1));
+
+        OrderSummaryResponse summary = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items().get(0);
+
+        assertThat(summary.totalPrice()).isEqualTo(17_000);
+    }
+
+    @Test
     @DisplayName("결제 대기 주문은 결제 가능 남은 시간을 담는다")
     @SuppressWarnings("unchecked")
     void remainingSeconds() {

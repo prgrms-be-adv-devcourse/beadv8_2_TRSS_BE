@@ -41,6 +41,9 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_NOT_CONFIRMABLE(409, "결제 완료된 주문만 구매 확정할 수 있습니다."),
     ORDER_NOT_DELIVERED(409, "배송이 완료된 뒤에 구매 확정할 수 있습니다."),
 
+    // 쿠폰
+    ORDER_COUPON_NOT_AVAILABLE(409, "아직 주문에 쿠폰을 사용할 수 없습니다."),
+
     // 결제
     INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다.");
 

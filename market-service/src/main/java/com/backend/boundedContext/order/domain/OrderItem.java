@@ -54,6 +54,10 @@ public class OrderItem extends BaseIdAndTime {
     @Column(nullable = false)
     private long lineAmount;
 
+    // 상품 쿠폰 할인액 (상품 쿠폰이 붙지 않은 항목은 0). 항목 금액을 넘지 않는다
+    @Column(nullable = false)
+    private long discountAmount;
+
     private Boolean restoreStock;  // 재고 복원여부
 
     static OrderItem create(Order order, OrderItemSpec spec) {
@@ -75,6 +79,21 @@ public class OrderItem extends BaseIdAndTime {
         item.lineAmount = Math.multiplyExact(spec.unitPrice(), spec.quantity());
 
         return item;
+    }
+
+    // 상품 쿠폰 할인 적용 (주문 생성 때 한 번). 할인액은 0 이상, 항목 금액 이하
+    void applyCouponDiscount(long discountAmount) {
+        // 정책상 할인 후 금액이 0원이 되는 쿠폰은 없다(쿠폰 쪽이 막는다). 들어오면 코드 오류
+        if (discountAmount < 0 || discountAmount >= lineAmount) {
+            throw new IllegalArgumentException("상품 쿠폰 할인액이 항목 금액 범위를 벗어났습니다. orderItemId=" + getId()
+                    + ", lineAmount=" + lineAmount + ", discountAmount=" + discountAmount);
+        }
+        this.discountAmount = discountAmount;
+    }
+
+    // 상품 쿠폰 할인 후 항목 금액
+    public long getDiscountedLineAmount() {
+        return lineAmount - discountAmount;
     }
 
     // 재고 차감, 복원 요청으로 변환

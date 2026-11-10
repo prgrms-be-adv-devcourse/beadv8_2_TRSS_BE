@@ -5,6 +5,7 @@ import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.in.dto.InsufficientBalanceResponse;
 import com.backend.boundedContext.order.in.dto.OrderPayResponse;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
@@ -23,7 +24,10 @@ import java.util.UUID;
 
 /**
  * 예치금 결제
- * 주문 PAID 변경 → 결제(지갑 → 홀딩)를 한 트랜잭션으로 처리한다.
+ * 주문 PAID 변경 → 쿠폰 사용 처리 → 결제(지갑 → 홀딩)를 한 트랜잭션으로 처리한다.
+ * 쿠폰 사용 처리는 결제 요청보다 먼저 한다: 예약 뒤 쿠폰이 중지됐거나 기간이 끝났으면 409-COUPON_NOT_ACTIVE로
+ * 돈이 움직이기 전에 멈춘다(결제 서비스 호출은 이 트랜잭션으로 되돌릴 수 없다). 결제가 실패하면 사용 처리도 함께 롤백된다.
+ * 결제 금액은 쿠폰 할인을 반영한 payAmount다(쿠폰이 꺼져 있거나 쓰지 않았으면 상품 금액 합계와 같다).
  * 배송지가 있는 주문이면 결제 완료 이벤트(OrderPaidEvent)를 outbox에 저장한다. delivery가 받아 배송 건(READY)을 만든다.
  * 결제가 실패하면(예외) 주문 변경과 함께 이벤트 저장도 롤백된다.
  */
@@ -36,6 +40,7 @@ public class OrderPayOrderUseCase {
     private final PaymentApi paymentApi;
     private final MemberApi memberApi;
     private final EventPublisher eventPublisher;
+    private final OrderCouponPort orderCouponPort;
 
     public OrderPayResponse pay(Long buyerId, Long orderId) {
         // 탈퇴한 회원은 남은 Access Token으로 결제할 수 없게 401
@@ -50,15 +55,16 @@ public class OrderPayOrderUseCase {
 
         order.pay(now);
         validateSaleable(order.getItems());
+        orderCouponPort.useReservedCoupons(order.getId(), now);
 
         PayResultDto result = paymentApi.pay(new PayCommand(order.getId(), order.getOrderNumber(), buyerId,
-                order.getTotalPrice(), order.getExpiresAt(), newIdempotencyKey(order)));
+                order.getPayAmount(), order.getExpiresAt(), newIdempotencyKey(order)));
         handleFailure(result, remainingSeconds);
         publishPaidEvent(order);
         removeCartItems(buyerId, order.getItems());
 
         return new OrderPayResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
-                order.getTotalPrice(), order.getPaidAt(), result.paymentId());
+                order.getPayAmount(), order.getPaidAt(), result.paymentId());
     }
 
     // 판매가능여부 확인

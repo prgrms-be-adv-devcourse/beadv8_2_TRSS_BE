@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
@@ -35,6 +36,7 @@ class OrderCancelPendingOrdersUseCaseTest {
 
     @Mock OrderRepository orderRepository;
     @Mock ProductApi productApi;
+    @Mock OrderCouponPort orderCouponPort;
 
     OrderCancelPendingOrdersUseCase useCase;
 
@@ -46,7 +48,7 @@ class OrderCancelPendingOrdersUseCaseTest {
     @BeforeEach
     void setUp() {
         // 재고 복원까지 확인하려고 OrderCancelSupport는 실제 객체를 쓴다
-        useCase = new OrderCancelPendingOrdersUseCase(orderRepository, new OrderCancelSupport(productApi));
+        useCase = new OrderCancelPendingOrdersUseCase(orderRepository, new OrderCancelSupport(productApi, orderCouponPort));
     }
 
     /** 결제 대기 주문. 항목은 (상품 ID, 옵션 ID, 수량) */

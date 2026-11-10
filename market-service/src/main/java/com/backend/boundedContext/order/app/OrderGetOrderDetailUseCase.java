@@ -89,7 +89,10 @@ public class OrderGetOrderDetailUseCase {
                 order.hasShippingAddress() ? ShippingAddressResponse.from(order.getShippingAddress()) : null,
                 order.getDeliveredAt(),
                 delivery.delivery(),
-                delivery.unavailable()
+                delivery.unavailable(),
+                order.getProductDiscountAmount(),
+                order.getCartCouponDiscountAmount(),
+                order.getPayAmount()
         );
     }
 
@@ -103,7 +106,8 @@ public class OrderGetOrderDetailUseCase {
                 item.getSellerName(),
                 item.getUnitPrice(),
                 item.getQuantity(),
-                item.getLineAmount()
+                item.getLineAmount(),
+                item.getDiscountAmount()
         );
     }
 }

@@ -4,6 +4,7 @@ import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.product.dto.StockRestoreReason;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.shared.product.out.ProductApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -14,12 +15,14 @@ import java.util.Collection;
 /**
  * 결제 전 주문 취소 공통 처리
  * 구매자 취소, 15분 만료, 상품 판매 중지는 모두 이 메서드로 취소한다.
+ * 재고를 되돌리고, 주문에 예약된 쿠폰을 해제한다(수량 제한 쿠폰은 남은 수량도 되돌아간다). 예약이 없으면 쿠폰 쪽은 아무것도 하지 않는다.
  */
 @Component
 @RequiredArgsConstructor
 public class OrderCancelSupport {
 
     private final ProductApi productApi;
+    private final OrderCouponPort orderCouponPort;
 
     // 상품부터 먼저 잠금한다.
     public void lockProducts(Collection<Long> productIds) {
@@ -35,5 +38,6 @@ public class OrderCancelSupport {
                         .toList(),
                 StockRestoreReason.ORDER_RESTORE
         );
+        orderCouponPort.releaseReservedCoupons(order.getId(), now);
     }
 }

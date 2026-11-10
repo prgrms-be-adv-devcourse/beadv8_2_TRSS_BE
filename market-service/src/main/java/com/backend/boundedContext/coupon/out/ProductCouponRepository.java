@@ -21,6 +21,10 @@ public interface ProductCouponRepository extends JpaRepository<ProductCoupon, Lo
     @Query("select pc from ProductCoupon pc join fetch pc.coupon where pc.code = :code")
     Optional<ProductCoupon> findWithCouponByCode(String code);
 
+    /** 쿠폰 코드의 쿠폰 ID (쿠폰 엔티티를 읽지 않고). 예약할 때 쿠폰부터 잠그려고 쓴다. 코드는 대문자로 바꿔서 넘긴다 */
+    @Query("select pc.coupon.id from ProductCoupon pc where pc.code = :code")
+    Optional<Long> findCouponIdByCode(String code);
+
     /** 쿠폰들의 상품 쿠폰 정보 (관리자 목록, 상세). 장바구니 쿠폰 ID는 결과에 없다 */
     @Query("select pc from ProductCoupon pc where pc.coupon.id in :couponIds")
     List<ProductCoupon> findAllByCouponIdIn(Collection<Long> couponIds);

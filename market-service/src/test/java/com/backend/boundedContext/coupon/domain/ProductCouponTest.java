@@ -18,13 +18,15 @@ class ProductCouponTest {
     }
 
     @Test
-    @DisplayName("정액 할인은 할인액을 그대로 주되 항목 금액을 넘지 않는다")
+    @DisplayName("정액 할인은 할인액을 그대로 주고, 할인 후 금액이 0원이 되면(할인액 >= 항목 금액) 400-COUPON_NOT_APPLICABLE")
     void fixed() {
         ProductCoupon coupon = create(new ProductCouponDiscount(DiscountType.FIXED, 3_000, null));
 
         assertThat(coupon.discountFor(20_000)).isEqualTo(3_000);
-        assertThat(coupon.discountFor(2_000)).isEqualTo(2_000);
-        assertThat(coupon.discountFor(0)).isZero();
+        assertThat(coupon.discountFor(3_001)).isEqualTo(3_000);   // 1원은 남는다
+        assertThatThrownBy(() -> coupon.discountFor(3_000)).extracting("resultCode").isEqualTo("400-COUPON_NOT_APPLICABLE");
+        assertThatThrownBy(() -> coupon.discountFor(2_000)).extracting("resultCode").isEqualTo("400-COUPON_NOT_APPLICABLE");
+        assertThatThrownBy(() -> coupon.discountFor(0)).extracting("resultCode").isEqualTo("400-COUPON_NOT_APPLICABLE");
     }
 
     @Test
@@ -38,11 +40,12 @@ class ProductCouponTest {
     }
 
     @Test
-    @DisplayName("100% 정률이어도 항목 금액을 넘지 않는다")
+    @DisplayName("100% 정률 쿠폰은 발급하지 않고(400-VALIDATION_FAILED), 99%는 원 단위 버림이라 항목 금액보다 작다")
     void rateFull() {
-        ProductCoupon coupon = create(new ProductCouponDiscount(DiscountType.RATE, 100, 1_000_000L));
+        assertInvalid(new ProductCouponDiscount(DiscountType.RATE, 100, 1_000_000L));
 
-        assertThat(coupon.discountFor(12_345)).isEqualTo(12_345);
+        ProductCoupon coupon = create(new ProductCouponDiscount(DiscountType.RATE, 99, 1_000_000L));
+        assertThat(coupon.discountFor(12_345)).isEqualTo(12_221);   // 12,345 × 99 ÷ 100 = 12,221.55 → 12,221
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.ShippingAddress;
 import com.backend.boundedContext.order.in.dto.InsufficientBalanceResponse;
 import com.backend.boundedContext.order.in.dto.OrderPayResponse;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,8 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,6 +54,7 @@ class OrderPayOrderUseCaseTest {
     @Mock PaymentApi paymentApi;
     @Mock MemberApi memberApi;
     @Mock EventPublisher eventPublisher;
+    @Mock OrderCouponPort orderCouponPort;
     @InjectMocks
     OrderPayOrderUseCase useCase;
 
@@ -82,6 +87,35 @@ class OrderPayOrderUseCaseTest {
                 && cmd.orderId().equals(ORDER_ID)
                 && cmd.orderNumber().equals(order.getOrderNumber())));
         verify(cart).removeItems(List.of(1L));
+    }
+
+    @Test
+    @DisplayName("결제 요청 전에 주문의 예약 쿠폰을 사용 처리하고, 결제 금액은 쿠폰 할인 후 금액(payAmount)이다")
+    void pay_usesCouponsBeforePayment() {
+        Order order = order(LocalDateTime.now());   // 20,000원
+        ReflectionTestUtils.setField(order.getItems().get(0), "id", 1L);
+        order.applyProductCouponDiscount(1L, 5_000);
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.pay(any())).willReturn(new PayResultDto(77L, PayResultStatus.PAID, 0, 0));
+
+        useCase.pay(BUYER_ID, ORDER_ID);
+
+        InOrder inOrder = inOrder(orderCouponPort, paymentApi);
+        inOrder.verify(orderCouponPort).useReservedCoupons(eq(ORDER_ID), any());
+        inOrder.verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 15_000));
+    }
+
+    @Test
+    @DisplayName("예약 뒤 쿠폰이 중지돼 사용 처리가 409-COUPON_NOT_ACTIVE면 결제 서비스를 부르지 않는다")
+    void pay_couponNotActive_noPayment() {
+        Order order = order(LocalDateTime.now());
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        willThrow(new DomainException("409-COUPON_NOT_ACTIVE", "사용 기간이 아니거나 중지된 쿠폰입니다.", null))
+                .given(orderCouponPort).useReservedCoupons(eq(ORDER_ID), any());
+
+        assertThatThrownBy(() -> useCase.pay(BUYER_ID, ORDER_ID))
+                .extracting("resultCode").isEqualTo("409-COUPON_NOT_ACTIVE");
+        verify(paymentApi, never()).pay(any());
     }
 
     @Test

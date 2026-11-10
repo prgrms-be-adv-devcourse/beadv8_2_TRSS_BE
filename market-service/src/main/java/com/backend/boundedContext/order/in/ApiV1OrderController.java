@@ -33,7 +33,11 @@ public class ApiV1OrderController {
 
     private final OrderFacade orderFacade;
 
-    @Operation(summary = "주문 생성", description = "주문을 생성하고 재고를 차감한다. 배송지는 선택 값이다(보내면 형식을 검증하고, 배송지가 있는 주문은 배송 완료 뒤에만 구매 확정된다).")
+    @Operation(summary = "주문 생성", description = "주문을 생성하고 재고를 차감한다. 배송지는 선택 값이다(보내면 형식을 검증하고, 배송지가 있는 주문은 배송 완료 뒤에만 구매 확정된다). "
+            + "쿠폰(상품 쿠폰 1개, 장바구니 쿠폰 1개까지)은 재고 차감과 같은 트랜잭션에서 예약한다. "
+            + "결제 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. "
+            + "쿠폰은 서버 설정이 켜져 있을 때만 반영되고, 꺼져 있을 때 쿠폰을 보내면 409-ORDER_COUPON_NOT_AVAILABLE이다. "
+            + "expectedTotalPrice가 실제 결제 금액(쿠폰 할인 후)과 다르면 409-PRICE_CHANGED이고 data.currentAmount에 실제 결제 금액을 담는다.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RsData<OrderCreateResponse> createOrder(
@@ -43,7 +47,7 @@ public class ApiV1OrderController {
     ) {
         OrderCreateResponse response = orderFacade.createOrder(
                 authMember.memberId(), idempotencyKey, request.cartItemIds(), request.expectedTotalPrice(),
-                request.shippingAddress());
+                request.shippingAddress(), request.toCouponSelection());
         return RsData.of("201-1", "주문을 생성했습니다.", response);
     }
 
