@@ -4,6 +4,7 @@ import com.backend.boundedContext.coupon.domain.CouponErrorCode;
 import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.CartItem;
 import com.backend.boundedContext.order.domain.Order;
+import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.domain.OrderCouponPolicy;
@@ -25,8 +26,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -180,14 +183,34 @@ class OrderCreateOrderCouponTest {
     }
 
     @Test
-    @DisplayName("꺼짐: 쿠폰을 보내면 장바구니를 잠그거나 재고를 건드리기 전에 409-ORDER_COUPON_NOT_AVAILABLE")
+    @DisplayName("꺼짐: 새 주문에 쿠폰을 보내면 재고를 건드리기 전에 409-ORDER_COUPON_NOT_AVAILABLE")
     void disabledWithCoupon() {
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(Cart.create(BUYER_ID));
+
         assertThatThrownBy(() -> useCase(false).create(BUYER_ID, null, List.of(1L), 40_000, null,
                 new OrderCouponSelection(List.of(), 7L)))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-ORDER_COUPON_NOT_AVAILABLE");
 
-        verifyNoInteractions(orderSupport, orderRepository, productApi, orderCouponPort);
+        verifyNoInteractions(orderRepository, productApi, orderCouponPort);
+    }
+
+    @Test
+    @DisplayName("꺼짐: 쿠폰을 쓴 주문을 만든 뒤 설정이 꺼져도, 같은 Idempotency-Key 재시도는 409 대신 처음 만든 주문을 돌려준다")
+    void disabledRetryReturnsExistingOrder() {
+        String key = "order-key-1";
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(Cart.create(BUYER_ID));
+        Order existing = Order.create(BUYER_ID, key, List.of(
+                        new OrderItemSpec(1L, 10L, 100L, 2L, "립스틱", "기본", "상점", 40_000, 1)),
+                LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(existing, "id", ORDER_ID);
+        given(orderRepository.findByBuyerIdAndIdempotencyKey(BUYER_ID, key)).willReturn(Optional.of(existing));
+
+        OrderCreateResponse response = useCase(false).create(BUYER_ID, key, List.of(1L), 40_000, null,
+                new OrderCouponSelection(List.of(), 7L));
+
+        assertThat(response.orderId()).isEqualTo(ORDER_ID);
+        verifyNoInteractions(productApi, orderCouponPort);
     }
 
     @Test

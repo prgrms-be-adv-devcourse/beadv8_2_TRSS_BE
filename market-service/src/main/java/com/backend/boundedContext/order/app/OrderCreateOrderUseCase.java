@@ -72,7 +72,6 @@ public class OrderCreateOrderUseCase {
         // 탈퇴한 회원은 남은 Access Token으로 주문할 수 없게 401 (재고가 차감되지 않도록)
         memberApi.checkActiveMember(buyerId);
         validateIdempotencyKey(idempotencyKey);
-        validateCouponsAvailable(coupons);
 
         Cart cart = orderSupport.getCartForUpdate(buyerId);
 
@@ -88,6 +87,10 @@ public class OrderCreateOrderUseCase {
                 return OrderCreateResponse.from(existing.get());
             }
         }
+
+        // 새 주문을 만들 때만 쿠폰 설정을 본다. 같은 키의 재시도는 위에서 처음 만든 주문을 돌려주므로,
+        // 쿠폰을 쓴 주문을 만든 뒤 설정이 꺼져도 재시도가 409로 막히지 않는다
+        validateCouponsAvailable(coupons);
 
         // 내 장바구니 항목인지 확인
         List<CartItem> cartItems = cartItemIds.stream()
@@ -132,7 +135,7 @@ public class OrderCreateOrderUseCase {
         return OrderCreateResponse.from(order);
     }
 
-    // 쿠폰 적용이 꺼져 있을 때 쿠폰을 보내면 409 (할인 없이 결제되는 일이 없게, 장바구니를 잠그거나 재고를 건드리기 전에 막는다)
+    // 쿠폰 적용이 꺼져 있을 때 쿠폰을 보내면 409 (할인 없이 결제되는 일이 없게, 재고를 건드리기 전에 막는다)
     private void validateCouponsAvailable(OrderCouponSelection coupons) {
         if (!coupons.isEmpty() && !orderCouponPolicy.isCouponEnabled()) {
             throw new DomainException(OrderErrorCode.ORDER_COUPON_NOT_AVAILABLE);
