@@ -19,6 +19,7 @@ import com.backend.boundedContext.settlement.out.SettlementMemberPort;
 import com.backend.boundedContext.settlement.out.SettlementPaymentPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
+import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
 import com.backend.shared.payment.dto.TransferResultDto;
@@ -38,6 +39,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -174,6 +176,67 @@ class SettlementLedgerRecheckAndJudgeUseCaseTest {
         assertEquals(0, released);
         assertEquals(SettlementStatus.HOLD, ledgerHeld.getStatus());
         assertTrue(histories.isEmpty());
+    }
+
+    @Test
+    @DisplayName("관리자 확인: 풀리지 않은 불일치를 사유와 함께 VERIFY·ADMIN·SUCCEEDED로 남기고(불일치 코드 유지), 다른 불일치가 없으면 원장 불일치 보류만 해제한다")
+    void confirmMismatchByAdmin() {
+        paid = paidSettlement();
+        histories.add(SettlementProcessHistory.ledgerChecked(31L, SettlementLedgerCheckResult.MISSING,
+                SettlementTrigger.LEDGER_RECHECK, null, NOW.minusDays(5)));
+        Settlement ledgerHeld = heldSettlement(41L, LedgerMismatchRule.REASON);
+        Settlement adminHeld = heldSettlement(42L, "관리자 확인 필요");
+
+        int released = recheckUseCase().confirmMismatchByAdmin(31L, "결제 쪽 정정 확인");
+
+        assertEquals(1, released);
+        SettlementProcessHistory confirmed = histories.get(1);
+        assertEquals(SettlementHistoryStage.VERIFY, confirmed.getStage());
+        assertEquals(SettlementTrigger.ADMIN, confirmed.getTriggerType());
+        assertEquals(SettlementHistoryResult.SUCCEEDED, confirmed.getResult());
+        assertEquals("409-SETTLEMENT_LEDGER_MISSING", confirmed.getErrorCode());
+        assertEquals("결제 쪽 정정 확인", confirmed.getAdminReason());
+        assertEquals(SettlementStatus.READY, ledgerHeld.getStatus());
+        assertEquals(SettlementStatus.HOLD, adminHeld.getStatus());
+        assertEquals(SettlementTrigger.ADMIN, histories.get(histories.size() - 1).getTriggerType());   // 해제 이력
+    }
+
+    @Test
+    @DisplayName("관리자 확인 뒤 같은 불일치가 다시 나와도 이력을 남기지 않아 확인 상태가 유지되고, 다른 불일치가 나오면 다시 MANUAL_REQUIRED")
+    void confirmedMismatchStaysConfirmed() {
+        paid = paidSettlement();
+        histories.add(SettlementProcessHistory.ledgerChecked(31L, SettlementLedgerCheckResult.MISSING,
+                SettlementTrigger.LEDGER_RECHECK, null, NOW.minusDays(5)));
+        SettlementLedgerRecheckUseCase useCase = recheckUseCase();
+        useCase.confirmMismatchByAdmin(31L, "결제 쪽 정정 확인");
+        int afterConfirm = histories.size();
+
+        useCase.recheck(31L, SettlementTrigger.LEDGER_RECHECK, null);   // 원장은 여전히 없음(MISSING)
+        assertEquals(afterConfirm, histories.size());
+
+        ledger = Optional.of(new TransferResultDto("SETTLEMENT-31", 999L, 18_000L, 2_000L, NOW));   // 행 교체(다른 불일치)
+        useCase.recheck(31L, SettlementTrigger.LEDGER_RECHECK, null);
+        assertEquals(SettlementHistoryResult.MANUAL_REQUIRED, histories.get(histories.size() - 1).getResult());
+    }
+
+    @Test
+    @DisplayName("관리자 확인: 다른 불일치가 남아 있으면 확인 이력만 남기고 보류는 유지, 풀리지 않은 불일치가 없으면 409, 없는 정산서면 404")
+    void confirmMismatchByAdminRejected() {
+        paid = paidSettlement();
+        histories.add(SettlementProcessHistory.ledgerChecked(31L, SettlementLedgerCheckResult.MISSING,
+                SettlementTrigger.LEDGER_RECHECK, null, NOW.minusDays(5)));
+        Settlement ledgerHeld = heldSettlement(41L, LedgerMismatchRule.REASON);
+        otherMismatchRemains = true;
+        SettlementLedgerRecheckUseCase useCase = recheckUseCase();
+
+        assertEquals(0, useCase.confirmMismatchByAdmin(31L, "확인"));
+        assertEquals(SettlementStatus.HOLD, ledgerHeld.getStatus());
+
+        assertEquals("409-SETTLEMENT_STATE_INVALID",
+                assertThrows(DomainException.class, () -> useCase.confirmMismatchByAdmin(31L, "또 확인")).getResultCode());
+        paid = null;
+        assertEquals("404-SETTLEMENT_NOT_FOUND",
+                assertThrows(DomainException.class, () -> useCase.confirmMismatchByAdmin(99L, "확인")).getResultCode());
     }
 
     @Test

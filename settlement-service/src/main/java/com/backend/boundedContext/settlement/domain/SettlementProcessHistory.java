@@ -147,6 +147,20 @@ public class SettlementProcessHistory extends BaseIdAndTime {
     // ---------- 원장 재대조 (단계 값은 VERIFY) ----------
 
     /**
+     * 관리자가 원장 재대조 불일치를 확인하고 지급을 막지 않기로 한 기록 (stage VERIFY, trigger ADMIN, SUCCEEDED)
+     * 정산서별 마지막 VERIFY 이력이 SUCCEEDED가 되므로 "풀리지 않은 불일치"에서 빠진다.
+     * error_code에는 확인한 불일치 코드를 그대로 남긴다. 다음 재대조에서 같은 불일치가 나오면 직전 결과와 같아 이력을 다시 남기지 않으므로
+     * 확인한 상태가 유지되고, 다른 불일치가 나오면 새 MANUAL_REQUIRED로 다시 막는다.
+     * @param reason 관리자 확인 사유 (admin_reason)
+     */
+    public static SettlementProcessHistory ledgerMismatchConfirmed(Long settlementId, String mismatchErrorCode,
+                                                                   String reason, LocalDateTime now) {
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
+                SettlementHistoryStage.VERIFY, 1, SettlementTrigger.ADMIN, SettlementHistoryResult.SUCCEEDED,
+                mismatchErrorCode, null, reason, null, now);
+    }
+
+    /**
      * 지급된 정산서의 원장 재대조 결과
      * 같음 → SUCCEEDED, 다름 → MANUAL_REQUIRED(error_code에 LEDGER_* resultCode)
      * 정산서별 가장 마지막 VERIFY 이력이 MANUAL_REQUIRED면 "풀리지 않은 불일치"로 보고 판별 단계가 그 판매자 지급을 보류한다

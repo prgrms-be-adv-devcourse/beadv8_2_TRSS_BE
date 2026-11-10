@@ -1,6 +1,7 @@
 package com.backend.boundedContext.settlement.app;
 
 import com.backend.boundedContext.settlement.domain.Settlement;
+import com.backend.boundedContext.settlement.domain.SettlementErrorCode;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryResult;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryStage;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType;
@@ -12,6 +13,7 @@ import com.backend.boundedContext.settlement.domain.judge.LedgerMismatchRule;
 import com.backend.boundedContext.settlement.out.SettlementPaymentPort;
 import com.backend.boundedContext.settlement.out.SettlementProcessHistoryRepository;
 import com.backend.boundedContext.settlement.out.SettlementRepository;
+import com.backend.global.exception.DomainException;
 import com.backend.shared.payment.dto.TransferResultDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,8 @@ import java.util.Optional;
  * 정리: 해소되는 순간에만 풀면 그 뒤에 생긴 원장 불일치 보류(재시작한 Job이 예전 판정을 적용, 해소와 동시에 커밋된 지급 직전 보류)를
  *      놓친다. 그래서 매일 재대조 끝에 "불일치가 없는데 원장 불일치 사유로 보류된" 정산서를 한 번 더 찾아 푼다
  *      (findSellerIdsWithLedgerMismatchHolds → releaseLedgerMismatchHoldsIfResolved).
+ * 관리자 확인: 원장이 원래 값으로 돌아오지 않는 불일치(결제 쪽 정상 정정 등)는 재대조로 풀리지 않는다. 관리자가 사유를 남기고
+ *      불일치를 확인하면(confirmMismatchByAdmin) 미해결에서 빠지고, 다른 불일치가 없으면 원장 불일치 보류를 같은 방식으로 해제한다.
  */
 @Slf4j
 @Component
@@ -69,6 +73,36 @@ public class SettlementLedgerRecheckUseCase {
         if (settlementRepository.existsUnresolvedLedgerMismatchBySellerId(sellerId)) return 0;
         return releaseLedgerMismatchHolds(sellerId, trigger, "원장 재대조 불일치가 없음을 확인해 자동 해제",
                 LocalDateTime.now());
+    }
+
+    /**
+     * 관리자가 원장 재대조 불일치를 확인한다(지급을 더 막지 않음). 사유와 확인한 불일치 코드를 VERIFY 이력(ADMIN, SUCCEEDED)에 남긴다
+     * 그 판매자에게 다른 불일치가 남지 않았으면 원장 불일치 사유로 보류된 정산서를 READY로 되돌린다
+     * 없는 정산서면 404-SETTLEMENT_NOT_FOUND, 풀리지 않은 불일치가 없는 정산서면 409-SETTLEMENT_STATE_INVALID
+     * @return 자동 해제한 정산서 수
+     */
+    public int confirmMismatchByAdmin(Long settlementId, String reason) {
+        Settlement settlement = settlementRepository.findById(settlementId)
+                .orElseThrow(() -> new DomainException(SettlementErrorCode.SETTLEMENT_NOT_FOUND));
+        SettlementProcessHistory last = settlementProcessHistoryRepository
+                .findFirstByTargetTypeAndTargetIdAndStageOrderByIdDesc(SettlementHistoryTargetType.SETTLEMENT,
+                        settlementId, SettlementHistoryStage.VERIFY)
+                .filter(history -> history.getResult() == SettlementHistoryResult.MANUAL_REQUIRED)
+                .orElseThrow(() -> new DomainException(SettlementErrorCode.SETTLEMENT_STATE_INVALID));
+
+        LocalDateTime now = LocalDateTime.now();
+        settlementProcessHistoryRepository.save(SettlementProcessHistory.ledgerMismatchConfirmed(settlementId,
+                last.getErrorCode(), reason, now));
+
+        Long sellerId = settlement.getSellerId();
+        int released = 0;
+        if (!settlementRepository.existsUnresolvedLedgerMismatchBySellerId(sellerId)) {
+            released = releaseLedgerMismatchHolds(sellerId, SettlementTrigger.ADMIN,
+                    "원장 재대조 불일치를 관리자가 확인해 자동 해제(settlementId=%d)".formatted(settlementId), now);
+        }
+        log.info("정산 원장 재대조 불일치 관리자 확인 settlementId={} sellerId={} errorCode={} 자동 해제 {}건",
+                settlementId, sellerId, last.getErrorCode(), released);
+        return released;
     }
 
     /** 지급일과 상관없이 불일치가 아직 풀리지 않은 정산서 ID (매일 다시 본다) */

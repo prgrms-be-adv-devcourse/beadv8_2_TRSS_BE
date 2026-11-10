@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
  * 판매자가 제재(SANCTIONED) 중이면 409 SETTLEMENT_SELLER_SANCTIONED,
  * 판매자의 지난 지급 원장 재대조 불일치가 풀리지 않았으면 409 SETTLEMENT_LEDGER_MISMATCH_UNRESOLVED로 거절한다.
  * 지급 직전에 같은 조건으로 다시 HOLD가 되므로(SettlementPayoutUseCase), 해제해도 지급되지 않고 보류만 되풀이된다.
- * 원장 불일치로 보류된 정산서는 불일치가 풀리면 원장 재대조가 자동 해제한다(SettlementLedgerRecheckUseCase).
+ * 원장 불일치로 보류된 정산서는 불일치가 풀리거나 관리자가 불일치를 확인하면(POST .../ledger-mismatch/confirm) 자동 해제한다(SettlementLedgerRecheckUseCase).
  * 제재 중인 판매자의 정산서는 판매자 제재가 해지될 때 함께 READY로 바꾼다(제재 해지 작업에서 추가 예정).
  * HOLD가 아니면 엔티티가 409 SETTLEMENT_STATE_INVALID를 던진다.
  */

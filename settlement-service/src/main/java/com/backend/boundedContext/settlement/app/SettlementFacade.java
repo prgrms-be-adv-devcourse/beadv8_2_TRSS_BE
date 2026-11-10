@@ -6,6 +6,7 @@ import com.backend.boundedContext.settlement.domain.SettlementLedgerCheckResult;
 import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
+import com.backend.boundedContext.settlement.in.dto.SettlementLedgerMismatchConfirmResponse;
 import com.backend.boundedContext.settlement.in.dto.SellerSettlementDetailResponse;
 import com.backend.boundedContext.settlement.in.dto.SellerSettlementResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementCandidateResponse;
@@ -220,6 +221,13 @@ public class SettlementFacade {
     @Transactional
     public SettlementResponse release(Long settlementId) {
         return settlementReleaseUseCase.release(settlementId);
+    }
+
+    /** 관리자 원장 재대조 불일치 확인. 이력 저장과 자동 해제가 한 트랜잭션이다 */
+    @Transactional
+    public SettlementLedgerMismatchConfirmResponse confirmLedgerMismatch(Long settlementId, String reason) {
+        return new SettlementLedgerMismatchConfirmResponse(settlementId,
+                settlementLedgerRecheckUseCase.confirmMismatchByAdmin(settlementId, reason));
     }
 
     // ================= 관리자 정산 후보 =================

@@ -4,6 +4,8 @@ import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.app.SettlementFacade;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
+import com.backend.boundedContext.settlement.in.dto.SettlementLedgerMismatchConfirmRequest;
+import com.backend.boundedContext.settlement.in.dto.SettlementLedgerMismatchConfirmResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementDetailResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementHistoryResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementHoldRequest;
@@ -142,6 +144,21 @@ public class ApiV1AdminSettlementController {
     @PostMapping("/{settlementId}/release")
     public RsData<SettlementResponse> release(@PathVariable Long settlementId) {
         return RsData.of("200-1", "정산 보류를 해제했습니다.", settlementFacade.release(settlementId));
+    }
+
+    @Operation(summary = "원장 재대조 불일치 확인",
+            description = "원장이 원래 값으로 돌아오지 않는 불일치(결제 쪽 정상 정정 등)를 관리자가 확인하고 지급을 더 막지 않기로 기록한다(사유 필수). "
+                    + "처리 이력에 VERIFY·ADMIN·SUCCEEDED로 남고, 그 판매자에게 다른 불일치가 없으면 원장 불일치 사유로 보류된 정산서를 READY로 되돌린다. "
+                    + "같은 불일치는 다음 재대조에서도 다시 막지 않고, 다른 불일치가 나오면 다시 막는다")
+    @ApiResponse(responseCode = "200", description = "200-1 확인 완료 (data.releasedCount 자동 해제 수)")
+    @ApiResponse(responseCode = "400", description = "400-VALIDATION_FAILED 사유 없음")
+    @ApiResponse(responseCode = "404", description = "404-SETTLEMENT_NOT_FOUND")
+    @ApiResponse(responseCode = "409", description = "409-SETTLEMENT_STATE_INVALID 풀리지 않은 원장 불일치가 없음")
+    @PostMapping("/{settlementId}/ledger-mismatch/confirm")
+    public RsData<SettlementLedgerMismatchConfirmResponse> confirmLedgerMismatch(
+            @PathVariable Long settlementId, @Valid @RequestBody SettlementLedgerMismatchConfirmRequest request) {
+        return RsData.of("200-1", "원장 불일치를 확인했습니다.",
+                settlementFacade.confirmLedgerMismatch(settlementId, request.reason()));
     }
 
 }
