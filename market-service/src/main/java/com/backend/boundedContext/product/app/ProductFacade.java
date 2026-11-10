@@ -27,6 +27,7 @@ import org.springframework.data.domain.Pageable;
 import com.backend.boundedContext.product.app.dto.ProductSampleDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.dto.ProductSnapshotDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +73,12 @@ public class ProductFacade {
     @Transactional(readOnly = true)
     public List<OptionSnapshotDto> getOptions(Collection<Long> optionIds) {
         return productSupport.getOptionSnapshots(optionIds);
+    }
+
+    // 상품 여러 개의 현재 정보 (ProductApi, 쿠폰 발행과 협약 pick 상품 목록)
+    @Transactional(readOnly = true)
+    public List<ProductSnapshotDto> getProducts(Collection<Long> productIds) {
+        return productSupport.getProductSnapshots(productIds);
     }
 
     @Transactional

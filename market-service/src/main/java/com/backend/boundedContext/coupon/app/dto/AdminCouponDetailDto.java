@@ -21,6 +21,7 @@ import java.util.List;
  * @param stoppedAt          중지 시각. 중지되지 않았으면 null
  * @param usedCount          사용(USED) 수
  * @param usedDiscountAmount 사용(USED)된 할인 합계
+ * @param productCoupon      상품 쿠폰 정보 (인플루언서, 대상 상품, 코드, 할인). 장바구니 쿠폰이면 null
  * @param usages             사용 내역 (최신순, page와 size로 나눠 조회)
  */
 public record AdminCouponDetailDto(
@@ -42,10 +43,11 @@ public record AdminCouponDetailDto(
         long usedCount,
         long usedDiscountAmount,
         LocalDateTime createdAt,
+        ProductCouponInfoDto productCoupon,
         PageResponse<AdminCouponUsageDto> usages
 ) {
     public static AdminCouponDetailDto of(Coupon coupon, LocalDateTime now, CouponUsageStat usedStat,
-                                          PageResponse<AdminCouponUsageDto> usages) {
+                                          ProductCouponInfoDto productCoupon, PageResponse<AdminCouponUsageDto> usages) {
         return new AdminCouponDetailDto(
                 coupon.getId(),
                 coupon.getCouponType(),
@@ -65,6 +67,7 @@ public record AdminCouponDetailDto(
                 usedStat.count(),
                 usedStat.discountAmount(),
                 coupon.getCreatedAt(),
+                productCoupon,
                 usages
         );
     }

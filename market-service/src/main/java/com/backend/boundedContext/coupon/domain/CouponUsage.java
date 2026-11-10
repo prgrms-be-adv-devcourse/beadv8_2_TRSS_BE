@@ -15,6 +15,8 @@ import java.util.List;
  * <p>한 쿠폰을 여러 회원이 쓰므로 "썼는지"는 쿠폰이 아니라 이 기록으로 관리한다.
  * 1인 1회는 같은 쿠폰과 회원의 RESERVED, USED 기록이 있는지로 보고,
  * DB에서도 부분 유니크 인덱스(uk_coupon_usage_member_active)로 한 번 더 막는다.
+ * 한 주문에는 쿠폰 종류(상품, 장바구니)마다 1개만 쓸 수 있다(최대 2개). 같은 주문·종류의 RESERVED, USED 기록이 있는지로 보고,
+ * DB에서도 부분 유니크 인덱스(uk_coupon_usage_order_type)로 막는다. 그래서 쿠폰 종류를 이 기록에도 둔다.
  */
 @Entity
 @Table(name = "coupon_usage",
@@ -41,6 +43,11 @@ public class CouponUsage extends BaseIdAndTime {
     @Column(nullable = false)
     private Long orderId;
 
+    // 쿠폰 종류 (주문당 종류별 1개 판단용, 쿠폰에서 복사. 바뀌지 않는다)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, updatable = false)
+    private CouponType couponType;
+
     // 상품 쿠폰이 붙은 주문 항목. 장바구니 쿠폰은 null
     private Long orderItemId;
 
@@ -65,6 +72,7 @@ public class CouponUsage extends BaseIdAndTime {
         usage.coupon = coupon;
         usage.memberId = memberId;
         usage.orderId = orderId;
+        usage.couponType = coupon.getCouponType();
         usage.orderItemId = orderItemId;
         usage.discountAmount = discountAmount;
         usage.status = CouponUsageStatus.RESERVED;

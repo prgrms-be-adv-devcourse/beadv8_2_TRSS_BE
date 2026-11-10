@@ -1,5 +1,6 @@
 package com.backend.boundedContext.order.in;
 
+import com.backend.shared.order.dto.CartLineDto;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -53,5 +54,10 @@ public class OrderApiAdapter implements OrderApi {
     @Override
     public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
         return orderFacade.getCartItemsAmount(buyerId, cartItemIds);
+    }
+
+    @Override
+    public List<CartLineDto> getCartLines(Long buyerId, Collection<Long> cartItemIds) {
+        return orderFacade.getCartLines(buyerId, cartItemIds);
     }
 }

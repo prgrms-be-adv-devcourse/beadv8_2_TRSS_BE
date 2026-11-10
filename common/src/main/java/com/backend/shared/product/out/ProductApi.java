@@ -1,6 +1,7 @@
 package com.backend.shared.product.out;
 
 import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.dto.ProductSnapshotDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
 
@@ -25,6 +26,16 @@ public interface ProductApi {
      * </ul>
      */
     List<OptionSnapshotDto> getOptions(Collection<Long> optionIds);
+
+    /**
+     * 상품 여러 개의 현재 정보를 조회한다 (상품 단위). 쿠폰 발행과 협약 pick 상품 목록에서 쓴다.
+     *
+     * <ul>
+     *   <li>삭제, 판매 중지된 상품도 결과에 포함한다 (onSale = false).</li>
+     *   <li>존재하지 않는 ID만 결과에서 빠지고, 결과 순서는 보장하지 않는다.</li>
+     * </ul>
+     */
+    List<ProductSnapshotDto> getProducts(Collection<Long> productIds);
 
     /**
      * 주문 생성 시 재고를 차감한다 (재고 이력 사유: ORDER_DEDUCT).
