@@ -1,11 +1,13 @@
 package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -53,6 +55,9 @@ class ProductFacadeProductTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     @MockitoBean
@@ -79,7 +84,7 @@ class ProductFacadeProductTest {
         assertThat(options).hasSize(1);
         ProductOption option = options.getFirst();
         assertThat(option.getName()).isEqualTo("기본");
-        assertThat(option.getStock()).isEqualTo(30);
+        assertThat(optionStock(option).getStock()).isEqualTo(30);
 
         List<StockHistory> histories = stockHistoryRepository.findAll().stream()
                 .filter(h -> h.getOption().getId().equals(option.getId()))
@@ -159,5 +164,10 @@ class ProductFacadeProductTest {
 
         private final int status;
         private final String msg;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

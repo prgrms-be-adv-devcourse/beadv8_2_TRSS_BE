@@ -43,25 +43,31 @@ class ProductTest {
     }
 
     @Test
-    @DisplayName("기본 옵션은 이름이 '기본'이고 초기 재고를 갖는다")
+    @DisplayName("기본 옵션은 이름이 '기본'이고, 옵션 재고는 옵션 ID를 ID로 쓰고 초기 재고를 갖는다")
     void createDefaultOption() {
         Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
 
-        ProductOption option = ProductOption.createDefault(product, 30);
+        ProductOption option = savedDefaultOption(product);
+        OptionStock stock = OptionStock.init(option, 30);
 
         assertThat(option.getName()).isEqualTo(ProductOption.DEFAULT_NAME).isEqualTo("기본");
-        assertThat(option.getStock()).isEqualTo(30);
         assertThat(option.getProduct()).isSameAs(product);
+        assertThat(stock.getId()).isEqualTo(option.getId());
+        assertThat(stock.getOption()).isSameAs(option);
+        assertThat(stock.getStock()).isEqualTo(30);
     }
 
     @Test
-    @DisplayName("기본 옵션의 초기 재고는 1 이상, 최대 재고 이하여야 한다")
+    @DisplayName("옵션의 초기 재고는 1 이상, 최대 재고 이하여야 하고, 저장하지 않은(ID 없는) 옵션에는 만들 수 없다")
     void createDefaultOptionWithInvalidStock() {
         Product product = Product.create(10L, skincare, "수분 크림", "설명", 25_000);
+        ProductOption option = savedDefaultOption(product);
 
-        assertThatThrownBy(() -> ProductOption.createDefault(product, 0))
+        assertThatThrownBy(() -> OptionStock.init(option, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> ProductOption.createDefault(product, ProductOption.MAX_STOCK + 1))
+        assertThatThrownBy(() -> OptionStock.init(option, OptionStock.MAX_STOCK + 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> OptionStock.init(ProductOption.createDefault(product), 30))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -119,9 +125,9 @@ class ProductTest {
     @Test
     @DisplayName("INIT 재고 이력은 초기 재고만큼 늘고, 주문 정보가 없다")
     void initStockHistory() {
-        ProductOption option = ProductOption.createDefault(Product.create(10L, skincare, "수분 크림", "설명", 25_000), 30);
+        ProductOption option = savedDefaultOption(Product.create(10L, skincare, "수분 크림", "설명", 25_000));
 
-        StockHistory history = StockHistory.ofInit(option);
+        StockHistory history = StockHistory.ofInit(OptionStock.init(option, 30));
 
         assertThat(history.getChangeType()).isEqualTo(StockChangeType.INIT);
         assertThat(history.getChangeQty()).isEqualTo(30);
@@ -224,5 +230,12 @@ class ProductTest {
                     .extracting("resultCode").isEqualTo("409-PRODUCT_NOT_ON_SALE");
         }
         assertThat(stopped.getStoppedBy()).isEqualTo(ProductStoppedBy.SELLER_WITHDRAWN);
+    }
+
+    /** 옵션 재고는 저장된 옵션(ID 있음)에만 만들 수 있으므로 ID를 넣어 둔다 */
+    private static ProductOption savedDefaultOption(Product product) {
+        ProductOption option = ProductOption.createDefault(product);
+        ReflectionTestUtils.setField(option, "id", 1L);
+        return option;
     }
 }

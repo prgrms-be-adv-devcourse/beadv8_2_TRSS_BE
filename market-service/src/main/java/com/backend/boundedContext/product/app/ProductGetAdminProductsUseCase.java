@@ -3,7 +3,7 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.AdminProductSummaryDto;
 import com.backend.boundedContext.product.domain.AdminProductDisplayStatus;
 import com.backend.boundedContext.product.domain.Product;
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
@@ -56,11 +56,11 @@ public class ProductGetAdminProductsUseCase {
     private PageResponse<AdminProductSummaryDto> toSummaries(Page<Product> products) {
         categoryRepository.findAll();   // 카테고리는 십여 개라 한 번에 읽어 두면 상품마다 따로 조회하지 않는다
         List<Long> productIds = products.map(Product::getId).getContent();
-        Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(productIds);
+        Map<Long, List<OptionStock>> stocks = productSupport.getOptionStocksByProductId(productIds);
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
 
         return PageResponse.from(products, product -> {
-            List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
+            List<OptionStock> optionStocks = stocks.getOrDefault(product.getId(), List.of());
             return new AdminProductSummaryDto(
                     product.getId(),
                     product.getSellerId(),
@@ -68,8 +68,8 @@ public class ProductGetAdminProductsUseCase {
                     product.getName(),
                     product.getCategory().getName(),
                     product.getPrice(),
-                    productOptions.stream().mapToInt(ProductOption::getStock).sum(),
-                    AdminProductDisplayStatus.of(product, ProductSupport.isSoldOut(productOptions)),
+                    ProductSupport.sumStock(optionStocks),
+                    AdminProductDisplayStatus.of(product, ProductSupport.isSoldOut(optionStocks)),
                     product.getStoppedBy(),
                     product.getStoppedReason(),
                     product.getStoppedAt(),
