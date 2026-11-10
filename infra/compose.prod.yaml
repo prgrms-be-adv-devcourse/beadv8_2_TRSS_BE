@@ -25,7 +25,9 @@ x-app-healthcheck: &app-healthcheck
   # 시간이 다 되면 Docker가 요청을 끊어 앱에 Broken pipe가 나므로 넉넉히 기다린다(평소 응답은 1초 미만)
   timeout: 15s
   retries: 3
-  start_period: 90s   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다
+  # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다. 이 시간 안에 응답하면 바로 healthy가 된다.
+  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초). 그보다 넉넉하게 둔다
+  start_period: 180s
 
 services:
   nginx:
