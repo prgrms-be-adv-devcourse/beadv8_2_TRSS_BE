@@ -25,6 +25,16 @@ public class NotificationFacade {
         notificationCreateUseCase.createOrderPaid(memberId, orderId);
     }
 
+    @Transactional
+    public void createDeliveryStarted(Long memberId, Long orderId, String carrierName, String trackingNumber) {
+        notificationCreateUseCase.createDeliveryStarted(memberId, orderId, carrierName, trackingNumber);
+    }
+
+    @Transactional
+    public void createDeliveryCompleted(Long memberId, Long orderId) {
+        notificationCreateUseCase.createDeliveryCompleted(memberId, orderId);
+    }
+
     @Transactional(readOnly = true)
     public NotificationListDto getNotifications(Long memberId, Long cursor, int size) {
         return notificationGetNotificationsUseCase.getNotifications(memberId, cursor, size);

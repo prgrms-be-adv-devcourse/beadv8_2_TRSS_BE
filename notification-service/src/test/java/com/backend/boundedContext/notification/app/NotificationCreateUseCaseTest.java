@@ -40,4 +40,26 @@ class NotificationCreateUseCaseTest {
         });
         assertThat(notificationFacade.getUnreadCount(MEMBER_ID)).isEqualTo(1L);
     }
+
+    @Test
+    @DisplayName("배송 시작 알림: 문구에 택배사·송장번호가 들어감")
+    void createDeliveryStarted() {
+        notificationFacade.createDeliveryStarted(MEMBER_ID, ORDER_ID, "CJ대한통운", "123456789012");
+
+        assertThat(notificationRepository.findAll()).singleElement().satisfies(notification -> {
+            assertThat(notification.getType()).isEqualTo(NotificationType.DELIVERY_STARTED);
+            assertThat(notification.getMessage()).isEqualTo("상품이 발송되었습니다. (CJ대한통운 123456789012)");
+        });
+    }
+
+    @Test
+    @DisplayName("배송 완료 알림: 구매자의 배송 완료 알림으로 저장됨")
+    void createDeliveryCompleted() {
+        notificationFacade.createDeliveryCompleted(MEMBER_ID, ORDER_ID);
+
+        assertThat(notificationRepository.findAll()).singleElement().satisfies(notification -> {
+            assertThat(notification.getMemberId()).isEqualTo(MEMBER_ID);
+            assertThat(notification.getType()).isEqualTo(NotificationType.DELIVERY_COMPLETED);
+        });
+    }
 }
