@@ -87,6 +87,17 @@ class ProductFacadeStockTest {
     }
 
     @Test
+    @DisplayName("옵션 재고 저장: ID를 직접 넣어도 새 재고면 merge(SELECT) 없이 persist해서 넘긴 객체를 그대로 돌려준다")
+    void saveNewOptionStockPersists() {
+        ProductOption newOption = productOptionRepository.save(ProductOption.createDefault(product));
+        OptionStock newStock = OptionStock.init(newOption, 3);
+
+        assertThat(newStock.isNew()).isTrue();
+        assertThat(optionStockRepository.save(newStock)).isSameAs(newStock);   // merge였다면 복사본을 돌려준다
+        assertThat(newStock.isNew()).isFalse();
+    }
+
+    @Test
     @DisplayName("getOptions: 재고 행이 없는 옵션은 없는 ID처럼 빠진다 (NPE 없이)")
     void getOptionsWithoutStockRow() {
         ProductOption noStock = productOptionRepository.save(ProductOption.createDefault(product));
