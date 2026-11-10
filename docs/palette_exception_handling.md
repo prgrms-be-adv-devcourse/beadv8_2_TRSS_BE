@@ -285,7 +285,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-CATEGORY_NOT_SELECTABLE | 상품 등록·수정 시 사용 중인 소분류가 아닌 카테고리 선택 |
 | order (은정) | 400-SELF_PURCHASE_NOT_ALLOWED | 본인 상품 담기·주문 |
 | | 400-STOCK_EXCEEDED | 장바구니 수량 > 재고 |
-| | 409-PRICE_CHANGED | 예상 금액 ≠ 현재 금액 (`data.currentAmount`) |
+| | 409-PRICE_CHANGED | 예상 결제 금액(쿠폰 할인 후) ≠ 실제 결제 금액 (`data.currentAmount`) |
 | | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기 주문에 포함된 장바구니 항목 (`data.pendingOrderIds`: 그 결제 대기 주문 ID, 오름차순) |
 | | 400-IDEMPOTENCY_KEY_INVALID | 주문 생성 `Idempotency-Key`가 비어 있거나 64자 초과 |
 | | 409-IDEMPOTENCY_KEY_EXPIRED | 같은 `Idempotency-Key`로 만든 주문이 이미 취소(만료 포함)됨. 새 키로 다시 주문 |
@@ -294,6 +294,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
 | | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
 | | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정 |
+| | 409-ORDER_COUPON_NOT_AVAILABLE | 주문에 쿠폰 반영이 꺼져 있을 때(custom.order.couponEnabled = false) 주문 생성에 쿠폰을 보냄 |
 | payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족. API 응답은 주문 결제가 order의 `OrderErrorCode.INSUFFICIENT_BALANCE`로 던진다(`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`). payment 코드는 `Wallet` 출금 안전장치 |
 | | 400-PAYMENT_PERIOD_INVALID | 조회 시작일 > 종료일 (거래 내역, 관리자 결제·충전 조회) |
 | | 400-TOPUP_AMOUNT_INVALID | 1만 원 단위·1만~100만 원 위반 |
@@ -326,7 +327,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-COUPON_SOLD_OUT | 수량 제한 쿠폰의 남은 수량 없음 (조건부 UPDATE로 판단) |
 | | 409-COUPON_ALREADY_USED | 같은 회원이 같은 쿠폰을 이미 예약했거나 사용함 (1인 1회, 동시 요청은 부분 유니크 인덱스 위반을 이 코드로 바꿈) |
 | | 409-COUPON_ORDER_LIMIT_EXCEEDED | 이 주문에 같은 종류의 쿠폰을 이미 예약했거나 사용함 (한 주문에 상품 쿠폰 1개 + 장바구니 쿠폰 1개까지, 동시 요청은 부분 유니크 인덱스 uk_coupon_usage_order_type 위반을 이 코드로 바꿈) |
-| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등), 상품 쿠폰 코드 검증에서 지정한 장바구니 항목이 판매 중인 대상 상품이 아님 |
+| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등), 상품 쿠폰 코드 검증에서 지정한 장바구니 항목이 판매 중인 대상 상품이 아님, 할인 후 금액이 0원이 되는 쿠폰(정액 할인액 ≥ 항목 금액) |
 | | 400-COUPON_MIN_ORDER_NOT_MET | 장바구니 쿠폰의 가장 낮은 구간 최소 주문 금액에 못 미침 |
 | | 404-COUPON_CODE_NOT_FOUND | 없는 상품 쿠폰 코드 (코드 검증, 대소문자 구분 없음) |
 | | 409-COUPON_PERIOD_OVERLAPPED | 같은 인플루언서와 상품으로 유효 기간이 겹치는 운영 중 쿠폰이 있음 (발행, 수정) |

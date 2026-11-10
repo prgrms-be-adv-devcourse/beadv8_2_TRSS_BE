@@ -30,6 +30,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
+import com.backend.boundedContext.order.in.dto.PriceChangedResponse;
 import com.backend.boundedContext.order.in.dto.ShippingAddressRequest;
 import com.backend.boundedContext.order.in.dto.ShippingAddressResponse;
 import com.backend.global.exception.DomainException;
@@ -57,6 +58,20 @@ class ApiV1OrderControllerDeliveryTest {
     @MockitoBean private OrderFacade orderFacade;
 
     @Test
+    @DisplayName("주문 생성: 예상 결제 금액이 다르면 409-PRICE_CHANGED이고 data.currentAmount에 실제 결제 금액을 담는다")
+    void create_priceChanged() throws Exception {
+        given(orderFacade.createOrder(eq(MEMBER_ID), isNull(), eq(List.of(1L)), eq(22000L), isNull(), any()))
+                .willThrow(new DomainException(OrderErrorCode.PRICE_CHANGED, new PriceChangedResponse(25000)));
+
+        mockMvc.perform(post("/api/v1/orders").header("Authorization", bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cartItemIds\":[1],\"expectedTotalPrice\":22000}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.resultCode").value("409-PRICE_CHANGED"))
+                .andExpect(jsonPath("$.data.currentAmount").value(25000));
+    }
+
+    @Test
     @DisplayName("주문 생성: shippingAddress를 생략하면(지금 프론트) 201이고 Facade에 null로 넘긴다")
     void create_withoutShippingAddress() throws Exception {
         mockMvc.perform(post("/api/v1/orders").header("Authorization", bearer())
@@ -65,7 +80,7 @@ class ApiV1OrderControllerDeliveryTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.resultCode").value("201-1"));
 
-        verify(orderFacade).createOrder(eq(MEMBER_ID), isNull(), eq(List.of(1L, 2L)), eq(30000L), isNull());
+        verify(orderFacade).createOrder(eq(MEMBER_ID), isNull(), eq(List.of(1L, 2L)), eq(30000L), isNull(), any());
     }
 
     @Test
@@ -77,7 +92,7 @@ class ApiV1OrderControllerDeliveryTest {
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<ShippingAddressRequest> captor = ArgumentCaptor.forClass(ShippingAddressRequest.class);
-        verify(orderFacade).createOrder(eq(MEMBER_ID), isNull(), eq(List.of(1L)), eq(30000L), captor.capture());
+        verify(orderFacade).createOrder(eq(MEMBER_ID), isNull(), eq(List.of(1L)), eq(30000L), captor.capture(), any());
         assertThat(captor.getValue().receiverName()).isEqualTo("홍길동");
         assertThat(captor.getValue().zipCode()).isEqualTo("06236");
     }
@@ -91,7 +106,7 @@ class ApiV1OrderControllerDeliveryTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("shippingAddress.receiverPhone"));
 
-        verify(orderFacade, never()).createOrder(anyLong(), any(), anyList(), anyLong(), any());
+        verify(orderFacade, never()).createOrder(anyLong(), any(), anyList(), anyLong(), any(), any());
     }
 
     @Test
@@ -103,7 +118,7 @@ class ApiV1OrderControllerDeliveryTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.data.fieldErrors[0].field").value("shippingAddress.zipCode"));
 
-        verify(orderFacade, never()).createOrder(anyLong(), any(), anyList(), anyLong(), any());
+        verify(orderFacade, never()).createOrder(anyLong(), any(), anyList(), anyLong(), any(), any());
     }
 
     @Test
@@ -125,7 +140,7 @@ class ApiV1OrderControllerDeliveryTest {
                 9L, "20261108-0001", OrderStatus.PAID, 10_000, LocalDateTime.now(), LocalDateTime.now(), 0,
                 LocalDateTime.now(), null, null, List.of(), List.of(),
                 new ShippingAddressResponse("홍길동", "01012345678", "06236", "서울", null, null),
-                null, null, true));
+                null, null, true, 0, 0, 10_000));
 
         mockMvc.perform(get("/api/v1/orders/9").header("Authorization", bearer()))
                 .andExpect(status().isOk())

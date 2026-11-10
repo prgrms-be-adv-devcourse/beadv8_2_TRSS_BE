@@ -14,6 +14,10 @@ import java.util.List;
  * @param deliveredAt         배송 완료 시각(market이 받은 배송 완료 이벤트 기준). 배송 전이면 null
  * @param delivery            배송 정보. 배송지 없는 주문·결제 전·배송 건이 아직 없음(결제 직후)·조회 실패면 null
  * @param deliveryUnavailable 배송 정보를 조회하지 못했으면 true (delivery 서비스 장애). 이때도 주문 상세는 200으로 응답한다
+ * @param totalPrice          상품 금액 합계 (할인 전)
+ * @param productDiscountAmount    상품 쿠폰 할인 합계
+ * @param cartCouponDiscountAmount 장바구니 쿠폰 할인액
+ * @param payAmount                결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인
  */
 public record OrderDetailResponse(
         Long orderId,
@@ -31,6 +35,9 @@ public record OrderDetailResponse(
         ShippingAddressResponse shippingAddress,
         LocalDateTime deliveredAt,
         OrderDeliveryResponse delivery,
-        boolean deliveryUnavailable
+        boolean deliveryUnavailable,
+        long productDiscountAmount,
+        long cartCouponDiscountAmount,
+        long payAmount
 ) {
 }

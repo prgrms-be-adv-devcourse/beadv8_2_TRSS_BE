@@ -25,7 +25,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductCoupon extends BaseIdAndTime {
 
-    private static final int MAX_RATE = 100;
+    private static final int RATE_BASE = 100;
+    // 정률 최대 할인율. 100% 쿠폰은 결제 금액이 0원이 되므로 정책상 발급하지 않는다
+    private static final int MAX_RATE = 99;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "coupon_id", nullable = false, unique = true)
@@ -82,7 +84,7 @@ public class ProductCoupon extends BaseIdAndTime {
         this.maxDiscountAmount = discount.maxDiscountAmount();
     }
 
-    // FIXED: 할인액 1원 이상, 최대 할인액 없음 / RATE: 1~100%, 최대 할인액 1원 이상 필수. 요청 DTO에서 먼저 400으로 거른다
+    // FIXED: 할인액 1원 이상, 최대 할인액 없음 / RATE: 1~99%(100% 쿠폰은 발급하지 않음), 최대 할인액 1원 이상 필수. 요청 DTO에서 먼저 400으로 거른다
     private static void validateDiscount(ProductCouponDiscount discount) {
         boolean valid = switch (discount.discountType()) {
             case FIXED -> discount.discountValue() >= 1 && discount.maxDiscountAmount() == null;
@@ -100,16 +102,18 @@ public class ProductCoupon extends BaseIdAndTime {
     }
 
     /**
-     * 주문 항목 금액(단가 × 수량)에 대한 할인액. 항목 금액을 넘지 않는다.
-     * 정률은 원 단위 버림 후 최대 할인액으로 자른다.
+     * 주문 항목 금액(단가 × 수량)에 대한 할인액. 정률은 원 단위 버림 후 최대 할인액으로 자른다.
+     * 정책상 할인 후 금액이 0원이 되는 쿠폰은 적용하지 않는다(0원 결제는 없다).
+     * 할인액이 항목 금액 이상이면(정액 할인액이 항목 금액 이상) 400-COUPON_NOT_APPLICABLE.
      */
     public long discountFor(long lineAmount) {
-        if (lineAmount <= 0) return 0;
-
         long discount = switch (discountType) {
             case FIXED -> discountValue;
-            case RATE -> Math.min(Math.multiplyExact(lineAmount, discountValue) / MAX_RATE, maxDiscountAmount);
+            case RATE -> Math.min(Math.multiplyExact(lineAmount, discountValue) / RATE_BASE, maxDiscountAmount);
         };
-        return Math.min(discount, lineAmount);
+        if (lineAmount <= 0 || discount >= lineAmount) {
+            throw new DomainException(CouponErrorCode.COUPON_NOT_APPLICABLE);
+        }
+        return discount;
     }
 }

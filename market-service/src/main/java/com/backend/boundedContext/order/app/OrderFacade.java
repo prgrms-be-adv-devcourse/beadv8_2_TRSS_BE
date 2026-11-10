@@ -80,8 +80,8 @@ public class OrderFacade {
     // 주문생성
     @Transactional
     public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
-                                           ShippingAddressRequest shippingAddress) {
-        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice, shippingAddress);
+                                           ShippingAddressRequest shippingAddress, OrderCouponSelection coupons) {
+        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice, shippingAddress, coupons);
     }
 
     // 주문목록 조회

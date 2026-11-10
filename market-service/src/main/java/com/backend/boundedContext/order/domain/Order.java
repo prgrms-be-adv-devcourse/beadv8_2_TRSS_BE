@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -51,8 +52,21 @@ public class Order extends BaseIdAndTime {
     @Column(nullable = false, length = 30)
     private OrderStatus status;
 
+    // 상품 금액 합계 (단가 x 수량의 합, 할인 전)
     @Column(nullable = false)
     private long totalPrice;
+
+    // 상품 쿠폰 할인 합계 (항목별 할인의 합)
+    @Column(nullable = false)
+    private long productDiscountAmount;
+
+    // 장바구니 쿠폰 할인액
+    @Column(nullable = false)
+    private long cartCouponDiscountAmount;
+
+    // 결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인
+    @Column(nullable = false)
+    private long payAmount;
 
     @Column(nullable = false)
     private LocalDateTime expiresAt;
@@ -136,8 +150,46 @@ public class Order extends BaseIdAndTime {
         order.totalPrice = order.items.stream()
                 .mapToLong(OrderItem::getLineAmount)
                 .sum();
+        order.payAmount = order.totalPrice;   // 할인은 applyProductCouponDiscount, applyCartCouponDiscount로 반영
 
         return order;
+    }
+
+    /**
+     * 상품 쿠폰 할인을 항목에 붙인다 (주문 생성 때, 쿠폰을 예약한 뒤). 결제 금액도 다시 계산한다.
+     * 한 주문에 상품 쿠폰은 1개라 보통 한 번만 부른다.
+     */
+    public void applyProductCouponDiscount(Long orderItemId, long discountAmount) {
+        OrderItem item = items.stream()
+                .filter(it -> Objects.equals(it.getId(), orderItemId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("주문에 없는 항목입니다. orderItemId=" + orderItemId));
+
+        item.applyCouponDiscount(discountAmount);
+        this.productDiscountAmount = items.stream().mapToLong(OrderItem::getDiscountAmount).sum();
+        recalculatePayAmount();
+    }
+
+    // 상품 쿠폰 할인 후 상품 금액 합계 (장바구니 쿠폰 최소 주문 금액의 기준)
+    public long getProductSubtotal() {
+        return totalPrice - productDiscountAmount;
+    }
+
+    /**
+     * 장바구니 쿠폰 할인을 반영한다 (주문 생성 때, 상품 쿠폰 다음). 할인은 상품 쿠폰 할인 후 상품 금액 합계를 넘을 수 없다.
+     */
+    public void applyCartCouponDiscount(long cartCouponDiscountAmount) {
+        // 정책상 결제 금액이 0원이 되는 일은 없다(장바구니 쿠폰 할인액 < 최소 주문 금액 <= 상품 금액). 들어오면 코드 오류
+        if (cartCouponDiscountAmount < 0 || cartCouponDiscountAmount >= getProductSubtotal()) {
+            throw new IllegalArgumentException("장바구니 쿠폰 할인액이 올바르지 않습니다. orderId=" + getId()
+                    + ", cartCouponDiscountAmount=" + cartCouponDiscountAmount);
+        }
+        this.cartCouponDiscountAmount = cartCouponDiscountAmount;
+        recalculatePayAmount();
+    }
+
+    private void recalculatePayAmount() {
+        this.payAmount = totalPrice - productDiscountAmount - cartCouponDiscountAmount;
     }
 
     // 결제 대기 상태 확인

@@ -6,10 +6,13 @@ import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
+import com.backend.boundedContext.order.domain.OrderCouponPolicy;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
 import com.backend.boundedContext.order.in.dto.PendingOrderConflictResponse;
 import com.backend.boundedContext.order.in.dto.ShippingAddressRequest;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
+import com.backend.boundedContext.order.in.dto.PriceChangedResponse;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
 import com.backend.shared.member.dto.SellerDto;
@@ -53,6 +56,7 @@ class OrderCreateOrderUseCaseTest {
     @Mock OrderRepository orderRepository;
     @Mock ProductApi productApi;
     @Mock MemberApi memberApi;   // 설정하지 않으면 findSellerByMemberId는 Optional.empty() = 판매자 아님
+    @Mock OrderCouponPort orderCouponPort;
 
     OrderCreateOrderUseCase useCase;
 
@@ -62,7 +66,8 @@ class OrderCreateOrderUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1), productApi, memberApi);
+        useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1), productApi, memberApi,
+                new OrderCouponPolicy(false), orderCouponPort);
     }
 
     @Test
@@ -243,7 +248,7 @@ class OrderCreateOrderUseCaseTest {
     }
 
     @Test
-    @DisplayName("예상 금액과 현재 금액이 다르면 PRICE_CHANGED, 저장·재고 차감을 하지 않는다")
+    @DisplayName("예상 금액과 현재 금액이 다르면 PRICE_CHANGED이고 data.currentAmount에 실제 결제 금액을 담으며, 저장·재고 차감을 하지 않는다")
     void priceChanged() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
         givenOptions(onSale(100L, 16000));   // 15000 → 16000
@@ -251,7 +256,8 @@ class OrderCreateOrderUseCaseTest {
 
         assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 15000, null))
                 .isInstanceOf(DomainException.class)
-                .hasFieldOrPropertyWithValue("resultCode", "409-PRICE_CHANGED");
+                .hasFieldOrPropertyWithValue("resultCode", "409-PRICE_CHANGED")
+                .hasFieldOrPropertyWithValue("data", new PriceChangedResponse(16000));
         verify(orderRepository, never()).save(any());
         verify(productApi, never()).deductStock(any());
     }

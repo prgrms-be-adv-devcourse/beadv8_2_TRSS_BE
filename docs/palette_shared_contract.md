@@ -413,8 +413,29 @@ public interface CouponApi {
      * 아직 끝나지 않은 운영 중 쿠폰만 중지하고, 중지된 쿠폰은 상품이 다시 판매 중이 돼도 되살리지 않는다.
      */
     int stopProductCouponsByProducts(Collection<Long> productIds, String reason);
+
+    // 아래 넷은 주문 컨텍스트가 OrderCouponPort를 거쳐 부른다
+
+    /** 주문 생성(재고 차감 뒤): 상품 쿠폰을 주문 항목에 예약하고 그 항목의 할인액을 돌려준다. 한 주문에 1개 */
+    long reserveProductCoupon(Long memberId, String code, Long orderId, Long orderItemId, Long productId, long lineAmount,
+                              LocalDateTime now);
+
+    /** 주문 생성(상품 쿠폰 다음): 장바구니 쿠폰을 예약하고 할인액을 돌려준다. orderAmount는 상품 쿠폰 할인 후 상품 금액 합계(배송비 제외) */
+    long reserveCartCoupon(Long memberId, Long couponId, Long orderId, long orderAmount, LocalDateTime now);
+
+    /** 결제(결제 요청 전): 예약 쿠폰 사용 처리. 예약 뒤 중지, 기간 종료면 409-COUPON_NOT_ACTIVE로 결제 전체 롤백 */
+    int useReservedCoupons(Long orderId, LocalDateTime now);
+
+    /** 결제 전 취소, 만료(OrderCancelSupport): 예약 쿠폰 해제와 수량 복원. 다시 불러도 결과가 같다 */
+    int releaseReservedCoupons(Long orderId, LocalDateTime now);
 }
 ```
+
+- 주문 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. 결제 요청(PayCommand.amount)은 이 결제 금액(payAmount)이다.
+  배송비는 배송비 작업에서 상품 쿠폰 할인 후 금액을 기준으로 더한다(장바구니 쿠폰 기준 금액은 배송비 제외라 바뀌지 않는다).
+- 쿠폰은 설정 custom.order.couponEnabled(환경변수 ORDER_COUPON_ENABLED, 기본 false)가 켜져 있을 때만 주문에 반영한다.
+  꺼져 있을 때 쿠폰을 보내면 409-ORDER_COUPON_NOT_AVAILABLE이라 결제 금액은 상품 금액 합계와 같다.
+  결제 서비스의 장바구니 쿠폰 지원금(COUPON_SUBSIDY)과 정산의 상품 쿠폰 할인 후 금액 반영이 끝난 뒤에 켠다.
 
 - 쿠폰 컨텍스트가 부르는 다른 기능은 모두 쿠폰 쪽 포트를 거친다: CouponSellerPort(MemberApi), CouponProductPort(ProductApi), CouponOrderPort(OrderApi).
 - 인플루언서(CouponInfluencerPort)와 pick(InfluencerPickPort)은 아직 구현이 없어 임시 구현체가 "인플루언서 아님", "pick 안 함"으로 답한다. 인플루언서와 pick이 생기면 구현체만 바꾼다.

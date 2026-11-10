@@ -42,7 +42,7 @@ class OrderCreateRequestValidationTest {
 
     private static Set<String> invalidFields(ShippingAddressRequest shippingAddress) {
         Set<ConstraintViolation<OrderCreateRequest>> violations =
-                validator.validate(new OrderCreateRequest(List.of(1L), 15000L, shippingAddress));
+                validator.validate(new OrderCreateRequest(List.of(1L), 15000L, shippingAddress, null, null));
         return violations.stream().map(v -> v.getPropertyPath().toString()).collect(java.util.stream.Collectors.toSet());
     }
 

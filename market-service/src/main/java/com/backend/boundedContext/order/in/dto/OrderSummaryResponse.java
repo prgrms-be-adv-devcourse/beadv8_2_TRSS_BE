@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 /**
  * 주문 목록의 한 줄
  *
+ * @param totalPrice                결제 금액(쿠폰 할인 후). 상세의 payAmount와 같다
  * @param representativeProductName 대표 상품명
  * @param thumbnailUrl              대표 상품의 현재 대표 이미지 URL. 상품이 삭제됐거나 이미지가 없으면 null
  * @param itemCount                 주문 항목 수

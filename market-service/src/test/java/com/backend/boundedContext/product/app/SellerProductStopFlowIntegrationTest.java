@@ -1,5 +1,6 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.order.app.OrderCouponSelection;
 import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.out.CartRepository;
@@ -151,7 +152,8 @@ class SellerProductStopFlowIntegrationTest {
     private Long createPendingOrder() {
         orderFacade.addCartItem(buyerId, optionId, ORDER_QUANTITY);
         Long cartItemId = orderFacade.getCart(buyerId).items().getFirst().itemId();
-        return orderFacade.createOrder(buyerId, null, List.of(cartItemId), PRICE * ORDER_QUANTITY, null).orderId();
+        return orderFacade.createOrder(buyerId, null, List.of(cartItemId), PRICE * ORDER_QUANTITY, null,
+                OrderCouponSelection.NONE).orderId();
     }
 
     private int stock() {
