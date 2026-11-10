@@ -49,7 +49,7 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../../palette-web:/usr/share/nginx/html:ro
-    # nginx는 시작할 때 member·market·payment·settlement·delivery의 이름을 찾으므로 먼저 떠 있어야 한다.
+    # nginx는 시작할 때 member·market·payment·settlement·delivery·notification의 이름을 찾으므로 먼저 떠 있어야 한다.
     # grafana는 요청할 때 찾으므로(nginx/default.conf의 resolver) 꺼져 있어도 nginx는 뜬다.
     depends_on:
       - member
@@ -57,6 +57,7 @@ services:
       - payment
       - settlement
       - delivery
+      - notification
 
   # 회원·인증·판매자(member-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
   # DB는 member 스키마에 member_user로 접속한다(DB_USERNAME과 다른 계정).
@@ -274,6 +275,44 @@ services:
       kafka:
         condition: service_healthy
 
+  # 구매자 알림(notification-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 notification 스키마에 notification_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 새 스키마라 테이블 이전은 없다. 처음 띄우기 전에 운영 DB에 notification 스키마·계정만 만든다(postgres/init/01-init-schemas.sh).
+  # 주문 완료(order.events)·배송 시작·완료(delivery.events)를 Kafka로 받아 알림을 저장한다. 다른 서비스를 HTTP로 부르지 않는다.
+  notification:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: notification-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-notification
+    container_name: palette-notification
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?NOTIFICATION_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # 가장 작은 512m(힙 384MB). 알림 저장·목록 조회뿐이라 가볍고, 서버 8GB에 앱이 6개가 되어 줄인다.
+    # 배포 후 실제 사용량(docker stats)을 보고 모자라면 늘린다
+    mem_limit: 512m
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8086 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 알림은 Redis를 쓰지 않는다
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     container_name: palette-postgres
@@ -290,6 +329,7 @@ services:
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD가 .env에 없습니다}
       SETTLEMENT_DB_PASSWORD: ${SETTLEMENT_DB_PASSWORD:?SETTLEMENT_DB_PASSWORD가 .env에 없습니다}
       DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD가 .env에 없습니다}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD가 .env에 없습니다}
       AI_DB_PASSWORD: ${AI_DB_PASSWORD:?AI_DB_PASSWORD가 .env에 없습니다}
       READONLY_DB_PASSWORD: ${READONLY_DB_PASSWORD:?READONLY_DB_PASSWORD가 .env에 없습니다}
     # 서버 안(127.0.0.1)에서만 접속된다. 외부에서 보려면 SSH 터널을 쓴다.
