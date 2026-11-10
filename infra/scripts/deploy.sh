@@ -15,8 +15,8 @@ set -euo pipefail
 APP_SERVICES=(member market payment settlement delivery notification)
 
 # 모든 앱 이미지에 들어가는 파일. 하나라도 바뀌면 앱을 전부 다시 빌드한다.
-#   common/(공통 코드), Gradle 설정, Dockerfile
-SHARED_PATHS='^(common/|gradle/|gradlew$|build\.gradle\.kts$|settings\.gradle\.kts$|lombok\.config$|Dockerfile$)'
+#   common/(공통 코드), Gradle 설정, Dockerfile, infra/compose.prod.yaml(앱 build.args 등이 여기 있어 바뀌면 이미지를 다시 만든다)
+SHARED_PATHS='^(common/|gradle/|gradlew$|build\.gradle\.kts$|settings\.gradle\.kts$|lombok\.config$|Dockerfile$|infra/compose\.prod\.yaml$)'
 
 # 마지막으로 배포에 성공한 커밋. 이번 커밋과 비교해 바뀐 앱을 고른다. 저장소 밖(서버 홈)에 둬서 git이 건드리지 않는다
 STATE_FILE="${DEPLOY_STATE_FILE:-$HOME/.palette-last-deployed}"
