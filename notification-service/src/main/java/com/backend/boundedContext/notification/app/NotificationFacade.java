@@ -15,9 +15,15 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class NotificationFacade {
 
+    private final NotificationCreateUseCase notificationCreateUseCase;
     private final NotificationGetNotificationsUseCase notificationGetNotificationsUseCase;
     private final NotificationGetUnreadCountUseCase notificationGetUnreadCountUseCase;
     private final NotificationReadUseCase notificationReadUseCase;
+
+    @Transactional
+    public void createOrderPaid(Long memberId, Long orderId) {
+        notificationCreateUseCase.createOrderPaid(memberId, orderId);
+    }
 
     @Transactional(readOnly = true)
     public NotificationListDto getNotifications(Long memberId, Long cursor, int size) {
