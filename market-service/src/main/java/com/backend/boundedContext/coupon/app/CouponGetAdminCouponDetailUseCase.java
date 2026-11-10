@@ -38,6 +38,7 @@ public class CouponGetAdminCouponDetailUseCase {
         PageResponse<AdminCouponUsageDto> usages = PageResponse.from(
                 couponUsageRepository.findAllByCouponId(couponId, latestFirst), AdminCouponUsageDto::from);
 
-        return AdminCouponDetailDto.of(coupon, now, usedStat, usages);
+        return AdminCouponDetailDto.of(coupon, now, usedStat,
+                couponSupport.getProductCouponInfos(List.of(couponId)).get(couponId), usages);
     }
 }

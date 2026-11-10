@@ -1,5 +1,6 @@
 package com.backend.boundedContext.coupon.out;
 
+import com.backend.boundedContext.coupon.domain.CouponType;
 import com.backend.boundedContext.coupon.domain.CouponUsage;
 import com.backend.boundedContext.coupon.domain.CouponUsageStatus;
 import org.springframework.data.domain.Page;
@@ -17,6 +18,10 @@ public interface CouponUsageRepository extends JpaRepository<CouponUsage, Long> 
 
     /** 이 회원이 이 쿠폰을 이미 예약했거나 사용했는지 (1인 1회) */
     boolean existsByCouponIdAndMemberIdAndStatusIn(Long couponId, Long memberId, Collection<CouponUsageStatus> statuses);
+
+    /** 이 주문에 이 종류의 쿠폰을 이미 예약했거나 사용했는지 (주문당 종류별 1개) */
+    boolean existsByOrderIdAndCouponTypeAndStatusIn(Long orderId, CouponType couponType,
+                                                    Collection<CouponUsageStatus> statuses);
 
     /** 쿠폰들 중 이 회원이 예약했거나 사용한 쿠폰 ID */
     @Query("""

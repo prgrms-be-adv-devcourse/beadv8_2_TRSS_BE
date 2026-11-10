@@ -20,6 +20,7 @@ import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.dto.ProductSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -66,6 +67,23 @@ public class ProductSupport {
                             option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getName(),
                             product.getPrice(), option.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
+                .toList();
+    }
+
+    /**
+     * 상품 여러 개의 현재 정보 (ProductApi.getProducts). 삭제, 판매 중지된 상품도 포함하고 없는 ID만 빠진다.
+     * onSale은 구매자에게 보여 줄 수 있는 상품인지(판매 중이고 카테고리 사용 중)로 정한다.
+     */
+    public List<ProductSnapshotDto> getProductSnapshots(Collection<Long> productIds) {
+        if (productIds.isEmpty()) return List.of();
+
+        List<Product> products = productRepository.findAllById(new HashSet<>(productIds));
+        Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(
+                products.stream().map(Product::getId).collect(Collectors.toSet()));
+
+        return products.stream()
+                .map(product -> new ProductSnapshotDto(product.getId(), product.getSellerId(), product.getName(),
+                        product.getPrice(), product.isDisplayable(), thumbnailUrls.get(product.getId())))
                 .toList();
     }
 

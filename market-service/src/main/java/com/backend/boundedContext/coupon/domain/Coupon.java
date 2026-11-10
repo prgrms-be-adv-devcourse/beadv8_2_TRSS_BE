@@ -110,6 +110,68 @@ public class Coupon extends BaseIdAndTime {
         return coupon;
     }
 
+    /**
+     * 상품 쿠폰 등록 (판매자). 대상 상품, 코드, 할인 내용은 {@link ProductCoupon}에 따로 둔다.
+     * 협약, pick, 상품 판매 상태, 기간 겹침은 app 계층이 확인한다.
+     */
+    public static Coupon createProductCoupon(Long sellerId, String name, boolean quantityLimited, Integer totalQuantity,
+                                             LocalDateTime validFrom, LocalDateTime validUntil, LocalDateTime now) {
+        validatePeriod(validFrom, validUntil, now);
+        validateQuantity(quantityLimited, totalQuantity);
+
+        Coupon coupon = new Coupon();
+        coupon.couponType = CouponType.PRODUCT;
+        coupon.issuerType = CouponIssuerType.SELLER;
+        coupon.issuerId = sellerId;
+        coupon.name = name;
+        coupon.quantityLimited = quantityLimited;
+        coupon.totalQuantity = totalQuantity;
+        coupon.remainingQuantity = totalQuantity;
+        coupon.validFrom = validFrom;
+        coupon.validUntil = validUntil;
+        coupon.status = CouponStatus.ACTIVE;
+        return coupon;
+    }
+
+    /**
+     * 시작 전 쿠폰 수정 (쿠폰명, 수량, 기간). 시작 전(SCHEDULED)이 아니면 409-COUPON_NOT_EDITABLE.
+     * 시작 전에는 예약이 있을 수 없으므로 남은 수량을 새 총 수량으로 맞춘다.
+     */
+    public void updateBeforeStart(String name, boolean quantityLimited, Integer totalQuantity,
+                                  LocalDateTime validFrom, LocalDateTime validUntil, LocalDateTime now) {
+        if (displayStatus(now) != CouponDisplayStatus.SCHEDULED) {
+            throw new DomainException(CouponErrorCode.COUPON_NOT_EDITABLE);
+        }
+        validatePeriod(validFrom, validUntil, now);
+        validateQuantity(quantityLimited, totalQuantity);
+
+        this.name = name;
+        this.quantityLimited = quantityLimited;
+        this.totalQuantity = totalQuantity;
+        this.remainingQuantity = totalQuantity;
+        this.validFrom = validFrom;
+        this.validUntil = validUntil;
+    }
+
+    /**
+     * 시작 후 종료 일시 연장. 사용 가능(ACTIVE)일 때만 되고, 끝났거나 중지된 쿠폰은 409-COUPON_NOT_EDITABLE.
+     * 새 종료 일시가 지금 종료 일시보다 늦지 않으면 400-COUPON_PERIOD_INVALID.
+     */
+    public void extendValidUntil(LocalDateTime newValidUntil, LocalDateTime now) {
+        if (displayStatus(now) != CouponDisplayStatus.ACTIVE) {
+            throw new DomainException(CouponErrorCode.COUPON_NOT_EDITABLE);
+        }
+        if (newValidUntil == null || !newValidUntil.isAfter(validUntil)) {
+            throw new DomainException(CouponErrorCode.COUPON_PERIOD_INVALID);
+        }
+        this.validUntil = newValidUntil;
+    }
+
+    // 이 판매자가 발행한 쿠폰인지
+    public boolean isIssuedBySeller(Long sellerId) {
+        return issuerType == CouponIssuerType.SELLER && issuerId.equals(sellerId);
+    }
+
     // 시작 < 종료, 종료 > 현재. 시작은 현재보다 이전이어도 된다(등록 즉시 사용 가능)
     private static void validatePeriod(LocalDateTime validFrom, LocalDateTime validUntil, LocalDateTime now) {
         if (validFrom == null || validUntil == null

@@ -1,6 +1,7 @@
 package com.backend.boundedContext.coupon.app;
 
 import com.backend.boundedContext.coupon.app.dto.AdminCouponSummaryDto;
+import com.backend.boundedContext.coupon.app.dto.ProductCouponInfoDto;
 import com.backend.boundedContext.coupon.domain.Coupon;
 import com.backend.boundedContext.coupon.domain.CouponDisplayStatus;
 import com.backend.boundedContext.coupon.domain.CouponType;
@@ -16,11 +17,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 관리자 전체 쿠폰 목록 (최신 등록순)
- * 보내지 않은 조건은 적용하지 않는다. 상태는 조회 시점 기준으로 계산한 화면 상태로 거른다.
+ * 보내지 않은 조건은 적용하지 않는다. sellerId, influencerId는 상품 쿠폰에만 해당하므로 보내면 장바구니 쿠폰은 빠진다. 상태는 조회 시점 기준으로 계산한 화면 상태로 거른다.
  */
 @Component
 @RequiredArgsConstructor
@@ -29,19 +31,25 @@ public class CouponGetAdminCouponsUseCase {
     private final CouponRepository couponRepository;
     private final CouponSupport couponSupport;
 
-    public PageResponse<AdminCouponSummaryDto> getCoupons(CouponType type, CouponDisplayStatus status, Pageable pageable) {
+    public PageResponse<AdminCouponSummaryDto> getCoupons(CouponType type, CouponDisplayStatus status,
+                                                          Long sellerId, Long influencerId, Pageable pageable) {
         LocalDateTime now = LocalDateTime.now();
         // 요청의 sort는 무시하고 최신 등록순으로만 준다
         Pageable latestFirst = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "id"));
 
         Page<Coupon> coupons = couponRepository.findAll(
-                CouponSpecifications.typeEquals(type).and(CouponSpecifications.displayStatusEquals(status, now)),
+                CouponSpecifications.typeEquals(type)
+                        .and(CouponSpecifications.displayStatusEquals(status, now))
+                        .and(CouponSpecifications.sellerEquals(sellerId))
+                        .and(CouponSpecifications.influencerEquals(influencerId)),
                 latestFirst);
 
-        Map<Long, CouponUsageStat> usedStats = couponSupport.getUsedStats(
-                coupons.getContent().stream().map(Coupon::getId).toList());
+        List<Long> couponIds = coupons.getContent().stream().map(Coupon::getId).toList();
+        Map<Long, CouponUsageStat> usedStats = couponSupport.getUsedStats(couponIds);
+        Map<Long, ProductCouponInfoDto> productCoupons = couponSupport.getProductCouponInfos(couponIds);
 
         return PageResponse.from(coupons, coupon -> AdminCouponSummaryDto.of(coupon, now,
-                usedStats.getOrDefault(coupon.getId(), CouponUsageStat.empty(coupon.getId()))));
+                usedStats.getOrDefault(coupon.getId(), CouponUsageStat.empty(coupon.getId())),
+                productCoupons.get(coupon.getId())));
     }
 }

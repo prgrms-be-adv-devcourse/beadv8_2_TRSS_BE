@@ -63,6 +63,10 @@ public class SecurityConfig {
     private static final String[] SELLER_API_URLS = {
             "/api/v1/seller/**"
     };
+    // 인플루언서 전용 (/api/v1/influencers/** (복수, 인플루언서 신청, 검색)와 다른 경로)
+    private static final String[] INFLUENCER_API_URLS = {
+            "/api/v1/influencer/**"
+    };
     // 구매자 기능. 관리자는 운영 전용이라 구매·판매자 신청을 막음 (/api/v1/sellers/** (복수, 판매자 신청)는 /api/v1/seller/** (단수, 판매자 전용)와 다른 경로)
     private static final String[] BUYER_API_URLS = {
             "/api/v1/cart/**",
@@ -136,6 +140,8 @@ public class SecurityConfig {
                         .requestMatchers(LOGISTICS_API_URLS).hasRole("LOGISTICS")
                         // 판매자 여부는 역할이 아니라 판매자 상태(APPROVED)로 판단하므로, URL에서는 관리자만 막고 판매 기능에서 상태를 확인한다
                         .requestMatchers(SELLER_API_URLS).hasRole("USER")
+                        // 인플루언서도 역할이 아니라 인플루언서 상태(APPROVED)로 판단하므로, URL에서는 관리자만 막고 기능에서 상태를 확인한다
+                        .requestMatchers(INFLUENCER_API_URLS).hasRole("USER")
                         .requestMatchers(BUYER_API_URLS).hasRole("USER")
                         .requestMatchers(WITHDRAWAL_API_URLS).hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/users/me").hasRole("USER")
