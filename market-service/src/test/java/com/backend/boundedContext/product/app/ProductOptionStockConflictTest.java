@@ -50,8 +50,11 @@ class ProductOptionStockConflictTest {
     private static final long ORDER_ITEM_ID = 9_100_000L;
     private static final long SELLER_ID = 10L;
     private static final int INITIAL_STOCK = 10;
-    /** 옵션 수정 트랜잭션이 옵션 행을 UPDATE한 채 커밋하지 않고 머무는 시간 (판매자 수정 요청이 느리게 끝나는 상황) */
-    private static final long EDIT_HOLD_MILLIS = 1_000;
+    /**
+     * 옵션 수정 트랜잭션이 옵션 행을 UPDATE한 채 주문 커밋을 기다리는 최대 시간.
+     * 차감이 잠금을 기다리지 않으면 바로 끝나므로, 넉넉히 잡아도 정상일 때 테스트 시간은 늘지 않는다
+     */
+    private static final long EDIT_HOLD_SECONDS = 5;
 
     @Autowired
     private ProductFacade productFacade;
@@ -144,32 +147,35 @@ class ProductOptionStockConflictTest {
     @DisplayName("[락 대기] 옵션 수정 트랜잭션이 옵션 행을 UPDATE한 채 커밋 전이어도, 같은 옵션의 주문 차감은 기다리지 않는다")
     void optionEditDoesNotDelayDeduct() throws Exception {
         CountDownLatch editLocked = new CountDownLatch(1);
+        CountDownLatch deductCommitted = new CountDownLatch(1);
         ExecutorService executor = Executors.newSingleThreadExecutor();
 
-        // 주문: 수정 트랜잭션이 옵션 행을 잠근(UPDATE) 뒤에 차감을 시도하고, 끝날 때까지 걸린 시간을 잰다
-        Future<Long> order = executor.submit(() -> {
+        // 주문: 수정 트랜잭션이 옵션 행을 잠근(UPDATE) 뒤에 차감하고 커밋한다
+        Future<?> order = executor.submit(() -> {
             await(editLocked);
-            long start = System.nanoTime();
             productFacade.deductStock(List.of(new StockChangeDto(ORDER_ID, ORDER_ITEM_ID, optionId, 1)));
-            return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            deductCommitted.countDown();
+            return null;
         });
 
-        // 판매자 옵션 수정: 이름을 바꿔 UPDATE를 DB에 보내고(옵션 행 잠금), 커밋하지 않은 채 잠시 머문다
-        transactionTemplate.executeWithoutResult(status -> {
+        // 판매자 옵션 수정: 이름을 바꿔 UPDATE를 DB에 보내고(옵션 행 잠금), 커밋하지 않은 채 주문 커밋을 기다린다.
+        // 차감이 옵션 행 잠금을 기다린다면 이 트랜잭션이 끝날 때까지 커밋할 수 없으므로 대기 시간이 지나 false가 된다.
+        // 시간이 아니라 순서(수정 커밋 전에 차감 커밋)로 보므로, 워밍업·GC로 차감이 느려져도 흔들리지 않는다
+        boolean deductCommittedWhileEditOpen = Boolean.TRUE.equals(transactionTemplate.execute(status -> {
             ProductOption option = productOptionRepository.findById(optionId).orElseThrow();
             ReflectionTestUtils.setField(option, "name", "흰색 / M");
             productOptionRepository.flush();
             editLocked.countDown();
-            sleep(EDIT_HOLD_MILLIS);
-        });
+            return awaitQuietly(deductCommitted, EDIT_HOLD_SECONDS);
+        }));
 
-        long deductMillis = order.get(10, TimeUnit.SECONDS);
+        order.get(10, TimeUnit.SECONDS);
         executor.shutdown();
 
+        // 주문은 수정이 끝나기를 기다리지 않았다 (분리 전에는 수정 커밋 뒤에야 차감이 끝났다)
+        assertThat(deductCommittedWhileEditOpen).isTrue();
         assertThat(stock()).isEqualTo(INITIAL_STOCK - 1);
         assertThat(optionName()).isEqualTo("흰색 / M");
-        // 주문은 수정이 끝나기를 기다리지 않았다 (분리 전에는 잠금을 쥔 시간만큼 기다렸다). 여유를 두고 절반 미만으로 본다
-        assertThat(deductMillis).isLessThan(EDIT_HOLD_MILLIS / 2);
     }
 
     private int stock() {
@@ -186,9 +192,10 @@ class ProductOptionStockConflictTest {
                 .count();
     }
 
-    private static void sleep(long millis) {
+    /** 래치가 열리면 true, 시간 안에 안 열리면 false (예외 없이 다음 단계로 넘어가 트랜잭션을 끝낸다) */
+    private static boolean awaitQuietly(CountDownLatch latch, long seconds) {
         try {
-            Thread.sleep(millis);
+            return latch.await(seconds, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
