@@ -1,6 +1,7 @@
 package com.backend.boundedContext.coupon.app;
 
 import com.backend.boundedContext.coupon.CouponFixtures;
+import com.backend.boundedContext.coupon.domain.Coupon;
 import com.backend.boundedContext.coupon.domain.CouponUsage;
 import com.backend.boundedContext.coupon.domain.CouponUsageStatus;
 import com.backend.boundedContext.coupon.out.CouponRepository;
@@ -187,14 +188,19 @@ class CouponReserveConcurrencyTest {
     }
 
     @Test
-    @DisplayName("한 주문에 예약한 쿠폰 2장 중 1장이 중지되면 결제 때 409-COUPON_NOT_ACTIVE이고, 먼저 사용 처리한 1장도 함께 롤백돼 둘 다 RESERVED로 남는다")
+    @DisplayName("한 주문의 장바구니 쿠폰과 상품 쿠폰 중 상품 쿠폰이 중지되면 결제 때 409-COUPON_NOT_ACTIVE이고, 먼저 사용 처리한 장바구니 쿠폰도 함께 롤백돼 둘 다 RESERVED로 남는다")
     void useRollsBackWhenOneCouponStopped() {
         Long activeCouponId = saveCoupon(10);
-        Long stoppedCouponId = saveCoupon(10);
         LocalDateTime now = LocalDateTime.now();
         long orderId = ORDER_ID_BASE + 700;
         couponFacade.reserveCartCoupon(MEMBER_ID_BASE + 700, activeCouponId, orderId, 50_000, now);
-        couponFacade.reserveCartCoupon(MEMBER_ID_BASE + 700, stoppedCouponId, orderId, 50_000, now);
+        // 상품 쿠폰 예약은 주문 연동 이슈에서 생기므로, 같은 주문에 상품 쿠폰 예약 기록을 직접 만든다
+        Long stoppedCouponId = transactionTemplate.execute(status -> {
+            Coupon productCoupon = couponRepository.save(CouponFixtures.productCouponBase(now.minusDays(1), now.plusDays(1), null));
+            couponUsageRepository.save(CouponUsage.reserve(productCoupon, MEMBER_ID_BASE + 700, orderId, 1L, 3_000, now));
+            return productCoupon.getId();
+        });
+        couponIds.add(stoppedCouponId);
         couponFacade.stopCouponByAdmin(stoppedCouponId, "부정 사용");
 
         assertThatThrownBy(() -> couponFacade.useReservedCoupons(orderId, LocalDateTime.now()))
@@ -203,6 +209,39 @@ class CouponReserveConcurrencyTest {
         assertThat(usageCount(activeCouponId, CouponUsageStatus.RESERVED)).isEqualTo(1);
         assertThat(usageCount(stoppedCouponId, CouponUsageStatus.RESERVED)).isEqualTo(1);
         assertThat(usageCount(activeCouponId, CouponUsageStatus.USED)).isZero();
+    }
+
+    @Test
+    @DisplayName("같은 주문에 서로 다른 장바구니 쿠폰을 동시에 예약하면 1건만 성공하고 나머지는 409-COUPON_ORDER_LIMIT_EXCEEDED, 줄였던 수량도 롤백된다")
+    void oneCartCouponPerOrderConcurrently() throws Exception {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < 5; i++) ids.add(saveCoupon(10));
+        LocalDateTime now = LocalDateTime.now();
+        long orderId = ORDER_ID_BASE + 800;
+
+        Map<String, AtomicInteger> results = runConcurrently(ids.size(), i ->
+                () -> couponFacade.reserveCartCoupon(MEMBER_ID_BASE + 800, ids.get(i), orderId, 50_000, now));
+
+        assertThat(count(results, "SUCCESS")).isEqualTo(1);
+        assertThat(count(results, "409-COUPON_ORDER_LIMIT_EXCEEDED")).isEqualTo(ids.size() - 1);
+        assertThat(ids.stream().mapToInt(this::remaining).sum()).isEqualTo(10 * ids.size() - 1);   // 성공한 1장만 줄었다
+    }
+
+    @Test
+    @DisplayName("주문의 장바구니 쿠폰 예약을 해제하면 같은 주문에 다른 장바구니 쿠폰을 다시 고를 수 있다")
+    void reselectCartCouponAfterRelease() {
+        Long first = saveCoupon(10);
+        Long second = saveCoupon(10);
+        LocalDateTime now = LocalDateTime.now();
+        long orderId = ORDER_ID_BASE + 900;
+        couponFacade.reserveCartCoupon(MEMBER_ID_BASE + 900, first, orderId, 50_000, now);
+
+        assertThatThrownBy(() -> couponFacade.reserveCartCoupon(MEMBER_ID_BASE + 900, second, orderId, 50_000, now))
+                .extracting("resultCode").isEqualTo("409-COUPON_ORDER_LIMIT_EXCEEDED");
+
+        couponFacade.releaseReservedCoupons(orderId, now);
+        couponFacade.reserveCartCoupon(MEMBER_ID_BASE + 900, second, orderId, 50_000, now);
+        assertThat(usageCount(second, CouponUsageStatus.RESERVED)).isEqualTo(1);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.backend.boundedContext.order.app;
 
+import com.backend.shared.order.dto.CartLineDto;
 import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderCancelType;
@@ -44,6 +45,7 @@ public class OrderFacade {
     private final OrderMarkDeliveredUseCase orderMarkDeliveredUseCase;
     private final OrderFindConfirmedOrderItemUseCase orderFindConfirmedOrderItemUseCase;
     private final OrderGetCartItemsAmountUseCase orderGetCartItemsAmountUseCase;
+    private final OrderGetCartLinesUseCase orderGetCartLinesUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -184,5 +186,11 @@ public class OrderFacade {
     @Transactional(readOnly = true)
     public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
         return orderGetCartItemsAmountUseCase.getAmount(buyerId, cartItemIds);
+    }
+
+    // 장바구니 항목들의 현재 가격 정보 (OrderApi, 상품 쿠폰 코드 검증용)
+    @Transactional(readOnly = true)
+    public List<CartLineDto> getCartLines(Long buyerId, Collection<Long> cartItemIds) {
+        return orderGetCartLinesUseCase.getLines(buyerId, cartItemIds);
     }
 }

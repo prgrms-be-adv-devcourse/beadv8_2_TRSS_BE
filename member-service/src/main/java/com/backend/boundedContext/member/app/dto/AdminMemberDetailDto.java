@@ -23,7 +23,7 @@ public record AdminMemberDetailDto(
         MemberStatus status,
         LocalDateTime createdAt,
         SellerStatus sellerStatus,  // 판매자 신청 이력이 없으면 null
-        Wallet wallet,                  // 결제를 조회하지 못하면 null
+        Wallet wallet,                  // 결제를 조회하지 못하거나 지갑이 없으면 null
         List<RecentOrder> recentOrders  // 최신순, 주문이 없으면 빈 목록. 주문을 조회하지 못하면 null
 ) {
     // 지갑 잔액 (사용 가능 금액, 홀딩 중 금액)

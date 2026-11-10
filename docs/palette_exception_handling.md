@@ -325,8 +325,22 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-COUPON_NOT_ACTIVE | 사용 기간 밖이거나 중지된 쿠폰을 예약, 또는 예약 뒤 중지됐거나 기간이 끝난 쿠폰으로 결제 (결제와 함께 롤백) |
 | | 409-COUPON_SOLD_OUT | 수량 제한 쿠폰의 남은 수량 없음 (조건부 UPDATE로 판단) |
 | | 409-COUPON_ALREADY_USED | 같은 회원이 같은 쿠폰을 이미 예약했거나 사용함 (1인 1회, 동시 요청은 부분 유니크 인덱스 위반을 이 코드로 바꿈) |
-| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등) |
+| | 409-COUPON_ORDER_LIMIT_EXCEEDED | 이 주문에 같은 종류의 쿠폰을 이미 예약했거나 사용함 (한 주문에 상품 쿠폰 1개 + 장바구니 쿠폰 1개까지, 동시 요청은 부분 유니크 인덱스 uk_coupon_usage_order_type 위반을 이 코드로 바꿈) |
+| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등), 상품 쿠폰 코드 검증에서 지정한 장바구니 항목이 판매 중인 대상 상품이 아님 |
 | | 400-COUPON_MIN_ORDER_NOT_MET | 장바구니 쿠폰의 가장 낮은 구간 최소 주문 금액에 못 미침 |
+| | 404-COUPON_CODE_NOT_FOUND | 없는 상품 쿠폰 코드 (코드 검증, 대소문자 구분 없음) |
+| | 409-COUPON_PERIOD_OVERLAPPED | 같은 인플루언서와 상품으로 유효 기간이 겹치는 운영 중 쿠폰이 있음 (발행, 수정) |
+| | 409-COUPON_NOT_EDITABLE | 시작 후 쿠폰을 종료 일시 연장 말고 다르게 수정, 끝났거나 중지된 쿠폰 수정 |
+| | 400-PRODUCT_NOT_OWNED | 상품 쿠폰 대상이 본인 상품이 아니거나 없는 상품 |
+| | 400-PRODUCT_NOT_PICKED | 상품 쿠폰 대상이 협약 인플루언서가 pick한 상품이 아님 |
+| | 409-PRODUCT_NOT_ON_SALE | 상품 쿠폰 대상 상품이 판매 중이 아님 |
+| | 404-PARTNERSHIP_NOT_FOUND | 없는 협약 |
+| | 409-PARTNERSHIP_ALREADY_EXISTS | 같은 인플루언서와 요청 중이거나 진행 중인 협약이 있음 (동시 요청은 부분 유니크 인덱스 위반을 이 코드로 바꿈) |
+| | 409-PARTNERSHIP_STATE_INVALID | 요청 중이 아닌 협약 수락, 거절이나 진행 중이 아닌 협약 종료 |
+| | 409-PARTNERSHIP_NOT_ACTIVE | 진행 중이 아닌 협약으로 쿠폰 발행, pick 상품 조회 |
+| | 404-INFLUENCER_NOT_FOUND | 협약 요청 대상 인플루언서가 없음 |
+| | 409-INFLUENCER_STATE_INVALID | 승인되지 않은 인플루언서에게 협약 요청 |
+| | 403-INFLUENCER_NOT_APPROVED | 승인된 인플루언서가 아닌 회원이 인플루언서 API 호출 |
 
 
 ## 9. 로그 규칙
