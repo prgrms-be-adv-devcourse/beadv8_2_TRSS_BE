@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.in;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductImageFile;
+import com.backend.boundedContext.product.app.dto.ProductOptionSpec;
 import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
 import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
@@ -29,6 +30,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -47,6 +49,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -57,7 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ApiV1SellerProductControllerTest {
 
     private static final String VALID_REQUEST = """
-            {"name":"수분 크림","price":25000,"categoryId":5,"description":"촉촉한 크림","stock":30}""";
+            {"name":"수분 크림","price":25000,"categoryId":5,"description":"촉촉한 크림","options":[{"values":[],"stock":30}]}""";
     private static final MockMultipartFile THUMBNAIL =
             new MockMultipartFile("thumbnail", "t.png", MediaType.IMAGE_PNG_VALUE, new byte[]{1});
 
@@ -71,9 +74,9 @@ class ApiV1SellerProductControllerTest {
     private ProductFacade productFacade;
 
     @Test
-    @DisplayName("상품 등록: 토큰의 회원 ID로 등록하고 상품 ID를 돌려준다")
+    @DisplayName("상품 등록: 토큰의 회원 ID로 등록하고 상품 ID를 돌려준다. 옵션 없는 상품은 optionNames 없이 값이 빈 조합 1개를 보낸다")
     void createProduct_success() throws Exception {
-        given(productFacade.createProduct(eq(2L), eq(5L), eq("수분 크림"), eq("촉촉한 크림"), eq(25_000L), eq(30), any(), any()))
+        given(productFacade.createProduct(eq(2L), eq(5L), eq("수분 크림"), eq("촉촉한 크림"), eq(25_000L), eq(List.of()), eq(List.of(ProductOptionSpec.single(30))), any(), any()))
                 .willReturn(11L);
 
         create(MemberRole.USER, jsonPart(VALID_REQUEST))
@@ -83,16 +86,16 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("상품 등록: 재고가 0이거나 최대 재고를 넘으면 400 VALIDATION_FAILED")
+    @DisplayName("상품 등록: 옵션 재고가 0이거나 최대 재고를 넘으면 400 VALIDATION_FAILED")
     void createProduct_invalidStock() throws Exception {
         for (String stock : List.of("0", "1000001")) {
             create(MemberRole.USER, jsonPart(VALID_REQUEST.replace("\"stock\":30", "\"stock\":" + stock)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"))
-                    .andExpect(jsonPath("$.data.fieldErrors[0].field").value("stock"));
+                    .andExpect(jsonPath("$.data.fieldErrors[0].field").value("options[0].stock"));
         }
 
-        verify(productFacade, never()).createProduct(any(), any(), any(), any(), anyLong(), anyInt(), any(), any());
+        verify(productFacade, never()).createProduct(any(), any(), any(), any(), anyLong(), any(), any(), any(), any());
     }
 
     @Test
@@ -122,7 +125,7 @@ class ApiV1SellerProductControllerTest {
         create(MemberRole.USER, new MockMultipartFile[]{jsonPart(VALID_REQUEST)}).andExpect(status().isOk());
         create(MemberRole.USER, jsonPart(VALID_REQUEST), emptyThumbnail).andExpect(status().isOk());
 
-        verify(productFacade, times(2)).createProduct(any(), any(), any(), any(), anyLong(), anyInt(), isNull(), eq(List.of()));
+        verify(productFacade, times(2)).createProduct(any(), any(), any(), any(), anyLong(), any(), any(), isNull(), eq(List.of()));
     }
 
     @Test
@@ -137,7 +140,7 @@ class ApiV1SellerProductControllerTest {
 
         ArgumentCaptor<ProductImageFile> thumbnail = ArgumentCaptor.captor();
         ArgumentCaptor<List<ProductImageFile>> details = ArgumentCaptor.captor();
-        verify(productFacade).createProduct(eq(2L), eq(5L), any(), any(), anyLong(), anyInt(), thumbnail.capture(), details.capture());
+        verify(productFacade).createProduct(eq(2L), eq(5L), any(), any(), anyLong(), any(), any(), thumbnail.capture(), details.capture());
         assertThat(thumbnail.getValue().content()).isEqualTo(THUMBNAIL.getBytes());
         assertThat(details.getValue()).extracting(ProductImageFile::content)
                 .containsExactly(new byte[]{1}, new byte[]{2});
@@ -339,6 +342,89 @@ class ApiV1SellerProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray())
                 .andExpect(jsonPath("$.data.size").value(20));
+    }
+
+    @Test
+    @DisplayName("상품 등록(옵션): optionNames와 options를 조합 스펙으로 넘긴다. 추가금을 보내지 않으면 0")
+    void createProduct_withOptions() throws Exception {
+        create(MemberRole.USER, jsonPart("""
+                {"name":"티셔츠","price":20000,"categoryId":5,"description":"면 티셔츠",
+                 "optionNames":["색상","사이즈"],
+                 "options":[{"values":["흰색","M"],"additionalPrice":0,"stock":10},{"values":["흰색","L"],"stock":5}]}"""))
+                .andExpect(status().isOk());
+
+        verify(productFacade).createProduct(eq(2L), eq(5L), eq("티셔츠"), eq("면 티셔츠"), eq(20_000L),
+                eq(List.of("색상", "사이즈")),
+                eq(List.of(new ProductOptionSpec(List.of("흰색", "M"), 0, 10), new ProductOptionSpec(List.of("흰색", "L"), 0, 5))),
+                any(), any());
+    }
+
+    @Test
+    @DisplayName("상품 등록(옵션): options가 없거나 비었거나, 옵션 값이 14자를 넘거나, 추가금이 음수면 400 VALIDATION_FAILED")
+    void createProduct_invalidOptions() throws Exception {
+        List<String> invalids = List.of(
+                """
+                {"name":"티셔츠","price":20000,"categoryId":5,"description":"설명","stock":3}""",
+                """
+                {"name":"티셔츠","price":20000,"categoryId":5,"description":"설명","options":[]}""",
+                """
+                {"name":"티셔츠","price":20000,"categoryId":5,"description":"설명",
+                 "optionNames":["색상"],"options":[{"values":["가가가가가가가가가가가가가가가"],"stock":1}]}""",
+                """
+                {"name":"티셔츠","price":20000,"categoryId":5,"description":"설명",
+                 "optionNames":["색상"],"options":[{"values":["흰색"],"additionalPrice":-1,"stock":1}]}""");
+        for (String json : invalids) {
+            create(MemberRole.USER, jsonPart(json))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        }
+
+        verify(productFacade, never()).createProduct(any(), any(), any(), any(), anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("옵션 추가: 경로의 상품 ID와 조합 스펙을 넘기고 만든 옵션 ID를 돌려준다")
+    void addOption() throws Exception {
+        given(productFacade.addOption(2L, 11L, new ProductOptionSpec(List.of("검정", "M"), 1_000, 4))).willReturn(31L);
+
+        sendAsSeller(post("/api/v1/seller/products/11/options"), """
+                {"values":["검정","M"],"additionalPrice":1000,"stock":4}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.optionId").value(31));
+    }
+
+    @Test
+    @DisplayName("옵션 수정: 추가금을 넘긴다. 추가금이 없거나 음수면 400 VALIDATION_FAILED")
+    void modifyOption() throws Exception {
+        sendAsSeller(patch("/api/v1/seller/products/11/options/21"), """
+                {"additionalPrice":2500}""")
+                .andExpect(status().isOk());
+        verify(productFacade).modifyOption(2L, 11L, 21L, 2_500L);
+
+        for (String json : List.of("{}", """
+                {"additionalPrice":-1}""")) {
+            sendAsSeller(patch("/api/v1/seller/products/11/options/21"), json)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        }
+    }
+
+    @Test
+    @DisplayName("옵션 삭제: 경로의 상품·옵션 ID로 지운다")
+    void deleteOption() throws Exception {
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
+        mockMvc.perform(delete("/api/v1/seller/products/11/options/21").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        verify(productFacade).deleteOption(2L, 11L, 21L);
+    }
+
+    private ResultActions sendAsSeller(MockHttpServletRequestBuilder request, String json) throws Exception {
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
+        return mockMvc.perform(request
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json)
+                .header("Authorization", "Bearer " + token));
     }
 
     private ResultActions adjust(MemberRole role, String json) throws Exception {
