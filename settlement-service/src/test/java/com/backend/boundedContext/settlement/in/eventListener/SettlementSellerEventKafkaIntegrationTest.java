@@ -88,10 +88,11 @@ class SettlementSellerEventKafkaIntegrationTest {
     @AfterEach
     void cleanUp() {
         if (settlement != null) extraSettlementIds.add(settlement.getId());
+        // 정산서·처리 이력은 @PreRemove로 JPA 삭제를 막으므로(원장 무결성 1단계) 테스트 정리는 SQL로 한다
         for (Long id : extraSettlementIds) {
-            settlementProcessHistoryRepository.deleteAll(settlementProcessHistoryRepository
-                    .findByTargetTypeAndTargetIdOrderByIdAsc(SettlementHistoryTargetType.SETTLEMENT, id));
-            settlementRepository.deleteById(id);
+            jdbcTemplate.update("delete from settlement_process_history where target_type = ? and target_id = ?",
+                    SettlementHistoryTargetType.SETTLEMENT.name(), id);
+            jdbcTemplate.update("delete from settlement where id = ?", id);
         }
         for (OutboxEvent outbox : findOutbox()) {
             jdbcTemplate.update("delete from processed_event where event_id = ?", outbox.getEventId());

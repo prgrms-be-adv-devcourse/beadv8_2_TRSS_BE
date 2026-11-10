@@ -21,9 +21,10 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 
 /**
- * 월 정산 Job(집계 Step → 지급 Step)을 실행한다. 매월 10일 스케줄러와 관리자 수동 실행이 함께 쓴다.
+ * 월 정산 Job(판별 → 확정 → 지급 Step)을 실행한다. 매월 10일 스케줄러와 관리자 수동 실행이 함께 쓴다.
  *   정산월만 Job 파라미터로 쓴다. 같은 달이 실행 중이면 409 SETTLEMENT_RUNNING, 이미 완료된 달이면 409 SETTLEMENT_ALREADY_COMPLETED
  *   실패로 끝난 달은 같은 파라미터로 다시 실행하면 실패한 Step부터 이어서 실행된다(Spring Batch 재시작)
+ *   서버가 강제 종료돼 STARTED로 남은 실행은 앱 기동 때 SettlementRecoverJobUseCase가 FAILED로 정리하므로 같은 방식으로 이어서 실행된다
  *
  * Job은 동기로 실행되므로 이 메서드가 끝나면 결과(성공·실패 건수, 지급·수수료 총액)를 바로 돌려준다.
  */

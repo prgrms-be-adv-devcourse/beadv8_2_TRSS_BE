@@ -6,10 +6,12 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
+import jakarta.persistence.PreRemove;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Immutable;
 
 import java.time.LocalDateTime;
 
@@ -22,6 +24,7 @@ import java.time.LocalDateTime;
  * 실패 사유에는 스택트레이스·개인정보를 넣지 않는다(상세는 애플리케이션 로그)
  */
 @Entity
+@Immutable   // 원장 무결성 1단계: 저장(INSERT)만 하고 UPDATE 문을 만들지 않는다
 @Table(name = "settlement_process_history",
         indexes = @Index(name = "idx_history_target", columnList = "target_type, target_id"))
 @Getter
@@ -141,6 +144,65 @@ public class SettlementProcessHistory extends BaseIdAndTime {
                 batchExecutionId, now);
     }
 
+    // ---------- 원장 재대조 (단계 값은 VERIFY) ----------
+
+    /**
+     * 관리자가 원장 재대조 불일치를 확인하고 지급을 막지 않기로 한 기록 (stage VERIFY, trigger ADMIN, SUCCEEDED)
+     * 정산서별 마지막 VERIFY 이력이 SUCCEEDED가 되므로 "풀리지 않은 불일치"에서 빠진다.
+     * error_code에는 확인한 불일치 코드를 그대로 남긴다. 다음 재대조에서 같은 불일치가 나오면 직전 결과와 같아 이력을 다시 남기지 않으므로
+     * 확인한 상태가 유지되고, 다른 불일치가 나오면 새 MANUAL_REQUIRED로 다시 막는다.
+     * @param reason 관리자 확인 사유 (admin_reason)
+     */
+    public static SettlementProcessHistory ledgerMismatchConfirmed(Long settlementId, String mismatchErrorCode,
+                                                                   String reason, LocalDateTime now) {
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
+                SettlementHistoryStage.VERIFY, 1, SettlementTrigger.ADMIN, SettlementHistoryResult.SUCCEEDED,
+                mismatchErrorCode, null, reason, null, now);
+    }
+
+    /**
+     * 지급된 정산서의 원장 재대조 결과
+     * 같음 → SUCCEEDED, 다름 → MANUAL_REQUIRED(error_code에 LEDGER_* resultCode)
+     * 정산서별 가장 마지막 VERIFY 이력이 MANUAL_REQUIRED면 "풀리지 않은 불일치"로 보고 판별 단계가 그 판매자 지급을 보류한다
+     */
+    public static SettlementProcessHistory ledgerChecked(Long settlementId, SettlementLedgerCheckResult checkResult,
+                                                         SettlementTrigger trigger, Long batchExecutionId,
+                                                         LocalDateTime now) {
+        SettlementHistoryResult result = checkResult.isMismatch()
+                ? SettlementHistoryResult.MANUAL_REQUIRED : SettlementHistoryResult.SUCCEEDED;
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
+                SettlementHistoryStage.VERIFY, 1, trigger, result, checkResult.resultCode(), checkResult.message(),
+                null, batchExecutionId, now);
+    }
+
+    // ---------- 판별 ----------
+
+    /**
+     * 판매자 1명의 판별 결과 (target_type = SELLER, target_id = 판매자 ID)
+     * PASS → SUCCEEDED, HOLD → SKIPPED(이번 실행에서 지급 보류), BLOCK → MANUAL_REQUIRED(사람 확인)
+     */
+    public static SettlementProcessHistory sellerJudged(Long sellerId, SettlementJudgement judgement,
+                                                        SettlementTrigger trigger, Long batchExecutionId,
+                                                        LocalDateTime now) {
+        SettlementHistoryResult result = switch (judgement.type()) {
+            case PASS -> SettlementHistoryResult.SUCCEEDED;
+            case HOLD -> SettlementHistoryResult.SKIPPED;
+            case BLOCK -> SettlementHistoryResult.MANUAL_REQUIRED;
+        };
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SELLER, sellerId,
+                SettlementHistoryStage.JUDGE, 1, trigger, result, judgement.errorCode(), judgement.reason(), null,
+                batchExecutionId, now);
+    }
+
+    /** 판별에서 금액 스냅샷이 맞지 않아 확정하지 않은 후보 1건 */
+    public static SettlementProcessHistory candidateBlocked(Long candidateId, String errorCode, String reason,
+                                                            SettlementTrigger trigger, Long batchExecutionId,
+                                                            LocalDateTime now) {
+        return new SettlementProcessHistory(SettlementHistoryTargetType.CANDIDATE, candidateId,
+                SettlementHistoryStage.JUDGE, 1, trigger, SettlementHistoryResult.MANUAL_REQUIRED, errorCode, reason,
+                null, batchExecutionId, now);
+    }
+
     // ---------- 보류·해제·제외 (관리자) ----------
 
     /**
@@ -167,9 +229,20 @@ public class SettlementProcessHistory extends BaseIdAndTime {
 
     /** 정산서 보류 해제(HOLD → READY). 이후 재시도 스케줄러가 지급한다 */
     public static SettlementProcessHistory released(Long settlementId, LocalDateTime now) {
+        return released(settlementId, SettlementTrigger.ADMIN, null, now);
+    }
+
+    /**
+     * 정산서 보류 해제. 해제한 경로를 함께 남긴다
+     * - ADMIN: 관리자가 정산서 1건을 해제
+     * - LEDGER_RECHECK: 원장 재대조 불일치가 풀려 그 사유로 보류한 정산서를 자동 해제
+     * @param reason 해제 사유 (admin_reason, 없으면 null)
+     */
+    public static SettlementProcessHistory released(Long settlementId, SettlementTrigger trigger, String reason,
+                                                    LocalDateTime now) {
         return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
-                SettlementHistoryStage.RELEASE, 1, SettlementTrigger.ADMIN,
-                SettlementHistoryResult.SUCCEEDED, null, null, null, null, now);
+                SettlementHistoryStage.RELEASE, 1, trigger,
+                SettlementHistoryResult.SUCCEEDED, null, null, reason, null, now);
     }
 
     /**
@@ -180,6 +253,12 @@ public class SettlementProcessHistory extends BaseIdAndTime {
         return new SettlementProcessHistory(SettlementHistoryTargetType.CANDIDATE, candidateId,
                 SettlementHistoryStage.EXCLUDE, 1, SettlementTrigger.ADMIN,
                 SettlementHistoryResult.SUCCEEDED, null, null, reason, null, now);
+    }
+
+    /** 원장 무결성 1단계: 처리 이력은 지우지 않는다 */
+    @PreRemove
+    private void denyRemove() {
+        throw new IllegalStateException("정산 처리 이력은 삭제할 수 없습니다.");
     }
 
     private static String truncate(String text) {

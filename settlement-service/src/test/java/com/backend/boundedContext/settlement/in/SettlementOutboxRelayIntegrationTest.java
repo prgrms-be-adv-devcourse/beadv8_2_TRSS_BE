@@ -110,12 +110,13 @@ class SettlementOutboxRelayIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        // 정산 후보·처리 이력은 @PreRemove로 JPA 삭제를 막으므로(원장 무결성 1단계) 테스트 정리는 SQL로 한다
         List<SettlementCandidate> candidates = findCandidates(orderId, markerOrderId);
         for (SettlementCandidate candidate : candidates) {
-            settlementProcessHistoryRepository.deleteAll(settlementProcessHistoryRepository
-                    .findByTargetTypeAndTargetIdOrderByIdAsc(SettlementHistoryTargetType.CANDIDATE, candidate.getId()));
+            jdbcTemplate.update("delete from settlement_process_history where target_type = ? and target_id = ?",
+                    SettlementHistoryTargetType.CANDIDATE.name(), candidate.getId());
+            jdbcTemplate.update("delete from settlement_candidate where id = ?", candidate.getId());
         }
-        settlementCandidateRepository.deleteAll(candidates);
         eventIds.forEach(id -> jdbcTemplate.update("delete from processed_event where event_id = ?", id));
         outboxEventRepository.deleteAll(findOutbox(orderId));
     }

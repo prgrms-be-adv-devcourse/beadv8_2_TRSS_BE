@@ -46,6 +46,17 @@ public interface SettlementCandidateRepository extends JpaRepository<SettlementC
     List<SettlementCandidate> findWithLockReadyBySellerIdUntilMonth(@Param("sellerId") Long sellerId,
                                                                     @Param("month") String month);
 
+    /** 판별 단계: 판매자의 READY 후보(정산월 ≤ 대상월). 읽기만 하므로 잠그지 않는다(확정 단계가 잠가서 다시 읽음) */
+    @Query("""
+            select c from SettlementCandidate c
+             where c.sellerId = :sellerId
+               and c.status = com.backend.boundedContext.settlement.domain.SettlementCandidateStatus.READY
+               and c.settlementMonth <= :month
+             order by c.id
+            """)
+    List<SettlementCandidate> findReadyBySellerIdUntilMonth(@Param("sellerId") Long sellerId,
+                                                             @Param("month") String month);
+
     @Query("select c from SettlementCandidate c where c.settlement.id = :settlementId order by c.id")
     List<SettlementCandidate> findBySettlementIdOrderByIdAsc(@Param("settlementId") Long settlementId);
 

@@ -1,6 +1,7 @@
 package com.backend.boundedContext.settlement.domain;
 
 import lombok.Getter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +14,7 @@ import java.util.Set;
  * 정산 컨텍스트 정책 값과 업무 규칙
  *
  * 값은 인스턴스, 규칙은 정적
- *   값(application.yaml의 custom.settlement.* 6개): 생성자에서 @Value로 받아 final 인스턴스 필드에 둔다.
+ *   값(application.yaml의 custom.settlement.* 8개): 생성자에서 @Value로 받아 final 인스턴스 필드에 둔다.
  *       필요한 UseCase·배치·스케줄러가 이 빈을 생성자로 주입받아 getFeeRate()처럼 꺼내 쓴다.
  *   규칙(calculateFee·isValidLineAmount·isNonRetryable 등): 정책 값에 기대지 않는 순수 계산식이라 정적 메서드로 둔다.
  *       필요한 값(수수료율 등)은 인자로 받으므로 엔티티·테스트 어디서든 스프링 없이 부를 수 있다.
@@ -73,17 +74,35 @@ public class SettlementPolicy {
     // 재시도 스케줄러가 한 번에 처리하는 정산서 수. 1 이상
     private final int retryBatchSize;
 
+    // 원장 재대조(매일 03:35 스케줄러) 사용 여부. payment-service 연결 전에는 findTransfer가 예외라 false로 둔다
+    private final boolean ledgerRecheckEnabled;
+
+    // 지급일이 오늘부터 며칠 전까지인 PAID 정산서를 다시 읽을지. 기본 2(T+1, 늦은 시각 지급 포함). 1 이상
+    private final int ledgerRecheckLookbackDays;
+
     /**
-     * 스프링은 application.yaml 값을 넣어 한 번 만들고, 단위 테스트는 new SettlementPolicy(10, 10, 3, 10, 100, 50)처럼 직접 만든다.
+     * 단위 테스트용: new SettlementPolicy(10, 10, 3, 10, 100, 50)처럼 직접 만든다. 원장 재대조는 꺼짐(lookback 2일)
      * 인자 순서: feeRate, payDayOfMonth, maxAttempts, retryIntervalMinutes, batchChunkSize, retryBatchSize
      */
+    public SettlementPolicy(int feeRate, int payDayOfMonth, int maxAttempts, int retryIntervalMinutes,
+                            int batchChunkSize, int retryBatchSize) {
+        this(feeRate, payDayOfMonth, maxAttempts, retryIntervalMinutes, batchChunkSize, retryBatchSize, false, 2);
+    }
+
+    /**
+     * 스프링은 application.yaml 값을 넣어 이 생성자로 한 번 만든다.
+     * 인자 순서: 위 6개 + ledgerRecheckEnabled, ledgerRecheckLookbackDays
+     */
+    @Autowired
     public SettlementPolicy(
             @Value("${custom.settlement.feeRate}") int feeRate,
             @Value("${custom.settlement.payDayOfMonth}") int payDayOfMonth,
             @Value("${custom.settlement.maxAttempts}") int maxAttempts,
             @Value("${custom.settlement.retryIntervalMinutes}") int retryIntervalMinutes,
             @Value("${custom.settlement.batchChunkSize}") int batchChunkSize,
-            @Value("${custom.settlement.retryBatchSize}") int retryBatchSize
+            @Value("${custom.settlement.retryBatchSize}") int retryBatchSize,
+            @Value("${custom.settlement.ledgerRecheck.enabled:false}") boolean ledgerRecheckEnabled,
+            @Value("${custom.settlement.ledgerRecheck.lookbackDays:2}") int ledgerRecheckLookbackDays
     ) {
         // 10/14 리뷰 반영: @ConfigurationProperties + @Validated(@Min·@Max)가 하던 범위 검사를 생성자에서 직접 한다
         this.feeRate = requireRange("custom.settlement.feeRate", feeRate, 0, 100);
@@ -92,6 +111,9 @@ public class SettlementPolicy {
         this.retryIntervalMinutes = requirePositive("custom.settlement.retryIntervalMinutes", retryIntervalMinutes);
         this.batchChunkSize = requirePositive("custom.settlement.batchChunkSize", batchChunkSize);
         this.retryBatchSize = requirePositive("custom.settlement.retryBatchSize", retryBatchSize);
+        this.ledgerRecheckEnabled = ledgerRecheckEnabled;
+        this.ledgerRecheckLookbackDays = requirePositive("custom.settlement.ledgerRecheck.lookbackDays",
+                ledgerRecheckLookbackDays);
     }
 
     /** 범위를 벗어나면 어떤 설정 키가 잘못됐는지 담아 예외를 던진다(빈 생성 실패 → 앱 기동 실패) */
