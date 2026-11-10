@@ -32,7 +32,7 @@ public class MemberPaymentHttpAdapter implements MemberPaymentPort {
         this.client = client;
     }
 
-    // 지갑이 없으면 결제가 404-WALLET_NOT_FOUND로 응답해 같은 DomainException이 됨 (탈퇴 검사는 잔액 0으로 봄)
+    // 지갑이 없으면 결제가 404-WALLET_NOT_FOUND로 응답해 같은 DomainException이 됨 (탈퇴 검사는 잔액 0으로 보고, 관리자 회원 상세는 지갑을 비움)
     @Override
     public WalletSummaryDto getWallet(Long memberId) {
         WalletSummaryDto wallet = client.call(() -> client.restClient().get()
