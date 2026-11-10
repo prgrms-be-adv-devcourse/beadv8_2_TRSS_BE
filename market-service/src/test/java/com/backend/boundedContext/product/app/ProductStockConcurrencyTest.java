@@ -1,5 +1,6 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
@@ -10,6 +11,7 @@ import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
 import com.backend.boundedContext.product.out.ProductStopRequestRepository;
 import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
@@ -66,6 +68,9 @@ class ProductStockConcurrencyTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     @Autowired
@@ -93,7 +98,7 @@ class ProductStockConcurrencyTest {
             Product product = productRepository.save(Product.create(
                     SELLER_ID, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "동시성 테스트 크림", "설명", 10_000));
             productId = product.getId();
-            optionId = productOptionRepository.save(ProductOption.createDefault(product, 10)).getId();
+            optionId = saveOption(product, 10).getId();
         });
     }
 
@@ -398,7 +403,7 @@ class ProductStockConcurrencyTest {
     }
 
     private int stock() {
-        return productOptionRepository.findById(optionId).orElseThrow().getStock();
+        return optionStockRepository.findById(optionId).orElseThrow().getStock();
     }
 
     private long historyCount(StockChangeType changeType) {
@@ -440,5 +445,12 @@ class ProductStockConcurrencyTest {
     @FunctionalInterface
     private interface IndexedTask {
         void run(int index) throws Exception;
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
     }
 }

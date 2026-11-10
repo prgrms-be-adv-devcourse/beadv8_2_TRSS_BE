@@ -4,12 +4,14 @@ import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStoppedBy;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
@@ -57,6 +59,9 @@ class ProductFacadeSellerProductTest {
 
     @Autowired
     private ProductOptionRepository productOptionRepository;
+
+    @Autowired
+    private OptionStockRepository optionStockRepository;
 
     @MockitoBean
     private MemberApi memberApi;
@@ -111,7 +116,7 @@ class ProductFacadeSellerProductTest {
     void getSellerProductsByStatus() {
         Product onSale = create(SELLER_ID, "판매 중", 10);
         Product soldOut = create(SELLER_ID, "품절", 1);
-        ReflectionTestUtils.setField(option(soldOut), "stock", 0);
+        ReflectionTestUtils.setField(optionStock(option(soldOut)), "stock", 0);
         Product stopped = create(SELLER_ID, "중지", 10);
         stop(stopped, "사유");
         setStatus(create(SELLER_ID, "삭제", 10), ProductSaleStatus.DELETED);
@@ -174,7 +179,7 @@ class ProductFacadeSellerProductTest {
         assertThat(product.getPrice()).isEqualTo(30_000);
         assertThat(product.getCategory().getId()).isEqualTo(makeup.getId());
         assertThat(product.getDescription()).isEqualTo("설명");
-        assertThat(option(product).getStock()).isEqualTo(10);
+        assertThat(optionStock(option(product)).getStock()).isEqualTo(10);
     }
 
     @Test
@@ -216,12 +221,12 @@ class ProductFacadeSellerProductTest {
 
     private Product create(Long sellerId, String name, int stock) {
         Product product = productRepository.save(Product.create(sellerId, skincare, name, "설명", 25_000));
-        productOptionRepository.save(ProductOption.createDefault(product, stock));
+        saveOption(product, stock);
         return product;
     }
 
     private ProductOption option(Product product) {
-        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(product.getId())).getFirst();
+        return optionStockRepository.findAllWithOptionByProductIdIn(List.of(product.getId())).getFirst().getOption();
     }
 
     /** 판매 중지 기능 전이라 필드를 직접 바꾼다 */
@@ -233,5 +238,17 @@ class ProductFacadeSellerProductTest {
 
     private void setStatus(Product product, ProductSaleStatus status) {
         ReflectionTestUtils.setField(product, "status", status);
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

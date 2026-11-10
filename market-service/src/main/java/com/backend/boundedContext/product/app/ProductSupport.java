@@ -4,6 +4,7 @@ import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.domain.ProductOption;
@@ -12,6 +13,7 @@ import com.backend.boundedContext.product.domain.ProductStopRequest;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.out.CategoryProductCount;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.ProductStopRequestRepository;
@@ -24,6 +26,7 @@ import com.backend.shared.product.dto.ProductSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -42,6 +45,7 @@ public class ProductSupport {
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final ProductOptionRepository productOptionRepository;
+    private final OptionStockRepository optionStockRepository;
     private final StockHistoryRepository stockHistoryRepository;
     private final ProductStopRequestRepository productStopRequestRepository;
     private final MemberApi memberApi;
@@ -50,22 +54,24 @@ public class ProductSupport {
 
     /**
      * 옵션 여러 개의 현재 정보. 삭제된 상품·옵션도 포함하고, 없는 ID만 빠진다.
+     * 재고 행을 기준으로 옵션·상품을 함께 읽으므로, 재고 행이 없는 옵션도 없는 ID로 보고 뺀다 (재고 잠금의 404와 같은 기준).
      * 대표 이미지는 상품 ID를 모아 한 번에 조회하고, 대표 이미지가 없는 상품이면 null이다.
      */
     public List<OptionSnapshotDto> getOptionSnapshots(Collection<Long> optionIds) {
         if (optionIds.isEmpty()) return List.of();
 
-        List<ProductOption> options = productOptionRepository.findAllWithProductByIdIn(optionIds);
+        List<OptionStock> stocks = optionStockRepository.findAllWithOptionAndProductByOptionIdIn(optionIds);
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(
-                options.stream().map(option -> option.getProduct().getId()).collect(Collectors.toSet()));
+                stocks.stream().map(stock -> stock.getOption().getProduct().getId()).collect(Collectors.toSet()));
 
-        return options.stream()
-                .map(option -> {
+        return stocks.stream()
+                .map(stock -> {
+                    ProductOption option = stock.getOption();
                     Product product = option.getProduct();
                     ProductUnsaleableReason reason = option.getUnsaleableReason();
                     return new OptionSnapshotDto(
                             option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getName(),
-                            product.getPrice(), option.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
+                            product.getPrice(), stock.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
                 .toList();
     }
@@ -88,25 +94,35 @@ public class ProductSupport {
     }
 
     /**
-     * 재고를 바꾸기 전에 상품(읽기)과 옵션(쓰기)을 ID 순으로 잠그고, 옵션 ID → 옵션으로 돌려준다.
-     * 잠금 순서는 항상 상품 → 옵션이다. 없는 옵션이 있으면 404.
+     * 재고를 바꾸기 전에 상품(읽기)과 옵션 재고(쓰기)를 ID 순으로 잠그고, 옵션 ID → 재고로 돌려준다.
+     * 잠금 순서는 항상 상품 → 재고다. 옵션 행은 잠그지 않으므로 옵션 정보 수정과는 서로 기다리지 않는다.
+     * 없는 옵션이 있으면 404.
      *
      * <p>같은 트랜잭션에서 먼저 조회한 엔티티(예: 주문 생성 중 getOptions)는 잠금 쿼리를 다시 실행해도
      * 메모리의 옛 값을 그대로 돌려준다. 그래서 잠근 뒤 DB 값으로 다시 읽는다(refresh).
-     * 잠금을 쥐고 있으므로 다시 읽은 값은 커밋 전까지 다른 트랜잭션이 바꾸지 못한다.
+     * 잠금을 쥐고 있으므로 다시 읽은 재고는 커밋 전까지 다른 트랜잭션이 바꾸지 못한다.
+     * 판매 가능 여부를 볼 옵션(삭제 여부)도 최신 값으로 다시 읽는다.
      */
-    public Map<Long, ProductOption> lockOptions(Collection<Long> optionIds) {
+    public Map<Long, OptionStock> lockStocks(Collection<Long> optionIds) {
         Set<Long> ids = new HashSet<>(optionIds);
 
         lockProductsForShare(productOptionRepository.findProductIdsByIdIn(ids));
 
-        List<ProductOption> options = productOptionRepository.findAllForUpdateByIdIn(ids);
-        options.forEach(entityManager::refresh);
-        if (options.size() != ids.size()) {
+        // 이 트랜잭션에서 이미 읽어 둔(메모리에 옛 값이 있는) 재고만 잠근 뒤 다시 읽는다. 처음 읽는 재고는 잠금 쿼리가 최신 값을 가져온다.
+        // getReference는 SELECT 없이, 읽어 둔 재고면 그 엔티티를, 아니면 초기화되지 않은 프록시를 준다
+        Set<Long> loadedStockIds = ids.stream()
+                .filter(id -> Hibernate.isInitialized(entityManager.getReference(OptionStock.class, id)))
+                .collect(Collectors.toSet());
+
+        List<OptionStock> stocks = optionStockRepository.findAllForUpdateByOptionIdIn(ids);
+        if (stocks.size() != ids.size()) {
             throw new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND);
         }
+        stocks.stream().filter(stock -> loadedStockIds.contains(stock.getId())).forEach(entityManager::refresh);
+        // 옵션도 이미 읽어 둔 것만 다시 읽는다. 읽지 않은 옵션은 프록시라 처음 쓸 때(잠금 뒤) 최신 값으로 읽힌다
+        stocks.stream().map(OptionStock::getOption).filter(Hibernate::isInitialized).forEach(entityManager::refresh);
 
-        return options.stream().collect(Collectors.toMap(ProductOption::getId, Function.identity()));
+        return stocks.stream().collect(Collectors.toMap(OptionStock::getId, Function.identity()));
     }
 
     /**
@@ -121,7 +137,7 @@ public class ProductSupport {
 
     /**
      * 판매자의 이 상태 상품을 ID 순으로 쓰기 잠금하고 DB 값으로 다시 읽는다 (판매자 전체 중지·재개용).
-     * 같은 트랜잭션에서 먼저 읽어 둔 상품이 있어도 잠근 뒤의 최신 상태로 판단하기 위해 refresh한다 (lockOptions와 같은 이유).
+     * 같은 트랜잭션에서 먼저 읽어 둔 상품이 있어도 잠근 뒤의 최신 상태로 판단하기 위해 refresh한다 (lockStocks와 같은 이유).
      */
     public List<Product> lockSellerProducts(Long sellerId, ProductSaleStatus status) {
         List<Product> products = productRepository.findAllForUpdateBySellerIdAndStatus(sellerId, status);
@@ -174,12 +190,12 @@ public class ProductSupport {
                 .toList();
     }
 
-    /** 상품 ID → 삭제되지 않은 옵션 목록 (ID 순). 옵션이 없는 상품은 키가 없다. */
-    public Map<Long, List<ProductOption>> getOptionsByProductId(Collection<Long> productIds) {
+    /** 상품 ID → 삭제되지 않은 옵션의 재고 목록 (옵션 ID 순, 옵션 포함). 옵션이 없는 상품은 키가 없다. */
+    public Map<Long, List<OptionStock>> getOptionStocksByProductId(Collection<Long> productIds) {
         if (productIds.isEmpty()) return Map.of();
 
-        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(productIds).stream()
-                .collect(Collectors.groupingBy(option -> option.getProduct().getId()));
+        return optionStockRepository.findAllWithOptionByProductIdIn(productIds).stream()
+                .collect(Collectors.groupingBy(stock -> stock.getOption().getProduct().getId()));
     }
 
     /** 판매자 ID → 상호명. 회원 컨텍스트에 한 번만 묻는다. 없는 판매자는 키가 없다. */
@@ -275,17 +291,22 @@ public class ProductSupport {
     }
 
     /** 삭제되지 않은 옵션이 없거나 모두 재고 0이면 품절 */
-    public static boolean isSoldOut(List<ProductOption> options) {
-        return options.stream().allMatch(ProductOption::isSoldOut);
+    public static boolean isSoldOut(List<OptionStock> stocks) {
+        return stocks.stream().allMatch(OptionStock::isSoldOut);
     }
 
     /**
      * 상품 단위로 구매자에게 보여 줄 남은 수량. 삭제되지 않은 옵션의 재고 합계가
-     * 1 ~ {@value ProductOption#LOW_STOCK_THRESHOLD}개일 때만 주고, 그 외(품절 포함)에는 null.
+     * 1 ~ {@value OptionStock#LOW_STOCK_THRESHOLD}개일 때만 주고, 그 외(품절 포함)에는 null.
      */
-    public static Integer getLowStockRemaining(List<ProductOption> options) {
-        int total = options.stream().mapToInt(ProductOption::getStock).sum();
-        return (total > 0 && total <= ProductOption.LOW_STOCK_THRESHOLD) ? total : null;
+    public static Integer getLowStockRemaining(List<OptionStock> stocks) {
+        int total = sumStock(stocks);
+        return (total > 0 && total <= OptionStock.LOW_STOCK_THRESHOLD) ? total : null;
+    }
+
+    /** 재고 합계 (판매자·관리자 목록용) */
+    public static int sumStock(List<OptionStock> stocks) {
+        return stocks.stream().mapToInt(OptionStock::getStock).sum();
     }
 
     public long countProducts() {

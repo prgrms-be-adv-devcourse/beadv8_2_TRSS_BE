@@ -1,12 +1,14 @@
 package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -55,6 +57,9 @@ class ProductFacadeStockAdjustTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     @MockitoBean
@@ -73,7 +78,7 @@ class ProductFacadeStockAdjustTest {
                 .willReturn(new SellerDto(SELLER_ID, MEMBER_ID, "팔레트 상점", SellerStatus.APPROVED));
 
         product = createProduct(SELLER_ID);
-        option = productOptionRepository.save(ProductOption.createDefault(product, 5));
+        option = saveOption(product, 5);
     }
 
     @Test
@@ -96,7 +101,7 @@ class ProductFacadeStockAdjustTest {
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-STOCK_NEGATIVE");
 
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(optionStock(option).getStock()).isEqualTo(5);
         assertThat(histories(StockChangeType.ADJUST)).isEmpty();
     }
 
@@ -104,19 +109,19 @@ class ProductFacadeStockAdjustTest {
     @DisplayName("다른 판매자의 상품이면 PRODUCT_NOT_FOUND")
     void adjustOtherSellersProduct() {
         Product otherProduct = createProduct(OTHER_SELLER_ID);
-        ProductOption otherOption = productOptionRepository.save(ProductOption.createDefault(otherProduct, 5));
+        ProductOption otherOption = saveOption(otherProduct, 5);
 
         assertThatThrownBy(() -> productFacade.adjustStock(MEMBER_ID, otherProduct.getId(), otherOption.getId(), 1))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("404-PRODUCT_NOT_FOUND");
-        assertThat(otherOption.getStock()).isEqualTo(5);
+        assertThat(optionStock(otherOption).getStock()).isEqualTo(5);
     }
 
     @Test
     @DisplayName("다른 상품의 옵션이면 PRODUCT_NOT_FOUND (같은 판매자여도)")
     void adjustOptionOfAnotherProduct() {
         Product anotherProduct = createProduct(SELLER_ID);
-        ProductOption anotherOption = productOptionRepository.save(ProductOption.createDefault(anotherProduct, 5));
+        ProductOption anotherOption = saveOption(anotherProduct, 5);
 
         assertThatThrownBy(() -> productFacade.adjustStock(MEMBER_ID, product.getId(), anotherOption.getId(), 1))
                 .isInstanceOf(DomainException.class)
@@ -151,5 +156,17 @@ class ProductFacadeStockAdjustTest {
         return stockHistoryRepository.findAll().stream()
                 .filter(h -> h.getOption().getId().equals(option.getId()) && h.getChangeType() == changeType)
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

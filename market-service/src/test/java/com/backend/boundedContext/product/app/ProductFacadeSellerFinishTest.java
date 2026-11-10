@@ -4,6 +4,7 @@ import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.app.dto.StockHistoryDto;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
@@ -12,6 +13,7 @@ import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.ProductStopRequestRepository;
@@ -74,6 +76,9 @@ class ProductFacadeSellerFinishTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     @Autowired
@@ -116,7 +121,7 @@ class ProductFacadeSellerFinishTest {
     @DisplayName("삭제: 품절 상품도 지울 수 있고, 심사 중인 판매 중지 요청은 CANCELED로 닫힌다")
     void deleteSoldOutProductWithPendingRequest() {
         Product product = create(SELLER_ID, 1);
-        ReflectionTestUtils.setField(option(product), "stock", 0);
+        ReflectionTestUtils.setField(optionStock(option(product)), "stock", 0);
         ProductStopRequestDto request = productFacade.requestStop(MEMBER_ID, product.getId(), "단종");
 
         productFacade.deleteProduct(MEMBER_ID, product.getId());
@@ -209,10 +214,10 @@ class ProductFacadeSellerFinishTest {
     void getStockHistories() {
         Product product = create(SELLER_ID, 10);
         ProductOption option = option(product);
-        stockHistoryRepository.save(StockHistory.ofInit(option));
+        stockHistoryRepository.save(StockHistory.ofInit(optionStock(option)));
         productFacade.adjustStock(MEMBER_ID, product.getId(), option.getId(), 5);
-        ReflectionTestUtils.setField(option, "stock", 13);
-        stockHistoryRepository.save(StockHistory.ofOrder(option, StockChangeType.ORDER_DEDUCT, -2, 77L, 9_200_001L));
+        ReflectionTestUtils.setField(optionStock(option), "stock", 13);
+        stockHistoryRepository.save(StockHistory.ofOrder(optionStock(option), StockChangeType.ORDER_DEDUCT, -2, 77L, 9_200_001L));
 
         PageResponse<StockHistoryDto> result = productFacade.getStockHistories(
                 MEMBER_ID, product.getId(), option.getId(), PageRequest.of(0, 20));
@@ -258,13 +263,13 @@ class ProductFacadeSellerFinishTest {
 
     private Product create(Long sellerId, int stock) {
         Product product = productRepository.save(Product.create(sellerId, skincare, "판매자 상품 테스트", "설명", 25_000));
-        productOptionRepository.save(ProductOption.createDefault(product, stock));
+        saveOption(product, stock);
         productRepository.flush();   // 잠금 조회가 DB 값을 다시 읽으므로 먼저 반영한다
         return product;
     }
 
     private ProductOption option(Product product) {
-        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(product.getId())).getFirst();
+        return optionStockRepository.findAllWithOptionByProductIdIn(List.of(product.getId())).getFirst().getOption();
     }
 
     private List<SellerProductSummaryDto> sellerList() {
@@ -277,5 +282,17 @@ class ProductFacadeSellerFinishTest {
 
     private PageResponse<StockHistoryDto> histories(Long productId, Long optionId) {
         return productFacade.getStockHistories(MEMBER_ID, productId, optionId, PageRequest.of(0, 20));
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

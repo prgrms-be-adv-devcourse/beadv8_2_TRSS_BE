@@ -1,6 +1,6 @@
 package com.backend.boundedContext.product.app;
 
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -25,7 +25,7 @@ public class ProductDeductStockUseCase {
     public void deductStock(List<StockChangeDto> items) {
         if (items.isEmpty()) return;
 
-        Map<Long, ProductOption> options = productSupport.lockOptions(
+        Map<Long, OptionStock> stocks = productSupport.lockStocks(
                 items.stream().map(StockChangeDto::optionId).toList());
         Set<Long> deducted = productSupport.findProcessedOrderItemIds(
                 items.stream().map(StockChangeDto::orderItemId).toList(), StockChangeType.ORDER_DEDUCT);
@@ -33,10 +33,10 @@ public class ProductDeductStockUseCase {
         for (StockChangeDto item : items) {
             if (deducted.contains(item.orderItemId())) continue;
 
-            ProductOption option = options.get(item.optionId());
-            option.deductStock(item.quantity());   // 판매 불가 409, 재고 부족 400
+            OptionStock stock = stocks.get(item.optionId());
+            stock.deductStock(item.quantity());   // 판매 불가 409, 재고 부족 400
             stockHistoryRepository.save(StockHistory.ofOrder(
-                    option, StockChangeType.ORDER_DEDUCT, -item.quantity(), item.orderId(), item.orderItemId()));
+                    stock, StockChangeType.ORDER_DEDUCT, -item.quantity(), item.orderId(), item.orderItemId()));
         }
     }
 }
