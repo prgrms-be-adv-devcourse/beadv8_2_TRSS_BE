@@ -87,6 +87,16 @@ class ProductFacadeStockTest {
     }
 
     @Test
+    @DisplayName("getOptions: 재고 행이 없는 옵션은 없는 ID처럼 빠진다 (NPE 없이)")
+    void getOptionsWithoutStockRow() {
+        ProductOption noStock = productOptionRepository.save(ProductOption.createDefault(product));
+
+        assertThat(productFacade.getOptions(List.of(option.getId(), noStock.getId())))
+                .extracting(OptionSnapshotDto::optionId)
+                .containsExactly(option.getId());
+    }
+
+    @Test
     @DisplayName("getOptions: 삭제된 상품도 결과에 포함하고 판매 불가로 표시한다")
     void getOptionsDeletedProduct() {
         ReflectionTestUtils.setField(product, "status", ProductSaleStatus.DELETED);

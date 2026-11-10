@@ -20,6 +20,11 @@ public interface OptionStockRepository extends JpaRepository<OptionStock, Long> 
     @Query("select s from OptionStock s where s.id in :optionIds order by s.id")
     List<OptionStock> findAllForUpdateByOptionIdIn(Collection<Long> optionIds);
 
+    /** 옵션 재고를 옵션·상품·카테고리와 함께 한 번에 조회한다 (삭제된 옵션 포함). 재고 행이 없는 옵션은 빠진다. */
+    @Query("select s from OptionStock s join fetch s.option o join fetch o.product p join fetch p.category "
+            + "where s.id in :optionIds")
+    List<OptionStock> findAllWithOptionAndProductByOptionIdIn(Collection<Long> optionIds);
+
     /** 상품들의 삭제되지 않은 옵션 재고를 옵션과 함께 조회한다 (옵션 ID 순) */
     @Query("select s from OptionStock s join fetch s.option o "
             + "where o.product.id in :productIds and o.deletedAt is null order by o.id")

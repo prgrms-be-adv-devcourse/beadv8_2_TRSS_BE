@@ -52,24 +52,24 @@ public class ProductSupport {
 
     /**
      * 옵션 여러 개의 현재 정보. 삭제된 상품·옵션도 포함하고, 없는 ID만 빠진다.
+     * 재고 행을 기준으로 옵션·상품을 함께 읽으므로, 재고 행이 없는 옵션도 없는 ID로 보고 뺀다 (재고 잠금의 404와 같은 기준).
      * 대표 이미지는 상품 ID를 모아 한 번에 조회하고, 대표 이미지가 없는 상품이면 null이다.
      */
     public List<OptionSnapshotDto> getOptionSnapshots(Collection<Long> optionIds) {
         if (optionIds.isEmpty()) return List.of();
 
-        List<ProductOption> options = productOptionRepository.findAllWithProductByIdIn(optionIds);
-        Map<Long, Integer> stocks = optionStockRepository.findAllById(optionIds).stream()
-                .collect(Collectors.toMap(OptionStock::getId, OptionStock::getStock));
+        List<OptionStock> stocks = optionStockRepository.findAllWithOptionAndProductByOptionIdIn(optionIds);
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(
-                options.stream().map(option -> option.getProduct().getId()).collect(Collectors.toSet()));
+                stocks.stream().map(stock -> stock.getOption().getProduct().getId()).collect(Collectors.toSet()));
 
-        return options.stream()
-                .map(option -> {
+        return stocks.stream()
+                .map(stock -> {
+                    ProductOption option = stock.getOption();
                     Product product = option.getProduct();
                     ProductUnsaleableReason reason = option.getUnsaleableReason();
                     return new OptionSnapshotDto(
                             option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getName(),
-                            product.getPrice(), stocks.get(option.getId()), reason == null, reason, thumbnailUrls.get(product.getId()));
+                            product.getPrice(), stock.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
                 .toList();
     }

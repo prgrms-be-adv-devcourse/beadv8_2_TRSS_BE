@@ -9,10 +9,6 @@ import java.util.List;
 
 public interface ProductOptionRepository extends JpaRepository<ProductOption, Long> {
 
-    /** 옵션을 상품·카테고리와 함께 한 번에 조회한다 (삭제된 옵션 포함) */
-    @Query("select o from ProductOption o join fetch o.product p join fetch p.category where o.id in :ids")
-    List<ProductOption> findAllWithProductByIdIn(Collection<Long> ids);
-
     /** 상품들의 삭제되지 않은 옵션 (ID 순) */
     List<ProductOption> findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(Collection<Long> productIds);
 
