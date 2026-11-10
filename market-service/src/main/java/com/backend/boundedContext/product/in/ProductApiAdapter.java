@@ -2,6 +2,7 @@ package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.dto.ProductSnapshotDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import com.backend.shared.product.dto.StockRestoreReason;
 import com.backend.shared.product.out.ProductApi;
@@ -25,6 +26,11 @@ public class ProductApiAdapter implements ProductApi {
     @Override
     public List<OptionSnapshotDto> getOptions(Collection<Long> optionIds) {
         return productFacade.getOptions(optionIds);
+    }
+
+    @Override
+    public List<ProductSnapshotDto> getProducts(Collection<Long> productIds) {
+        return productFacade.getProducts(productIds);
     }
 
     @Override

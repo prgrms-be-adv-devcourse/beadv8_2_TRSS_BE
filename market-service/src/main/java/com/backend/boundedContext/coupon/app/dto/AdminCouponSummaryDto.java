@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
  * @param remainingQuantity  수량 제한이 없으면 null. 예약된 수량도 빠진 값
  * @param usedCount          사용(USED) 수. 예약 중인 것은 세지 않는다
  * @param usedDiscountAmount 사용(USED)된 할인 합계
+ * @param productCoupon      상품 쿠폰 정보 (인플루언서, 대상 상품, 코드, 할인). 장바구니 쿠폰이면 null
  */
 public record AdminCouponSummaryDto(
         Long couponId,
@@ -32,9 +33,11 @@ public record AdminCouponSummaryDto(
         Integer remainingQuantity,
         long usedCount,
         long usedDiscountAmount,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        ProductCouponInfoDto productCoupon
 ) {
-    public static AdminCouponSummaryDto of(Coupon coupon, LocalDateTime now, CouponUsageStat usedStat) {
+    public static AdminCouponSummaryDto of(Coupon coupon, LocalDateTime now, CouponUsageStat usedStat,
+                                           ProductCouponInfoDto productCoupon) {
         return new AdminCouponSummaryDto(
                 coupon.getId(),
                 coupon.getCouponType(),
@@ -49,7 +52,8 @@ public record AdminCouponSummaryDto(
                 coupon.getRemainingQuantity(),
                 usedStat.count(),
                 usedStat.discountAmount(),
-                coupon.getCreatedAt()
+                coupon.getCreatedAt(),
+                productCoupon
         );
     }
 }

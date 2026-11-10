@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Optional;
 
 public interface CouponRepository extends JpaRepository<Coupon, Long>, JpaSpecificationExecutor<Coupon> {
@@ -44,4 +46,39 @@ public interface CouponRepository extends JpaRepository<Coupon, Long>, JpaSpecif
                and c.remainingQuantity < c.totalQuantity
             """)
     int increaseRemainingQuantity(Long id);
+
+    /**
+     * 상품들의 상품 쿠폰 중 아직 끝나지 않은 운영 중 쿠폰을 모두 중지한다 (상품 판매 중지, 삭제). 바뀐 행 수를 돌려준다.
+     * 이미 중지됐거나 기간이 끝난 쿠폰은 건드리지 않는다. 시작 전 쿠폰도 중지한다.
+     * 벌크 UPDATE라 수정 시각 자동 기록(@LastModifiedDate)이 돌지 않으므로 updatedAt도 직접 넣는다.
+     * 예약(쿠폰 쓰기 잠금)과 겹치면 예약이 끝날 때까지 기다린다. 이미 예약된 쿠폰은 결제 때 중지 여부를 다시 본다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Coupon c
+               set c.status = com.backend.boundedContext.coupon.domain.CouponStatus.STOPPED,
+                   c.stoppedBy = com.backend.boundedContext.coupon.domain.CouponStoppedBy.SYSTEM,
+                   c.stopReason = :reason,
+                   c.stoppedAt = :now,
+                   c.updatedAt = :now
+             where c.status = com.backend.boundedContext.coupon.domain.CouponStatus.ACTIVE
+               and c.validUntil > :now
+               and c.id in (select pc.coupon.id from ProductCoupon pc where pc.productId in :productIds)
+            """)
+    int stopActiveProductCouponsByProductIds(Collection<Long> productIds, String reason, LocalDateTime now);
+
+    /** 협약들의 상품 쿠폰 중 아직 끝나지 않은 운영 중 쿠폰을 모두 중지한다 (협약 종료). 조건은 상품 기준 중지와 같다 */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Coupon c
+               set c.status = com.backend.boundedContext.coupon.domain.CouponStatus.STOPPED,
+                   c.stoppedBy = com.backend.boundedContext.coupon.domain.CouponStoppedBy.SYSTEM,
+                   c.stopReason = :reason,
+                   c.stoppedAt = :now,
+                   c.updatedAt = :now
+             where c.status = com.backend.boundedContext.coupon.domain.CouponStatus.ACTIVE
+               and c.validUntil > :now
+               and c.id in (select pc.coupon.id from ProductCoupon pc where pc.partnershipId in :partnershipIds)
+            """)
+    int stopActiveProductCouponsByPartnershipIds(Collection<Long> partnershipIds, String reason, LocalDateTime now);
 }

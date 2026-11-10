@@ -46,10 +46,14 @@ public class ApiV1AdminCouponController {
             @RequestParam(required = false) CouponType type,
             @Parameter(description = "SCHEDULED(시작 전), ACTIVE(사용 가능), ENDED(종료), STOPPED(중지)")
             @RequestParam(required = false) CouponDisplayStatus status,
+            @Parameter(description = "상품 쿠폰을 발행한 판매자 ID (보내면 장바구니 쿠폰은 빠짐)")
+            @RequestParam(required = false) Long sellerId,
+            @Parameter(description = "상품 쿠폰을 받은 인플루언서 ID (보내면 장바구니 쿠폰은 빠짐)")
+            @RequestParam(required = false) Long influencerId,
             @ParameterObject Pageable pageable
     ) {
         return RsData.of("200-1", "쿠폰 목록을 조회했습니다.",
-                couponFacade.getCouponsForAdmin(type, status, pageable));
+                couponFacade.getCouponsForAdmin(type, status, sellerId, influencerId, pageable));
     }
 
     @Operation(

@@ -234,6 +234,12 @@ public interface ProductApi {
     List<OptionSnapshotDto> getOptions(Collection<Long> optionIds);
 
     /**
+     * 상품 여러 개의 현재 정보 (상품 단위). 쿠폰 발행과 협약 pick 상품 목록에서 쓴다.
+     * 삭제, 판매 중지 상품도 포함하고(onSale = false) 없는 ID만 빠진다. 순서는 보장하지 않는다.
+     */
+    List<ProductSnapshotDto> getProducts(Collection<Long> productIds);
+
+    /**
      * 주문 생성 시 재고 차감(ORDER_DEDUCT). 주문 항목을 저장해 orderItemId가 생긴 뒤 같은 트랜잭션에서 호출한다.
      * 상품(읽기 잠금) → 옵션(쓰기 잠금) 순서로, 각각 ID 오름차순으로 잠근다.
      * 실패: 409 PRODUCT_NOT_ON_SALE(판매 불가), 400 OUT_OF_STOCK(재고 부족), 404 PRODUCT_NOT_FOUND (하나라도 실패하면 전체 롤백)
@@ -387,8 +393,33 @@ public interface OrderApi {
      * 판매 중지, 삭제된 옵션은 0원으로 센다. 내 장바구니 항목이 아니면 404-CART_ITEM_NOT_FOUND.
      */
     long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds);
+
+    /**
+     * 내 장바구니 항목들의 현재 가격 정보 (항목마다 상품, 단가, 수량, 판매 가능 여부). 보낸 순서대로, 중복 ID는 한 번만 준다.
+     * 쿠폰 컨텍스트가 상품 쿠폰 코드를 검증할 때 CouponOrderPort를 거쳐 부른다.
+     * 판매할 수 없는 항목은 saleable = false, 단가 0원. 내 장바구니 항목이 아니면 404-CART_ITEM_NOT_FOUND.
+     */
+    List<CartLineDto> getCartLines(Long buyerId, Collection<Long> cartItemIds);
 }
 ```
+
+### CouponApi (쿠폰 컨텍스트, market-service)
+
+```java
+public interface CouponApi {
+    /**
+     * 판매를 멈춘(판매 중지, 삭제) 상품의 상품 쿠폰을 모두 중지한다 (중지 주체 SYSTEM).
+     * 상품 컨텍스트가 ProductSaleEndSupport에서 상품 상태를 바꾼 트랜잭션 안에서 ProductCouponPort를 거쳐 부른다.
+     * 아직 끝나지 않은 운영 중 쿠폰만 중지하고, 중지된 쿠폰은 상품이 다시 판매 중이 돼도 되살리지 않는다.
+     */
+    int stopProductCouponsByProducts(Collection<Long> productIds, String reason);
+}
+```
+
+- 쿠폰 컨텍스트가 부르는 다른 기능은 모두 쿠폰 쪽 포트를 거친다: CouponSellerPort(MemberApi), CouponProductPort(ProductApi), CouponOrderPort(OrderApi).
+- 인플루언서(CouponInfluencerPort)와 pick(InfluencerPickPort)은 아직 구현이 없어 임시 구현체가 "인플루언서 아님", "pick 안 함"으로 답한다. 인플루언서와 pick이 생기면 구현체만 바꾼다.
+- influencerId는 인플루언서 테이블 ID(influencer.id)이고 회원 ID가 아니다.
+- 판매자 제재(SellerSanctionedEvent)는 쿠폰 컨슈머가 groupId market-coupon으로 따로 받아 협약을 종료한다.
 
 ### 이벤트
 
