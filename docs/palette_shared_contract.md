@@ -67,7 +67,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
 | 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
-| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
+| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
 | 배송 시작 | delivery | 물류 담당 송장 등록 → 배송 SHIPPED → `DeliveryShippedEvent` → (Kafka `delivery.events`) 알림이 구매자에게 배송 시작 알림 | 이벤트, 별도 Tx (송장 수정은 이벤트 없음) |
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
 | 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
@@ -680,11 +680,15 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderPaidEvent` (주문, 미정) | 구매자에게 주문 완료 알림 저장 | `processed_event`(eventId, `notification`) |
-| 배송 시작 이벤트 (배송, 미정) | 구매자에게 배송 시작 알림 저장(택배사·송장번호 포함) | 위와 같음 |
-| 배송 완료 이벤트 (배송, 미정) | 구매자에게 배송 완료 알림 저장 | 위와 같음 |
+| `OrderPaidEvent` (주문, `order.events`) | 구매자(`buyerId`)에게 주문 완료 알림 저장 | `processed_event`(eventId, `notification`) |
+| `DeliveryShippedEvent` (배송, `delivery.events`) | 구매자에게 배송 시작 알림 저장. 문구에 `carrierName`·`trackingNumber`를 넣음 | 위와 같음 |
+| `DeliveryCompletedEvent` (배송, `delivery.events`) | 구매자에게 배송 완료 알림 저장 | 위와 같음 |
 
-- 이벤트는 발행하는 쪽(주문·배송)이 정의하고 발행한다. 알림은 다른 서비스를 다시 부르지 않으므로 `orderId`·`buyerId`와 문구에 필요한 값(택배사·송장번호)을 payload에 담아야 한다. 계약이 정해지면 이 표를 채운다.
+- 두 토픽을 같은 groupId `notification`으로 받는다(`NotificationOrderEventListener`, `NotificationDeliveryEventListener`). 같은 토픽의 다른 이벤트(구매 확정·반품 등)는 `eventType` 헤더로 거르고, 헤더가 없는 메시지는 봉투를 읽어 거른다.
+- 알림은 다른 서비스를 다시 부르지 않고 이벤트 값만으로 알림을 만든다. 배송지·연락처는 쓰지 않는다.
+- 배송지가 없는 주문은 `OrderPaidEvent`가 발행되지 않으므로 주문 완료 알림도 없다.
+- 송장 수정은 이벤트가 없어 알림을 다시 보내지 않는다. 바뀐 송장번호는 주문 상세의 배송 정보로 확인한다.
+- 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 알림 저장이 함께 커밋되고, 저장이 실패하면 기록도 롤백되어 다시 처리된다. 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `<토픽>-dlt`로 보낸다.
 - 알림 저장이 실패해도 주문·배송 처리는 되돌리지 않는다(별도 컨슈머, groupId `notification`).
 
 ## 9. 구현 주의사항
