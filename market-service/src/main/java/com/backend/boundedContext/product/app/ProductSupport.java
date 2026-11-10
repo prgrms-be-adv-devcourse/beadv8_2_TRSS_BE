@@ -25,6 +25,7 @@ import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -89,12 +90,19 @@ public class ProductSupport {
 
         lockProductsForShare(productOptionRepository.findProductIdsByIdIn(ids));
 
+        // 이 트랜잭션에서 이미 읽어 둔(메모리에 옛 값이 있는) 재고만 잠근 뒤 다시 읽는다. 처음 읽는 재고는 잠금 쿼리가 최신 값을 가져온다.
+        // getReference는 SELECT 없이, 읽어 둔 재고면 그 엔티티를, 아니면 초기화되지 않은 프록시를 준다
+        Set<Long> loadedStockIds = ids.stream()
+                .filter(id -> Hibernate.isInitialized(entityManager.getReference(OptionStock.class, id)))
+                .collect(Collectors.toSet());
+
         List<OptionStock> stocks = optionStockRepository.findAllForUpdateByOptionIdIn(ids);
         if (stocks.size() != ids.size()) {
             throw new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND);
         }
-        stocks.forEach(entityManager::refresh);
-        productOptionRepository.findAllById(ids).forEach(entityManager::refresh);
+        stocks.stream().filter(stock -> loadedStockIds.contains(stock.getId())).forEach(entityManager::refresh);
+        // 옵션도 이미 읽어 둔 것만 다시 읽는다. 읽지 않은 옵션은 프록시라 처음 쓸 때(잠금 뒤) 최신 값으로 읽힌다
+        stocks.stream().map(OptionStock::getOption).filter(Hibernate::isInitialized).forEach(entityManager::refresh);
 
         return stocks.stream().collect(Collectors.toMap(OptionStock::getId, Function.identity()));
     }
