@@ -23,6 +23,8 @@ main() {
     )
     # 앱과 별개로, 재시작한 nginx(80)가 요청을 앱으로 넘기는지 본다. 로그인 없이 열리는 경로를 쓴다
     local nginx_url="http://localhost/v3/api-docs"
+    # 기동 확인 상한(초). 앱이 뜨는 중(starting)이면 이 시간까지 기다린다. 정상이면 닿지 않는 안전장치다
+    local wait_limit="${DEPLOY_WAIT_LIMIT:-600}"
     local compose=(docker compose -f infra/compose.prod.yaml)
 
     cd "$app_dir"
@@ -45,30 +47,59 @@ main() {
     echo "▶ nginx 설정 다시 읽기"
     "${compose[@]}" restart nginx
 
-    echo "▶ 기동 확인 (최대 150초)"
-    local container healthy
-    for _ in $(seq 1 30); do
-        # 하나라도 준비되지 않으면 5초 뒤 처음부터 다시 본다
-        healthy=true
+    # 시간이 아니라 상태로 판단한다(compose.prod.yaml의 x-app-healthcheck).
+    #   starting  : 뜨는 중 → 계속 기다린다
+    #   healthy   : 다 떴다
+    #   unhealthy : 시작 시간(start_period)이 지났는데도 응답이 없다 → 바로 실패
+    echo "▶ 기동 확인 (unhealthy면 바로 실패, 최대 ${wait_limit}초)"
+    local started=$SECONDS last_report=$SECONDS container status waiting
+    while true; do
+        waiting=()
         for container in "${health_containers[@]}"; do
-            [ "$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)" = "healthy" ] \
-                || { healthy=false; break; }
+            status="$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "없음")"
+            case "$status" in
+                healthy) ;;
+                starting) waiting+=("${container#palette-}") ;;
+                *)
+                    # unhealthy이거나 컨테이너가 없다(떴다가 죽음 등)
+                    fail_with_logs "${container} 상태가 ${status}입니다" "${container#palette-}"
+                    return 1
+                    ;;
+            esac
         done
-        if $healthy; then
-            curl -fsS -o /dev/null "$nginx_url" || healthy=false
-        fi
-        if $healthy; then
-            echo "✅ 배포 완료"
+
+        # 앱이 다 떴으면 nginx를 거쳐서도 응답하는지 본다(nginx가 막 재시작했으면 잠깐 실패할 수 있어 다시 본다)
+        if [ "${#waiting[@]}" -eq 0 ] && curl -fsS -o /dev/null "$nginx_url" 2>/dev/null; then
+            echo "✅ 배포 완료 ($(( SECONDS - started ))초)"
             docker image prune -f > /dev/null   # 이전 빌드에서 남은 이미지 정리 (디스크 50GB 제한)
             return 0
         fi
+
+        if (( SECONDS - started >= wait_limit )); then
+            fail_with_logs "${wait_limit}초 안에 끝나지 않았습니다. 아직 뜨는 중: ${waiting[*]:-nginx}" "${waiting[@]}"
+            return 1
+        fi
+
+        # 30초마다 아직 뜨는 중인 앱을 알려 준다(Actions 로그에서 어디서 오래 걸리는지 보이게)
+        if (( SECONDS - last_report >= 30 )); then
+            echo "  … $(( SECONDS - started ))초, 뜨는 중: ${waiting[*]:-없음 (nginx 확인 중)}"
+            last_report=$SECONDS
+        fi
         sleep 5
     done
+}
 
-    echo "❌ 앱이 150초 안에 응답하지 않습니다. 최근 앱 로그:"
-    "${compose[@]}" ps
-    "${compose[@]}" logs --tail 80 member market payment settlement delivery
-    return 1
+# 실패 이유와 함께 컨테이너 상태, 문제 서비스의 최근 로그를 보여 준다(서비스를 못 집으면 앱 전체)
+fail_with_logs() {
+    local reason="$1"
+    shift
+    local services=("$@")
+    [ "${#services[@]}" -eq 0 ] && services=(member market payment settlement delivery)
+
+    echo "❌ ${reason}"
+    docker compose -f infra/compose.prod.yaml ps
+    echo "▶ 최근 로그: ${services[*]}"
+    docker compose -f infra/compose.prod.yaml logs --tail 80 "${services[@]}"
 }
 
 main "$@"
