@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
@@ -32,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 옵션 정보 수정(이름·추가금)과 주문 재고 차감이 겹쳐도 서로 영향을 주지 않는지 확인한다.
+ * 옵션 정보 수정(추가금)과 주문 재고 차감이 겹쳐도 서로 영향을 주지 않는지 확인한다.
  *
  * <p>재고가 product_option에 있던 때는 두 문제가 있었다.
  * <ul>
@@ -50,6 +49,7 @@ class ProductOptionStockConflictTest {
     private static final long ORDER_ITEM_ID = 9_100_000L;
     private static final long SELLER_ID = 10L;
     private static final int INITIAL_STOCK = 10;
+    private static final long ADDITIONAL_PRICE = 3_000L;
     /**
      * 옵션 수정 트랜잭션이 옵션 행을 UPDATE한 채 주문 커밋을 기다리는 최대 시간.
      * 차감이 잠금을 기다리지 않으면 바로 끝나므로, 넉넉히 잡아도 정상일 때 테스트 시간은 늘지 않는다
@@ -109,7 +109,7 @@ class ProductOptionStockConflictTest {
     }
 
     @Test
-    @DisplayName("[lost update] 옵션 이름을 수정하는 사이 주문이 1개 차감해도, 수정 커밋이 재고를 덮어쓰지 않아 차감이 남는다")
+    @DisplayName("[lost update] 옵션 추가금을 수정하는 사이 주문이 1개 차감해도, 수정 커밋이 재고를 덮어쓰지 않아 차감이 남는다")
     void optionEditDoesNotOverwriteDeductedStock() throws Exception {
         CountDownLatch editRead = new CountDownLatch(1);
         CountDownLatch deductCommitted = new CountDownLatch(1);
@@ -123,15 +123,14 @@ class ProductOptionStockConflictTest {
             return null;
         });
 
-        // 판매자 옵션 수정: 옵션과 재고를 읽고(재고 10) → 주문 커밋을 기다린 뒤 → 이름만 바꿔 커밋한다
+        // 판매자 옵션 수정: 옵션과 재고를 읽고(재고 10) → 주문 커밋을 기다린 뒤 → 추가금만 바꿔 커밋한다
         // ProductOption에는 @Version·@DynamicUpdate가 없어 모든 컬럼을 UPDATE하지만, 재고 컬럼은 이제 이 행에 없다
         transactionTemplate.executeWithoutResult(status -> {
             ProductOption option = productOptionRepository.findById(optionId).orElseThrow();
             assertThat(optionStockRepository.findById(optionId).orElseThrow().getStock()).isEqualTo(INITIAL_STOCK);
             editRead.countDown();
             await(deductCommitted);
-            // 옵션 수정 API는 다중 옵션 작업에서 생긴다. 지금은 이름 필드를 직접 바꿔 그 수정을 흉내 낸다
-            ReflectionTestUtils.setField(option, "name", "흰색 / M");
+            option.changeAdditionalPrice(ADDITIONAL_PRICE);
         });
 
         order.get(10, TimeUnit.SECONDS);
@@ -140,7 +139,7 @@ class ProductOptionStockConflictTest {
         // 차감 이력(-1)과 재고가 맞는다 (분리 전에는 재고가 10으로 되돌아갔다)
         assertThat(deductHistoryCount()).isEqualTo(1);
         assertThat(stock()).isEqualTo(INITIAL_STOCK - 1);
-        assertThat(optionName()).isEqualTo("흰색 / M");
+        assertThat(additionalPrice()).isEqualTo(ADDITIONAL_PRICE);
     }
 
     @Test
@@ -158,12 +157,12 @@ class ProductOptionStockConflictTest {
             return null;
         });
 
-        // 판매자 옵션 수정: 이름을 바꿔 UPDATE를 DB에 보내고(옵션 행 잠금), 커밋하지 않은 채 주문 커밋을 기다린다.
+        // 판매자 옵션 수정: 추가금을 바꿔 UPDATE를 DB에 보내고(옵션 행 잠금), 커밋하지 않은 채 주문 커밋을 기다린다.
         // 차감이 옵션 행 잠금을 기다린다면 이 트랜잭션이 끝날 때까지 커밋할 수 없으므로 대기 시간이 지나 false가 된다.
         // 시간이 아니라 순서(수정 커밋 전에 차감 커밋)로 보므로, 워밍업·GC로 차감이 느려져도 흔들리지 않는다
         boolean deductCommittedWhileEditOpen = Boolean.TRUE.equals(transactionTemplate.execute(status -> {
             ProductOption option = productOptionRepository.findById(optionId).orElseThrow();
-            ReflectionTestUtils.setField(option, "name", "흰색 / M");
+            option.changeAdditionalPrice(ADDITIONAL_PRICE);
             productOptionRepository.flush();
             editLocked.countDown();
             return awaitQuietly(deductCommitted, EDIT_HOLD_SECONDS);
@@ -175,15 +174,15 @@ class ProductOptionStockConflictTest {
         // 주문은 수정이 끝나기를 기다리지 않았다 (분리 전에는 수정 커밋 뒤에야 차감이 끝났다)
         assertThat(deductCommittedWhileEditOpen).isTrue();
         assertThat(stock()).isEqualTo(INITIAL_STOCK - 1);
-        assertThat(optionName()).isEqualTo("흰색 / M");
+        assertThat(additionalPrice()).isEqualTo(ADDITIONAL_PRICE);
     }
 
     private int stock() {
         return optionStockRepository.findById(optionId).orElseThrow().getStock();
     }
 
-    private String optionName() {
-        return productOptionRepository.findById(optionId).orElseThrow().getName();
+    private long additionalPrice() {
+        return productOptionRepository.findById(optionId).orElseThrow().getAdditionalPrice();
     }
 
     private long deductHistoryCount() {

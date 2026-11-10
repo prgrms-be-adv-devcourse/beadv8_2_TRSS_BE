@@ -83,7 +83,9 @@ class ProductFacadeProductTest {
                 .toList();
         assertThat(options).hasSize(1);
         ProductOption option = options.getFirst();
-        assertThat(option.getName()).isEqualTo("기본");
+        assertThat(option.getDisplayName()).isEqualTo("기본");
+        assertThat(option.getValues()).isEmpty();
+        assertThat(option.getAdditionalPrice()).isZero();
         assertThat(optionStock(option).getStock()).isEqualTo(30);
 
         List<StockHistory> histories = stockHistoryRepository.findAll().stream()

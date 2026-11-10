@@ -178,7 +178,7 @@ class ApiV1SellerProductControllerTest {
     @DisplayName("상품 수정 폼 조회: 이미지 자리(thumbnail, detailImages)를 포함해 돌려준다")
     void getSellerProductForm() throws Exception {
         given(productFacade.getSellerProductForm(2L, 11L)).willReturn(
-                new SellerProductFormDto(11L, "수분 크림", 25_000, "설명", 1L, 5L, null, List.of()));
+                new SellerProductFormDto(11L, "수분 크림", 25_000, "설명", 1L, 5L, null, List.of(), List.of(), List.of()));
 
         getAsSeller("/api/v1/seller/products/11")
                 .andExpect(status().isOk())
