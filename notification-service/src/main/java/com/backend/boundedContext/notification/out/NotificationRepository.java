@@ -1,0 +1,33 @@
+package com.backend.boundedContext.notification.out;
+
+import com.backend.boundedContext.notification.domain.Notification;
+import org.springframework.data.domain.Limit;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+public interface NotificationRepository extends JpaRepository<Notification, Long> {
+
+    // 회원의 알림 중 cursor보다 id가 작은 것을 최신순으로 limit개 (idx_notification_member_id)
+    List<Notification> findByMemberIdAndIdLessThanOrderByIdDesc(Long memberId, Long cursor, Limit limit);
+
+    // 안 읽은 알림 개수 (idx_notification_member_unread)
+    long countByMemberIdAndReadAtIsNull(Long memberId);
+
+    // 본인 알림만 찾음. 다른 회원의 알림이면 empty
+    Optional<Notification> findByIdAndMemberId(Long id, Long memberId);
+
+    // 안 읽은 알림을 한 번에 읽음 처리함. 벌크 update는 Auditing이 돌지 않아 updated_at도 직접 채움
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            update Notification n
+               set n.readAt = :now, n.updatedAt = :now
+             where n.memberId = :memberId
+               and n.readAt is null
+            """)
+    int readAllByMemberId(Long memberId, LocalDateTime now);
+}

@@ -12,11 +12,11 @@ set -euo pipefail
 
 # 앱 서비스 목록. compose.prod.yaml의 서비스 이름이고, 소스 폴더는 <이름>-service, 컨테이너는 palette-<이름>이다.
 # 서비스가 분리되면 여기에 추가한다.
-APP_SERVICES=(member market payment settlement delivery)
+APP_SERVICES=(member market payment settlement delivery notification)
 
 # 모든 앱 이미지에 들어가는 파일. 하나라도 바뀌면 앱을 전부 다시 빌드한다.
-#   common/(공통 코드), Gradle 설정, Dockerfile
-SHARED_PATHS='^(common/|gradle/|gradlew$|build\.gradle\.kts$|settings\.gradle\.kts$|lombok\.config$|Dockerfile$)'
+#   common/(공통 코드), Gradle 설정, Dockerfile, infra/compose.prod.yaml(앱 build.args 등이 여기 있어 바뀌면 이미지를 다시 만든다)
+SHARED_PATHS='^(common/|gradle/|gradlew$|build\.gradle\.kts$|settings\.gradle\.kts$|lombok\.config$|Dockerfile$|infra/compose\.prod\.yaml$)'
 
 # 마지막으로 배포에 성공한 커밋. 이번 커밋과 비교해 바뀐 앱을 고른다. 저장소 밖(서버 홈)에 둬서 git이 건드리지 않는다
 STATE_FILE="${DEPLOY_STATE_FILE:-$HOME/.palette-last-deployed}"
@@ -64,7 +64,8 @@ main() {
     DEPLOY_STAGE="빌드·재시작"
     if [ "${#BUILD_SERVICES[@]}" -gt 0 ]; then
         echo "▶ 빌드: ${BUILD_SERVICES[*]}"
-        "${compose[@]}" build "${BUILD_SERVICES[@]}"
+        # Dockerfile의 공통 빌드 단계가 바뀐 앱 jar만 만들게 한다(기본은 jar 전부). 예: "market-service"
+        "${compose[@]}" build --build-arg SERVICES="$(printf '%s-service ' "${BUILD_SERVICES[@]}")" "${BUILD_SERVICES[@]}"
     else
         echo "▶ 빌드: 바뀐 앱이 없어 건너뜁니다"
     fi
@@ -79,6 +80,7 @@ main() {
         echo "▶ nginx 설정 다시 읽기"
         "${compose[@]}" restart nginx
     else
+        # 다시 만든 앱 컨테이너는 IP가 바뀔 수 있지만, nginx는 앱 주소를 요청할 때 찾으므로(nginx/default.conf의 resolver) 그대로 둔다
         echo "▶ nginx: 설정이 그대로라 재시작하지 않습니다"
     fi
 
