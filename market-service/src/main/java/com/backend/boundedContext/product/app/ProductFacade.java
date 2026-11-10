@@ -10,6 +10,7 @@ import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.OptionStockDto;
 import com.backend.boundedContext.product.app.dto.ProductDetailDto;
 import com.backend.boundedContext.product.app.dto.ProductImageFile;
+import com.backend.boundedContext.product.app.dto.ProductOptionSpec;
 import com.backend.boundedContext.product.app.dto.ProductStopRequestDto;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.app.dto.StockHistoryDto;
@@ -55,6 +56,9 @@ public class ProductFacade {
     private final ProductRequestStopUseCase productRequestStopUseCase;
     private final ProductGetStockHistoriesUseCase productGetStockHistoriesUseCase;
     private final ProductAdjustStockUseCase productAdjustStockUseCase;
+    private final ProductAddOptionUseCase productAddOptionUseCase;
+    private final ProductModifyOptionUseCase productModifyOptionUseCase;
+    private final ProductDeleteOptionUseCase productDeleteOptionUseCase;
     private final ProductSearchProductsUseCase productSearchProductsUseCase;
     private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
     private final ProductGetSellerProductsUseCase productGetSellerProductsUseCase;
@@ -143,13 +147,22 @@ public class ProductFacade {
         return productGetWishlistUseCase.getWishlist(memberId, pageable);
     }
 
-    /** 승인된 판매자의 상품을 등록하고 상품 ID를 돌려준다. 대표 이미지는 필수, 상세 이미지는 선택이다. */
+    /** 승인된 판매자의 옵션 없는 상품을 등록하고 상품 ID를 돌려준다. 대표 이미지는 필수, 상세 이미지는 선택이다. */
     @Transactional
     public Long createProduct(Long memberId, Long categoryId, String name, String description,
                               long price, int stock, ProductImageFile thumbnail, List<ProductImageFile> detailImages) {
+        return createProduct(memberId, categoryId, name, description, price,
+                List.of(), List.of(ProductOptionSpec.single(stock)), thumbnail, detailImages);
+    }
+
+    /** 승인된 판매자의 상품을 옵션 조합과 함께 등록하고 상품 ID를 돌려준다. 대표 이미지는 필수, 상세 이미지는 선택이다. */
+    @Transactional
+    public Long createProduct(Long memberId, Long categoryId, String name, String description, long price,
+                              List<String> optionNames, List<ProductOptionSpec> options,
+                              ProductImageFile thumbnail, List<ProductImageFile> detailImages) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
-        return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price, stock,
-                thumbnail, detailImages).getId();
+        return productCreateProductUseCase.createProduct(sellerId, categoryId, name, description, price,
+                optionNames, options, thumbnail, detailImages).getId();
     }
 
     /** 승인된 판매자의 본인 상품 목록 */
@@ -206,6 +219,27 @@ public class ProductFacade {
     public PageResponse<StockHistoryDto> getStockHistories(Long memberId, Long productId, Long optionId, Pageable pageable) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         return productGetStockHistoriesUseCase.getStockHistories(sellerId, productId, optionId, pageable);
+    }
+
+    /** 승인된 판매자가 본인 상품에 옵션 조합을 하나 더하고, 만든 옵션 ID를 돌려준다. */
+    @Transactional
+    public Long addOption(Long memberId, Long productId, ProductOptionSpec spec) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productAddOptionUseCase.addOption(sellerId, productId, spec).getId();
+    }
+
+    /** 승인된 판매자가 본인 상품 옵션의 추가금을 바꾼다. */
+    @Transactional
+    public void modifyOption(Long memberId, Long productId, Long optionId, long additionalPrice) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productModifyOptionUseCase.modifyOption(sellerId, productId, optionId, additionalPrice);
+    }
+
+    /** 승인된 판매자가 본인 상품의 옵션 조합을 지운다 (소프트 삭제). 마지막 옵션은 지울 수 없다. */
+    @Transactional
+    public void deleteOption(Long memberId, Long productId, Long optionId) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productDeleteOptionUseCase.deleteOption(sellerId, productId, optionId);
     }
 
     /** 승인된 판매자가 자기 상품 옵션의 재고를 증감량만큼 조정하고, 조정 후 재고를 돌려준다. */
