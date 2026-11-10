@@ -61,6 +61,12 @@ ARG MODULE
 COPY --from=build --chown=app:app /jars/${MODULE}.jar app.jar
 USER app
 
+# 배포 커밋(compose.prod.yaml의 build.args, deploy.sh가 넘김). 로그의 service.version에 들어가 Slack 에러 알림이 커밋 링크로 쓴다.
+# compose의 environment가 아니라 이미지에 넣는다. environment에 두면 배포마다 값이 바뀌어
+# 코드가 안 바뀐 앱까지 전부 다시 만들어지기 때문이다. 이미지에 두면 다시 빌드한 앱만 바뀐다.
+ARG APP_VERSION=unknown
+ENV LOGGING_STRUCTURED_ECS_SERVICE_VERSION=${APP_VERSION}
+
 # member-service 8081, market-service 8082, payment-service 8083, settlement-service 8084, delivery-service 8085
 # (각 application.yaml의 server.port)
 EXPOSE 8081 8082 8083 8084 8085
