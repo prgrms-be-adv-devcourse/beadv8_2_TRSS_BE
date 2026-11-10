@@ -13,7 +13,7 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
-# Spring 앱(payment·member·market·settlement·delivery) 기동 확인. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
+# Spring 앱(payment·member·market·settlement·delivery)이 제대로 실행됐는지 확인한다. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
 # 앱마다 컨테이너 안에서 로그인 없이 열리는 Swagger 문서(/v3/api-docs)가 200인지 본다.
 #   정산처럼 로그인 없이 열리는 API가 없는 앱도 같은 방식으로 확인하려고 nginx를 거치지 않는다.
 # 실행 이미지에 curl이 없어도 되게 bash로 HTTP 요청을 직접 보낸다. 포트만 앱마다 다르다(각 서비스의 test).
