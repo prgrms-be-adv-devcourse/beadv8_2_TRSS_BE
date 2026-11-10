@@ -1,9 +1,11 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductImage;
 import com.backend.boundedContext.product.domain.ProductImageType;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.LocalProductImageStorage;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductImageRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
@@ -53,6 +55,9 @@ class ProductImageFileCleanupTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     @Autowired
@@ -88,10 +93,12 @@ class ProductImageFileCleanupTest {
                         localProductImageStorage.delete(image.getImageKey());
                         productImageRepository.delete(image);
                     });
-            productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(productId)).forEach(option -> {
+            optionStockRepository.findAllWithOptionByProductIdIn(List.of(productId)).forEach(stock -> {
+                ProductOption option = stock.getOption();
                 stockHistoryRepository.deleteAll(stockHistoryRepository.findAll().stream()
                         .filter(history -> history.getOption().getId().equals(option.getId()))
                         .toList());
+                optionStockRepository.delete(stock);   // 옵션을 가리키는 재고 엔티티를 먼저 지운다
                 productOptionRepository.delete(option);
             });
             productRepository.deleteById(productId);

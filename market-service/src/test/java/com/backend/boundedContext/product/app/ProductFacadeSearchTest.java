@@ -5,11 +5,13 @@ import com.backend.boundedContext.product.app.dto.ProductDetailDto;
 import com.backend.boundedContext.product.app.dto.ProductOptionDto;
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
@@ -59,6 +61,9 @@ class ProductFacadeSearchTest {
 
     @Autowired
     private ProductOptionRepository productOptionRepository;
+
+    @Autowired
+    private OptionStockRepository optionStockRepository;
 
     @MockitoBean
     private MemberApi memberApi;
@@ -297,7 +302,7 @@ class ProductFacadeSearchTest {
 
     private Product create(Category category, String name, long price, int stock) {
         Product product = productRepository.save(Product.create(SELLER_ID, category, name, "설명", price));
-        productOptionRepository.save(ProductOption.createDefault(product, stock));
+        saveOption(product, stock);
         return product;
     }
 
@@ -308,7 +313,7 @@ class ProductFacadeSearchTest {
     }
 
     private void setStock(Product product, int stock) {
-        ReflectionTestUtils.setField(option(product), "stock", stock);
+        ReflectionTestUtils.setField(optionStock(option(product)), "stock", stock);
     }
 
     private void setStatus(Product product, ProductSaleStatus status) {
@@ -317,5 +322,17 @@ class ProductFacadeSearchTest {
 
     private Category category(String parentName, String name) {
         return categoryRepository.findByParentNameAndName(parentName, name).orElseThrow();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

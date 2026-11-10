@@ -17,18 +17,21 @@ main() {
 
     # 정확히 "deploy <소문자 40자리 SHA>"만 받는다. 짧은 SHA·브랜치 이름·추가 명령은 모두 거부한다.
     if [[ ! "$request" =~ ^deploy\ ([0-9a-f]{40})$ ]]; then
-        echo "❌ 허용되지 않은 요청입니다. 형식: deploy <40자리 커밋 SHA>" >&2
+        reject "허용되지 않은 요청입니다. 형식: deploy <40자리 커밋 SHA>"
         return 1
     fi
     local sha="${BASH_REMATCH[1]}"
 
     cd "$app_dir"
 
-    git fetch --quiet origin develop
+    if ! git fetch --quiet origin develop; then
+        reject "서버에서 GitHub의 develop을 가져오지 못했습니다"
+        return 1
+    fi
 
     # develop에 있는 커밋만 배포한다.
     if ! git merge-base --is-ancestor "$sha" origin/develop 2>/dev/null; then
-        echo "❌ develop에 없는 커밋입니다: $sha" >&2
+        reject "develop에 없는 커밋입니다: $sha"
         return 1
     fi
 
@@ -42,6 +45,12 @@ main() {
     git checkout --quiet --force -B develop "$sha"
 
     bash infra/scripts/deploy.sh
+}
+
+# deploy.sh와 같은 형식으로 실패 단계·원인을 남긴다. deploy.yml이 이 두 줄을 Slack 실패 알림에 붙인다.
+reject() {
+    echo "❌ 단계: 배포 요청 확인"
+    echo "❌ 원인: $1"
 }
 
 main "$@"

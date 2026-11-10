@@ -5,7 +5,7 @@ import com.backend.boundedContext.product.app.dto.ProductImageDto;
 import com.backend.boundedContext.product.app.dto.ProductOptionDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.Product;
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.out.wishlist.WishlistRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,7 +29,7 @@ public class ProductGetProductDetailUseCase {
         Category category = product.getCategory();
         Category parent = category.getParent();
 
-        List<ProductOption> options = productSupport.getOptionsByProductId(Set.of(productId))
+        List<OptionStock> optionStocks = productSupport.getOptionStocksByProductId(Set.of(productId))
                 .getOrDefault(productId, List.of());
         String businessName = productSupport.getBusinessNames(Set.of(product.getSellerId()))
                 .get(product.getSellerId());
@@ -39,8 +39,8 @@ public class ProductGetProductDetailUseCase {
                 parent.getId(), parent.getName(), category.getId(), category.getName(),
                 product.getSellerId(), businessName, thumbnailUrl(productId),
                 productImageSupport.getDetailImages(productId).stream().map(ProductImageDto::url).toList(),
-                ProductSupport.isSoldOut(options),
-                options.stream().map(ProductOptionDto::from).toList(),
+                ProductSupport.isSoldOut(optionStocks),
+                optionStocks.stream().map(ProductOptionDto::from).toList(),
                 memberId != null && wishlistRepository.existsByMemberIdAndProductId(memberId, productId));
     }
 

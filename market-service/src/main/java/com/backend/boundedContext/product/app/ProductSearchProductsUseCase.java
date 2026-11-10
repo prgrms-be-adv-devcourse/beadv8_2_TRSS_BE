@@ -2,7 +2,7 @@ package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.domain.Product;
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.ProductSearchPort;
@@ -52,20 +52,20 @@ public class ProductSearchProductsUseCase {
 
     private Map<Long, ProductSummaryDto> toSummaries(List<Long> productIds) {
         List<Product> products = productRepository.findAllById(productIds);
-        Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(productIds);
+        Map<Long, List<OptionStock>> stocks = productSupport.getOptionStocksByProductId(productIds);
         Map<Long, String> businessNames = productSupport.getBusinessNames(
                 products.stream().map(Product::getSellerId).collect(Collectors.toSet()));
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
 
         return products.stream()
                 .map(product -> {
-                    List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
+                    List<OptionStock> optionStocks = stocks.getOrDefault(product.getId(), List.of());
                     return new ProductSummaryDto(
                             product.getId(), product.getName(), product.getPrice(), product.getCategory().getId(),
                             product.getSellerId(), businessNames.get(product.getSellerId()),
                             thumbnailUrls.get(product.getId()),
-                            ProductSupport.isSoldOut(productOptions),
-                            ProductSupport.getLowStockRemaining(productOptions));
+                            ProductSupport.isSoldOut(optionStocks),
+                            ProductSupport.getLowStockRemaining(optionStocks));
                 })
                 .collect(Collectors.toMap(ProductSummaryDto::productId, Function.identity()));
     }

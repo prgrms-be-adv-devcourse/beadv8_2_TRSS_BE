@@ -7,8 +7,12 @@ import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
+import com.backend.boundedContext.order.domain.OrderCouponPolicy;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
 import com.backend.boundedContext.order.in.dto.PendingOrderConflictResponse;
+import com.backend.boundedContext.order.in.dto.PriceChangedResponse;
+import com.backend.boundedContext.order.in.dto.ShippingAddressRequest;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
@@ -29,6 +33,18 @@ import java.util.stream.Collectors;
 /**
  * 주문 생성
  * 장바구니에서 고른 항목으로 결제 대기 주문을 만들고 재고를 차감한다.
+ *
+ * <p>쿠폰(OrderCouponPolicy가 켜져 있을 때만)은 재고 차감과 같은 트랜잭션에서 아래 순서로 반영한다.
+ * 쿠폰 예약이 실패하면 주문 저장과 재고 차감까지 함께 롤백된다.
+ * <ol>
+ *     <li>상품 금액 = 단가 x 수량</li>
+ *     <li>상품 쿠폰 할인 (지정한 항목 1개에 예약, 할인액은 그 항목 금액 이하)</li>
+ *     <li>장바구니 쿠폰 할인 (상품 쿠폰 할인 후 상품 금액 합계 기준)</li>
+ *     <li>결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인</li>
+ * </ol>
+ * 배송비는 배송비 작업에서 2번과 3번 사이(상품 쿠폰 할인 후 금액 기준)에 더한다. 장바구니 쿠폰 기준 금액은 배송비를 빼고 계산하므로 바뀌지 않는다.
+ * 잠금 순서는 장바구니 → 상품과 옵션(재고 차감) → 쿠폰이다. 쿠폰 쪽 작업(중지, 자동 중지)은 쿠폰보다 먼저 상품을 잠그지 않으므로
+ * 서로 기다리다 막히지 않는다.
  */
 @Component
 @RequiredArgsConstructor
@@ -41,8 +57,18 @@ public class OrderCreateOrderUseCase {
     private final OrderPolicy orderPolicy;
     private final ProductApi productApi;
     private final MemberApi memberApi;
+    private final OrderCouponPolicy orderCouponPolicy;
+    private final OrderCouponPort orderCouponPort;
 
-    public OrderCreateResponse create(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice) {
+    // 쿠폰 없이 주문
+    public OrderCreateResponse create(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
+                                      ShippingAddressRequest shippingAddress) {
+        return create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice, shippingAddress, OrderCouponSelection.NONE);
+    }
+
+    // shippingAddress: null이면 배송지 없는 주문 (프론트가 붙기 전까지 선택 값)
+    public OrderCreateResponse create(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
+                                      ShippingAddressRequest shippingAddress, OrderCouponSelection coupons) {
         // 탈퇴한 회원은 남은 Access Token으로 주문할 수 없게 401 (재고가 차감되지 않도록)
         memberApi.checkActiveMember(buyerId);
         validateIdempotencyKey(idempotencyKey);
@@ -51,6 +77,7 @@ public class OrderCreateOrderUseCase {
 
         // 같은 키로 다시 온 요청이면 처음 만든 주문을 그대로 돌려준다
         // 그 주문이 취소(만료 포함)됐으면 키를 다시 쓸 수 없으므로 409로 알려 새 키로 주문하게 한다
+        // 배송지도 처음 주문의 것을 그대로 둔다(다시 보낸 배송지와 비교·변경하지 않는다)
         if (idempotencyKey != null) {
             Optional<Order> existing = orderRepository.findByBuyerIdAndIdempotencyKey(buyerId, idempotencyKey);
             if (existing.isPresent()) {
@@ -60,6 +87,10 @@ public class OrderCreateOrderUseCase {
                 return OrderCreateResponse.from(existing.get());
             }
         }
+
+        // 새 주문을 만들 때만 쿠폰 설정을 본다. 같은 키의 재시도는 위에서 처음 만든 주문을 돌려주므로,
+        // 쿠폰을 쓴 주문을 만든 뒤 설정이 꺼져도 재시도가 409로 막히지 않는다
+        validateCouponsAvailable(coupons);
 
         // 내 장바구니 항목인지 확인
         List<CartItem> cartItems = cartItemIds.stream()
@@ -79,10 +110,13 @@ public class OrderCreateOrderUseCase {
         List<OrderItemSpec> specs = cartItems.stream()
                 .map(item -> toSpec(item, options.get(item.getOptionId()), sellerNames))
                 .toList();
-        Order order = Order.create(buyerId, idempotencyKey, specs, LocalDateTime.now(), orderPolicy.getExpireMinutes());
+        Order order = Order.create(buyerId, idempotencyKey, specs,
+                shippingAddress == null ? null : shippingAddress.toShippingAddress(),
+                LocalDateTime.now(), orderPolicy.getExpireMinutes());
 
-        if (order.getTotalPrice() != expectedTotalPrice) {
-            throw new DomainException(OrderErrorCode.PRICE_CHANGED);
+        // 쿠폰이 없으면 결제 금액 = 상품 금액 합계라 저장·재고 차감 전에 바로 확인한다
+        if (coupons.isEmpty() && order.getTotalPrice() != expectedTotalPrice) {
+            throw new DomainException(OrderErrorCode.PRICE_CHANGED, new PriceChangedResponse(order.getTotalPrice()));
         }
 
         orderRepository.save(order);
@@ -90,7 +124,45 @@ public class OrderCreateOrderUseCase {
                 .map(OrderItem::toStockChangeDto)
                 .toList());
 
+        applyCoupons(buyerId, order, coupons, LocalDateTime.now());
+
+        // 쿠폰을 쓰면 예상 결제 금액을 쿠폰 할인 후 금액(payAmount)과 비교한다. 할인은 쿠폰을 예약해야 정해지므로 여기서 본다.
+        // 다르면 같은 트랜잭션의 주문 저장, 재고 차감, 쿠폰 예약이 모두 롤백된다
+        if (order.getPayAmount() != expectedTotalPrice) {
+            throw new DomainException(OrderErrorCode.PRICE_CHANGED, new PriceChangedResponse(order.getPayAmount()));
+        }
+
         return OrderCreateResponse.from(order);
+    }
+
+    // 쿠폰 적용이 꺼져 있을 때 쿠폰을 보내면 409 (할인 없이 결제되는 일이 없게, 재고를 건드리기 전에 막는다)
+    private void validateCouponsAvailable(OrderCouponSelection coupons) {
+        if (!coupons.isEmpty() && !orderCouponPolicy.isCouponEnabled()) {
+            throw new DomainException(OrderErrorCode.ORDER_COUPON_NOT_AVAILABLE);
+        }
+    }
+
+    /**
+     * 상품 쿠폰 → 장바구니 쿠폰 순서로 반영한다. 쿠폰 예약은 주문 ID와 주문 항목 ID가 필요해 주문을 저장한 뒤에 한다.
+     * 쿠폰이 없으면 아무것도 하지 않아 결제 금액은 상품 금액 합계와 같다.
+     */
+    private void applyCoupons(Long buyerId, Order order, OrderCouponSelection coupons, LocalDateTime now) {
+        for (OrderCouponSelection.ProductCoupon selection : coupons.productCoupons()) {
+            OrderItem target = order.getItems().stream()
+                    .filter(item -> selection.cartItemId().equals(item.getCartItemId()))
+                    .findFirst()
+                    .orElseThrow(() -> new DomainException(OrderErrorCode.CART_ITEM_NOT_FOUND));
+
+            long discount = orderCouponPort.reserveProductCoupon(buyerId, selection.code(), order.getId(), target.getId(),
+                    target.getProductId(), target.getLineAmount(), now);
+            order.applyProductCouponDiscount(target.getId(), discount);
+        }
+
+        if (coupons.cartCouponId() != null) {
+            long cartCouponDiscount = orderCouponPort.reserveCartCoupon(buyerId, coupons.cartCouponId(), order.getId(),
+                    order.getProductSubtotal(), now);
+            order.applyCartCouponDiscount(cartCouponDiscount);
+        }
     }
 
     // 키를 보냈다면 비어 있지 않고 컬럼 길이 이내여야 함

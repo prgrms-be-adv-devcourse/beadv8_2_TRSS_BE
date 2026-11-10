@@ -3,6 +3,7 @@ package com.backend.boundedContext.order.app;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.in.dto.OrderCancelResponse;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.order.dto.OrderCancelType;
@@ -37,13 +38,14 @@ class OrderCancelOrderUseCaseTest {
 
     @Mock OrderRepository orderRepository;
     @Mock ProductApi productApi;
+    @Mock OrderCouponPort orderCouponPort;
 
     OrderCancelOrderUseCase useCase;
 
     @BeforeEach
     void setUp() {
         // 취소 + 재고 복원까지 실제 흐름으로 검증하려고 OrderCancelSupport는 실제 객체를 쓴다
-        useCase = new OrderCancelOrderUseCase(orderRepository, new OrderCancelSupport(productApi));
+        useCase = new OrderCancelOrderUseCase(orderRepository, new OrderCancelSupport(productApi, orderCouponPort));
     }
 
     private static final Long BUYER_ID = 3L;

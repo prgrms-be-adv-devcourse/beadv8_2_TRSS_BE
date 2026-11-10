@@ -1,5 +1,6 @@
 package com.backend.boundedContext.product.app.dto;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.ProductOption;
 
 /**
@@ -13,7 +14,8 @@ public record ProductOptionDto(
         boolean soldOut,
         Integer remainingStock
 ) {
-    public static ProductOptionDto from(ProductOption option) {
-        return new ProductOptionDto(option.getId(), option.getName(), option.isSoldOut(), option.getLowStockRemaining());
+    public static ProductOptionDto from(OptionStock stock) {
+        ProductOption option = stock.getOption();
+        return new ProductOptionDto(option.getId(), option.getName(), stock.isSoldOut(), stock.getLowStockRemaining());
     }
 }

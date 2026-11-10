@@ -43,7 +43,7 @@ spring:
         default-page-size: 20
         max-page-size: 100
 
-  # Outbox 릴레이가 이벤트 봉투를 발행하는 Kafka
+  # Outbox 릴레이가 이벤트 봉투를 발행하는 Kafka. 컨슈머는 seller.events(판매자 이벤트)와 delivery.events(배송 완료)를 받는다
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -74,7 +74,7 @@ custom:
     accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
   internal:
     # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 모든 서비스가 같은 값을 쓰고, 기본값 없이 환경변수(.env)로만 주입한다.
-    # market이 받는 내부 API(/internal/v1/orders) 검사와 회원 내부 API 호출(MemberApiClient)에 함께 쓴다
+    # market이 받는 내부 API(/internal/v1/orders) 검사와 회원·배송 내부 API 호출(MemberApiClient, DeliveryApiClient)에 함께 쓴다
     apiKey: ${INTERNAL_API_KEY}
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
@@ -94,14 +94,21 @@ custom:
     baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
     connectTimeoutMillis: 1000   # 회원 서비스 접속 제한 시간(밀리초)
     readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 장바구니·주문 요청 안에서 부르므로 짧게 둔다
+  # 배송 내부 API(/internal/v1/deliveries). delivery-service(8085). 주문 상세의 배송 정보 조회에 쓴다
+  # 응답하지 못하면 주문 상세는 배송 정보 없이(deliveryUnavailable: true) 응답한다
+  delivery:
+    baseUrl: ${DELIVERY_SERVICE_URL:http://localhost:8085}
+    connectTimeoutMillis: 1000   # delivery 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 2000      # 응답 대기 제한 시간(밀리초). 주문 상세 요청 안에서 부르므로 짧게 둔다
   order:
     cartMaxQuantity: 99       # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
-    autoConfirmDays: 7         # 결제 후 자동 구매 확정(일)
+    autoConfirmDays: 7         # 배송 완료 후(배송지 없는 주문은 결제 후) 자동 구매 확정(일)
     autoConfirmIntervalSeconds: 3600   # 자동 구매 확정 스케줄러 실행 간격(초). 7일 경과 후 최대 이 시간만큼 늦게 확정된다
     schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
+    couponEnabled: ${ORDER_COUPON_ENABLED:false}   # 주문에 쿠폰을 반영하는지. 결제(COUPON_SUBSIDY)와 정산(할인 후 금액)이 지원한 뒤에 켠다
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다

@@ -56,6 +56,7 @@ beadv8_2_TRSS_BE
 ├── market-service
 ├── payment-service
 ├── settlement-service
+├── delivery-service
 ├── ai-service
 └── infra                     # 실행·배포 환경 (Docker Compose, Nginx, 모니터링, 배포 스크립트)
 ```

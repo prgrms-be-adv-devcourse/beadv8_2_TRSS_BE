@@ -4,19 +4,27 @@ import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
+import com.backend.boundedContext.order.domain.ShippingAddress;
 import com.backend.boundedContext.order.in.dto.InsufficientBalanceResponse;
 import com.backend.boundedContext.order.in.dto.OrderPayResponse;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
+import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
 import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.order.dto.PaidOrderItemDto;
+import com.backend.shared.order.dto.ShippingAddressDto;
+import com.backend.shared.order.event.OrderPaidEvent;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.PayResultStatus;
 import com.backend.shared.payment.out.PaymentApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -29,8 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,6 +53,8 @@ class OrderPayOrderUseCaseTest {
     @Mock OrderSupport orderSupport;
     @Mock PaymentApi paymentApi;
     @Mock MemberApi memberApi;
+    @Mock EventPublisher eventPublisher;
+    @Mock OrderCouponPort orderCouponPort;
     @InjectMocks
     OrderPayOrderUseCase useCase;
 
@@ -75,6 +87,35 @@ class OrderPayOrderUseCaseTest {
                 && cmd.orderId().equals(ORDER_ID)
                 && cmd.orderNumber().equals(order.getOrderNumber())));
         verify(cart).removeItems(List.of(1L));
+    }
+
+    @Test
+    @DisplayName("결제 요청 전에 주문의 예약 쿠폰을 사용 처리하고, 결제 금액은 쿠폰 할인 후 금액(payAmount)이다")
+    void pay_usesCouponsBeforePayment() {
+        Order order = order(LocalDateTime.now());   // 20,000원
+        ReflectionTestUtils.setField(order.getItems().get(0), "id", 1L);
+        order.applyProductCouponDiscount(1L, 5_000);
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.pay(any())).willReturn(new PayResultDto(77L, PayResultStatus.PAID, 0, 0));
+
+        useCase.pay(BUYER_ID, ORDER_ID);
+
+        InOrder inOrder = inOrder(orderCouponPort, paymentApi);
+        inOrder.verify(orderCouponPort).useReservedCoupons(eq(ORDER_ID), any());
+        inOrder.verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 15_000));
+    }
+
+    @Test
+    @DisplayName("예약 뒤 쿠폰이 중지돼 사용 처리가 409-COUPON_NOT_ACTIVE면 결제 서비스를 부르지 않는다")
+    void pay_couponNotActive_noPayment() {
+        Order order = order(LocalDateTime.now());
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        willThrow(new DomainException("409-COUPON_NOT_ACTIVE", "사용 기간이 아니거나 중지된 쿠폰입니다.", null))
+                .given(orderCouponPort).useReservedCoupons(eq(ORDER_ID), any());
+
+        assertThatThrownBy(() -> useCase.pay(BUYER_ID, ORDER_ID))
+                .extracting("resultCode").isEqualTo("409-COUPON_NOT_ACTIVE");
+        verify(paymentApi, never()).pay(any());
     }
 
     @Test
@@ -132,5 +173,66 @@ class OrderPayOrderUseCaseTest {
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getResultCode()).isEqualTo("409-PRODUCT_NOT_ON_SALE"));
         verifyNoInteractions(paymentApi);
+    }
+
+    // ===== 결제 완료 이벤트 (PR 4) =====
+
+    /** 배송지와 함께 방금 만든 주문 (장바구니 항목 1번, 옵션 100, 상품 10, 판매자 2, 10,000원 × 2) */
+    private Order orderWithAddress() {
+        Order order = Order.create(BUYER_ID, null, List.of(
+                        new OrderItemSpec(1L, 10L, 100L, 2L, "립스틱", "기본", "상점", 10_000, 2)),
+                ShippingAddress.of("홍길동", "01012345678", "06236", "서울 강남구 테헤란로 1", "101호", "문 앞"),
+                LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(order, "id", ORDER_ID);
+        ReflectionTestUtils.setField(order.getItems().get(0), "id", 900L);
+        return order;
+    }
+
+    @Test
+    @DisplayName("배송지가 있는 주문의 결제에 성공하면 OrderPaidEvent 1건을 발행한다 (항목·배송지 값)")
+    void pay_withAddress_publishesPaidEvent() {
+        Order order = orderWithAddress();
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.pay(any())).willReturn(new PayResultDto(77L, PayResultStatus.PAID, 0, 0));
+        ArgumentCaptor<OrderPaidEvent> captor = ArgumentCaptor.forClass(OrderPaidEvent.class);
+
+        useCase.pay(BUYER_ID, ORDER_ID);
+
+        verify(eventPublisher).publish(captor.capture());
+        OrderPaidEvent event = captor.getValue();
+        assertThat(event.orderId()).isEqualTo(ORDER_ID);
+        assertThat(event.orderNumber()).isEqualTo(order.getOrderNumber());
+        assertThat(event.buyerId()).isEqualTo(BUYER_ID);
+        assertThat(event.paidAt()).isEqualTo(order.getPaidAt()).isNotNull();
+        assertThat(event.shippingAddress()).isEqualTo(new ShippingAddressDto(
+                "홍길동", "01012345678", "06236", "서울 강남구 테헤란로 1", "101호", "문 앞"));
+        assertThat(event.items()).containsExactly(
+                new PaidOrderItemDto(900L, 10L, 100L, 2L, "상점", "립스틱", "기본", 2));
+    }
+
+    @Test
+    @DisplayName("배송지 없는 주문은 결제에 성공해도 OrderPaidEvent를 발행하지 않는다")
+    void pay_withoutAddress_noEvent() {
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID))
+                .willReturn(Optional.of(order(LocalDateTime.now())));
+        given(paymentApi.pay(any())).willReturn(new PayResultDto(77L, PayResultStatus.PAID, 0, 0));
+
+        useCase.pay(BUYER_ID, ORDER_ID);
+
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("배송지가 있어도 결제가 실패(잔액 부족)하면 OrderPaidEvent를 발행하지 않는다 (예외로 롤백)")
+    void pay_withAddress_insufficientBalance_noEvent() {
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID))
+                .willReturn(Optional.of(orderWithAddress()));
+        given(paymentApi.pay(any()))
+                .willReturn(new PayResultDto(null, PayResultStatus.FAILED_INSUFFICIENT_BALANCE, 18_000, 20_000));
+
+        assertThatThrownBy(() -> useCase.pay(BUYER_ID, ORDER_ID))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo("402-INSUFFICIENT_BALANCE"));
+        verifyNoInteractions(eventPublisher);
     }
 }

@@ -4,7 +4,7 @@ import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
-import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequestStatus;
 import com.backend.boundedContext.product.out.CategoryRepository;
@@ -73,22 +73,22 @@ public class ProductGetSellerProductsUseCase {
     private PageResponse<SellerProductSummaryDto> toSummaries(Page<Product> products) {
         categoryRepository.findAll();   // 카테고리는 십여 개라 한 번에 읽어 두면 상품마다 따로 조회하지 않는다
         List<Long> productIds = products.map(Product::getId).getContent();
-        Map<Long, List<ProductOption>> options = productSupport.getOptionsByProductId(productIds);
+        Map<Long, List<OptionStock>> stocks = productSupport.getOptionStocksByProductId(productIds);
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
         Set<Long> stopRequestPending = productIds.isEmpty() ? Set.of() : new HashSet<>(
                 productStopRequestRepository.findProductIdsByProductIdInAndStatus(productIds, ProductStopRequestStatus.PENDING));
 
         return PageResponse.from(products, product -> {
-            List<ProductOption> productOptions = options.getOrDefault(product.getId(), List.of());
-            boolean soldOut = ProductSupport.isSoldOut(productOptions);
+            List<OptionStock> optionStocks = stocks.getOrDefault(product.getId(), List.of());
+            boolean soldOut = ProductSupport.isSoldOut(optionStocks);
             return new SellerProductSummaryDto(
                     product.getId(),
-                    productOptions.isEmpty() ? null : productOptions.getFirst().getId(),
+                    optionStocks.isEmpty() ? null : optionStocks.getFirst().getId(),
                     thumbnailUrls.get(product.getId()),
                     product.getName(),
                     product.getCategory().getName(),
                     product.getPrice(),
-                    productOptions.stream().mapToInt(ProductOption::getStock).sum(),
+                    ProductSupport.sumStock(optionStocks),
                     ProductDisplayStatus.of(product, soldOut),
                     product.getStoppedBy(),
                     product.getStoppedReason(),

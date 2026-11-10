@@ -3,9 +3,11 @@ package com.backend.boundedContext.product.app.wishlist;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.WishlistItemDto;
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.wishlist.WishlistRepository;
@@ -58,6 +60,9 @@ class ProductFacadeWishlistTest {
 
     @Autowired
     private ProductOptionRepository productOptionRepository;
+
+    @Autowired
+    private OptionStockRepository optionStockRepository;
 
     @Autowired
     private WishlistRepository wishlistRepository;
@@ -212,8 +217,8 @@ class ProductFacadeWishlistTest {
     /** stock이 0이면 품절 상품 (초기 재고는 1 이상이어야 하므로 만든 뒤 0으로 바꾼다) */
     private Product create(String name, int stock) {
         Product product = productRepository.save(Product.create(SELLER_ID, skincare, name, "설명", 10_000));
-        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product, Math.max(stock, 1)));
-        if (stock == 0) ReflectionTestUtils.setField(option, "stock", 0);
+        ProductOption option = saveOption(product, Math.max(stock, 1));
+        if (stock == 0) ReflectionTestUtils.setField(optionStock(option), "stock", 0);
         return product;
     }
 
@@ -221,5 +226,17 @@ class ProductFacadeWishlistTest {
         return outboxEventRepository.findAll().stream()
                 .filter(e -> e.getEventType().equals(eventType) && e.getAggregateId().equals(productId))
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

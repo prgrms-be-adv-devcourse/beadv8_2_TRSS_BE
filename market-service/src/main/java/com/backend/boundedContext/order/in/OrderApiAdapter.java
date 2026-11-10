@@ -1,7 +1,9 @@
 package com.backend.boundedContext.order.in;
 
+import com.backend.shared.order.dto.CartLineDto;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -9,6 +11,7 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderSummaryDto;
+import com.backend.shared.order.dto.ReviewableOrderItemDto;
 import com.backend.shared.order.out.OrderApi;
 
 import lombok.RequiredArgsConstructor;
@@ -41,5 +44,20 @@ public class OrderApiAdapter implements OrderApi {
     @Override
     public List<OrderSummaryDto> getRecentOrders(Long buyerId, int limit) {
         return orderFacade.getRecentOrders(buyerId, limit);
+    }
+
+    @Override
+    public Optional<ReviewableOrderItemDto> findConfirmedOrderItem(Long buyerId, Long orderItemId) {
+        return orderFacade.findConfirmedOrderItem(buyerId, orderItemId);
+    }
+
+    @Override
+    public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
+        return orderFacade.getCartItemsAmount(buyerId, cartItemIds);
+    }
+
+    @Override
+    public List<CartLineDto> getCartLines(Long buyerId, Collection<Long> cartItemIds) {
+        return orderFacade.getCartLines(buyerId, cartItemIds);
     }
 }

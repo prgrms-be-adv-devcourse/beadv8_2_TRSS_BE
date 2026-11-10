@@ -1,9 +1,11 @@
 package com.backend.boundedContext.product.app.wishlist;
 
 import com.backend.boundedContext.product.app.ProductFacade;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.wishlist.WishlistRepository;
@@ -53,6 +55,9 @@ class ProductWishlistConcurrencyTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private WishlistRepository wishlistRepository;
 
     @Autowired
@@ -78,7 +83,7 @@ class ProductWishlistConcurrencyTest {
                     SELLER_ID, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(),
                     "찜 동시성 테스트 크림", "설명", 10_000));
             productId = product.getId();
-            optionId = productOptionRepository.save(ProductOption.createDefault(product, 10)).getId();
+            optionId = saveOption(product, 10).getId();
         });
     }
 
@@ -122,5 +127,12 @@ class ProductWishlistConcurrencyTest {
         return outboxEventRepository.findAll().stream()
                 .filter(e -> "PRODUCT".equals(e.getAggregateType()) && e.getAggregateId().equals(productId))
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
     }
 }

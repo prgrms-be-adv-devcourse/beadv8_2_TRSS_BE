@@ -50,19 +50,31 @@ public class SecurityConfig {
             "/api/v1/auth/signup",
             "/api/v1/auth/login",
             "/api/v1/auth/kakao",
-            "/api/v1/auth/refresh"
+            "/api/v1/auth/refresh",
+            "/webhooks/delivery-tracker/**"   // Delivery Tracker 콜백. URL 토큰으로 delivery가 직접 확인
     };
     private static final String[] ADMIN_API_URLS = {
             "/api/v1/admin/**"
     };
+    // 물류 담당자 기능(출고·송장 등록). 관리자·구매자도 막음
+    private static final String[] LOGISTICS_API_URLS = {
+            "/api/v1/logistics/**"
+    };
     private static final String[] SELLER_API_URLS = {
             "/api/v1/seller/**"
+    };
+    // 인플루언서 전용 (/api/v1/influencers/** (복수, 인플루언서 신청, 검색)와 다른 경로)
+    private static final String[] INFLUENCER_API_URLS = {
+            "/api/v1/influencer/**"
     };
     // 구매자 기능. 관리자는 운영 전용이라 구매·판매자 신청을 막음 (/api/v1/sellers/** (복수, 판매자 신청)는 /api/v1/seller/** (단수, 판매자 전용)와 다른 경로)
     private static final String[] BUYER_API_URLS = {
             "/api/v1/cart/**",
             "/api/v1/orders/**",
             "/api/v1/wishlist/**",
+            "/api/v1/reviews/**",
+            "/api/v1/coupons/**",
+            "/api/v1/users/me/coupon-usages",
             "/api/v1/topups/**",
             "/api/v1/wallet/**",
             "/api/v1/sellers/**"
@@ -125,8 +137,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_API_URLS).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_API_URLS).permitAll()
                         .requestMatchers(ADMIN_API_URLS).hasRole("ADMIN")
+                        .requestMatchers(LOGISTICS_API_URLS).hasRole("LOGISTICS")
                         // 판매자 여부는 역할이 아니라 판매자 상태(APPROVED)로 판단하므로, URL에서는 관리자만 막고 판매 기능에서 상태를 확인한다
                         .requestMatchers(SELLER_API_URLS).hasRole("USER")
+                        // 인플루언서도 역할이 아니라 인플루언서 상태(APPROVED)로 판단하므로, URL에서는 관리자만 막고 기능에서 상태를 확인한다
+                        .requestMatchers(INFLUENCER_API_URLS).hasRole("USER")
                         .requestMatchers(BUYER_API_URLS).hasRole("USER")
                         .requestMatchers(WITHDRAWAL_API_URLS).hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/users/me").hasRole("USER")

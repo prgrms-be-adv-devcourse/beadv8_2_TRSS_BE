@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 /**
  * 주문 목록의 한 줄
  *
+ * @param totalPrice                결제 금액(쿠폰 할인 후). 상세의 payAmount와 같다
  * @param representativeProductName 대표 상품명
  * @param thumbnailUrl              대표 상품의 현재 대표 이미지 URL. 상품이 삭제됐거나 이미지가 없으면 null
  * @param itemCount                 주문 항목 수
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
  * @param expiresAt                 결제 만료 시각
  * @param remainingSeconds          결제 가능 남은 시간(초)
  * @param paidAt                    결제 일시(결제 전이면 null)
+ * @param deliveredAt               배송 완료 일시(배송 전·배송지 없는 주문이면 null)
  */
 public record OrderSummaryResponse(
         Long orderId,
@@ -26,6 +28,7 @@ public record OrderSummaryResponse(
         LocalDateTime orderedAt,
         LocalDateTime expiresAt,
         long remainingSeconds,
-        LocalDateTime paidAt
+        LocalDateTime paidAt,
+        LocalDateTime deliveredAt
 ) {
 }

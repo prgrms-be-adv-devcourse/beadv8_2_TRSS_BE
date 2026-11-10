@@ -40,6 +40,7 @@ public class MemberFacade {
     private final MemberGetMembersUseCase memberGetMembersUseCase;
     private final MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
     private final MemberCreateSeedMembersUseCase memberCreateSeedMembersUseCase;
+    private final MemberCreateSeedLogisticsUseCase memberCreateSeedLogisticsUseCase;
     private final MemberGetMyInfoUseCase memberGetMyInfoUseCase;
     private final MemberGetWithdrawalCheckUseCase memberGetWithdrawalCheckUseCase;
     private final MemberWithdrawUseCase memberWithdrawUseCase;
@@ -138,6 +139,18 @@ public class MemberFacade {
         if (memberSupport.countMembers() > 0) return;
 
         memberCreateSeedMembersUseCase.createSeedMembers(password);
+    }
+
+    // 개발용 시드 물류 담당자 생성 (비밀번호가 없거나 같은 이메일 회원이 있으면 아무것도 하지 않음)
+    // 다른 회원이 이미 있는 DB에도 추가되도록 회원 수는 보지 않음
+    @Transactional
+    public void createSeedLogistics(String email, String password) {
+        if (password == null || password.isBlank()) {
+            log.info("시드 회원 비밀번호(MEMBER_SEED_PASSWORD)가 없어 물류 담당자 시드를 건너뜀");
+            return;
+        }
+
+        memberCreateSeedLogisticsUseCase.createSeedLogistics(email, password);
     }
 
     // 내 정보 조회

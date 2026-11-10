@@ -3,6 +3,7 @@ package com.backend.boundedContext.order.app;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
+import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderStatus;
@@ -37,6 +38,7 @@ class OrderExpireOrdersUseCaseTest {
 
     @Mock OrderRepository orderRepository;
     @Mock ProductApi productApi;
+    @Mock OrderCouponPort orderCouponPort;
 
     OrderExpireOrdersUseCase useCase;
 
@@ -49,7 +51,7 @@ class OrderExpireOrdersUseCaseTest {
     void setUp() {
         // OrderPolicy는 값 객체라 실제로 만들고(만료 여유 1분), 재고 복원까지 보려고 OrderCancelSupport도 실제 객체를 쓴다
         useCase = new OrderExpireOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100, 1),
-                new OrderCancelSupport(productApi));
+                new OrderCancelSupport(productApi, orderCouponPort));
     }
 
     /** CREATED_AT에 만든 결제 대기 주문 (만료 시각 = CREATED_AT + 15분) */
