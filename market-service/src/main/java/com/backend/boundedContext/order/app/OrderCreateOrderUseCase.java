@@ -9,6 +9,7 @@ import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.in.dto.OrderCreateResponse;
 import com.backend.boundedContext.order.in.dto.PendingOrderConflictResponse;
+import com.backend.boundedContext.order.in.dto.ShippingAddressRequest;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
@@ -42,7 +43,9 @@ public class OrderCreateOrderUseCase {
     private final ProductApi productApi;
     private final MemberApi memberApi;
 
-    public OrderCreateResponse create(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice) {
+    // shippingAddress: null이면 배송지 없는 주문 (프론트가 붙기 전까지 선택 값)
+    public OrderCreateResponse create(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
+                                      ShippingAddressRequest shippingAddress) {
         // 탈퇴한 회원은 남은 Access Token으로 주문할 수 없게 401 (재고가 차감되지 않도록)
         memberApi.checkActiveMember(buyerId);
         validateIdempotencyKey(idempotencyKey);
@@ -51,6 +54,7 @@ public class OrderCreateOrderUseCase {
 
         // 같은 키로 다시 온 요청이면 처음 만든 주문을 그대로 돌려준다
         // 그 주문이 취소(만료 포함)됐으면 키를 다시 쓸 수 없으므로 409로 알려 새 키로 주문하게 한다
+        // 배송지도 처음 주문의 것을 그대로 둔다(다시 보낸 배송지와 비교·변경하지 않는다)
         if (idempotencyKey != null) {
             Optional<Order> existing = orderRepository.findByBuyerIdAndIdempotencyKey(buyerId, idempotencyKey);
             if (existing.isPresent()) {
@@ -79,7 +83,9 @@ public class OrderCreateOrderUseCase {
         List<OrderItemSpec> specs = cartItems.stream()
                 .map(item -> toSpec(item, options.get(item.getOptionId()), sellerNames))
                 .toList();
-        Order order = Order.create(buyerId, idempotencyKey, specs, LocalDateTime.now(), orderPolicy.getExpireMinutes());
+        Order order = Order.create(buyerId, idempotencyKey, specs,
+                shippingAddress == null ? null : shippingAddress.toShippingAddress(),
+                LocalDateTime.now(), orderPolicy.getExpireMinutes());
 
         if (order.getTotalPrice() != expectedTotalPrice) {
             throw new DomainException(OrderErrorCode.PRICE_CHANGED);

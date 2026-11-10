@@ -40,6 +40,7 @@ create_service_schema member     "${MEMBER_DB_PASSWORD:?MEMBER_DB_PASSWORD가 �
 create_service_schema market     "${MARKET_DB_PASSWORD:?MARKET_DB_PASSWORD가 없습니다}"
 create_service_schema payment    "${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD가 없습니다}"
 create_service_schema settlement "${SETTLEMENT_DB_PASSWORD:?SETTLEMENT_DB_PASSWORD가 없습니다}"
+create_service_schema delivery   "${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD가 없습니다}"
 create_service_schema notification "${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD가 없습니다}"
 create_service_schema ai         "${AI_DB_PASSWORD:?AI_DB_PASSWORD가 없습니다}"
 
@@ -54,6 +55,7 @@ create_readonly_user() {
         "market:market_user"
         "payment:payment_user"
         "settlement:settlement_user"
+        "delivery:delivery_user"
         "notification:notification_user"
         "ai:ai_user"
     )

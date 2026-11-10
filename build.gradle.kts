@@ -64,8 +64,6 @@ dependencies {
 	// webmvc, data-jpa, validation, security, kafka, jjwt, springdoc은 common이 api로 준다
 	implementation(project(":common"))
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
-	implementation("org.springframework.boot:spring-boot-starter-data-redis")
-	implementation("org.springframework.boot:spring-boot-starter-mail")
 
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("org.postgresql:postgresql")

@@ -3,12 +3,20 @@ package com.backend.global.outbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.backend.shared.delivery.event.DeliveryCompletedEvent;
+import com.backend.shared.delivery.event.DeliveryShippedEvent;
 import com.backend.shared.event.DomainEvent;
 import com.backend.shared.event.EventEnvelope;
 import com.backend.shared.event.OutboxTestEvent;
+import com.backend.shared.order.dto.PaidOrderItemDto;
+import com.backend.shared.order.dto.ShippingAddressDto;
+import com.backend.shared.order.event.OrderPaidEvent;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -23,6 +31,53 @@ class EventMessagesTest {
     void topicOf() {
         assertThat(EventMessages.topicOf("ORDER")).isEqualTo("order.events");
         assertThat(EventMessages.topicOf("MEMBER")).isEqualTo("member.events");
+        assertThat(EventMessages.topicOf("DELIVERY")).isEqualTo("delivery.events");
+    }
+
+    @Test
+    @DisplayName("결제 완료 이벤트(배송지·항목 2개)는 order.events로 가고, JSON으로 보냈다 읽으면 값이 그대로다")
+    void orderPaidEventRoundTrip() {
+        OrderPaidEvent event = new OrderPaidEvent(10L, "ORD-20261106-0001", 3L,
+                LocalDateTime.of(2026, 11, 6, 14, 30, 15, 123_000_000),
+                new ShippingAddressDto("홍길동", "010-1234-5678", "06236",
+                        "서울시 강남구 테헤란로 1", "101동 202호", "문 앞에 놓아 주세요"),
+                List.of(new PaidOrderItemDto(100L, 20L, 200L, 5L, "팔레트상점", "머그컵", "화이트", 2),
+                        new PaidOrderItemDto(101L, 21L, null, 6L, "다른상점", "접시", null, 1)));
+
+        EventEnvelope<DomainEvent> read = roundTrip(event);
+
+        assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("order.events");
+        assertThat(read.eventType()).isEqualTo("OrderPaidEvent");
+        assertThat(read.aggregateId()).isEqualTo(10L);
+        assertThat(read.payload()).isEqualTo(event);
+    }
+
+    @Test
+    @DisplayName("배송 완료 이벤트는 delivery.events로 가고, JSON으로 보냈다 읽으면 값이 그대로다")
+    void deliveryCompletedEventRoundTrip() {
+        DeliveryCompletedEvent event = new DeliveryCompletedEvent(30L, 10L, 3L,
+                LocalDateTime.of(2026, 11, 8, 9, 5, 0, 456_000_000));
+
+        EventEnvelope<DomainEvent> read = roundTrip(event);
+
+        assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("delivery.events");
+        assertThat(read.eventType()).isEqualTo("DeliveryCompletedEvent");
+        assertThat(read.aggregateId()).isEqualTo(30L);
+        assertThat(read.payload()).isEqualTo(event);
+    }
+
+    @Test
+    @DisplayName("배송 시작 이벤트는 delivery.events로 가고, JSON으로 보냈다 읽으면 값이 그대로다")
+    void deliveryShippedEventRoundTrip() {
+        DeliveryShippedEvent event = new DeliveryShippedEvent(30L, 10L, 3L, "CJ대한통운", "123456789012",
+                LocalDateTime.of(2026, 11, 7, 11, 20, 0, 789_000_000));
+
+        EventEnvelope<DomainEvent> read = roundTrip(event);
+
+        assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("delivery.events");
+        assertThat(read.eventType()).isEqualTo("DeliveryShippedEvent");
+        assertThat(read.aggregateId()).isEqualTo(30L);
+        assertThat(read.payload()).isEqualTo(event);
     }
 
     @Test
@@ -76,5 +131,12 @@ class EventMessagesTest {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("eventType");
         assertThatThrownBy(() -> eventMessages.read(noEventId))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("eventId");
+    }
+
+    // EventPublisher처럼 이벤트를 JSON으로 저장한 outbox 행을 만들고, 릴레이 → 컨슈머 순서로 보냈다 읽는다
+    private EventEnvelope<DomainEvent> roundTrip(DomainEvent event) {
+        EventEnvelope<DomainEvent> envelope = EventEnvelope.wrap(event);
+        OutboxEvent outbox = OutboxEvent.create(envelope, jsonMapper.writeValueAsString(event));
+        return eventMessages.read(eventMessages.toJson(outbox));
     }
 }

@@ -5,6 +5,7 @@ import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderCancelType;
 import com.backend.shared.order.dto.OrderSummaryDto;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.order.dto.ReviewableOrderItemDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 주문 컨텍스트 진입점
@@ -39,6 +41,9 @@ public class OrderFacade {
     private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
     private final OrderGetSellerOrderItemsUseCase orderGetSellerOrderItemsUseCase;
     private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
+    private final OrderMarkDeliveredUseCase orderMarkDeliveredUseCase;
+    private final OrderFindConfirmedOrderItemUseCase orderFindConfirmedOrderItemUseCase;
+    private final OrderGetCartItemsAmountUseCase orderGetCartItemsAmountUseCase;
 
     // 장바구니 조회
     @Transactional(readOnly = true)
@@ -72,8 +77,9 @@ public class OrderFacade {
 
     // 주문생성
     @Transactional
-    public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice) {
-        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice);
+    public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
+                                           ShippingAddressRequest shippingAddress) {
+        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice, shippingAddress);
     }
 
     // 주문목록 조회
@@ -118,6 +124,12 @@ public class OrderFacade {
         return orderAutoConfirmOrdersUseCase.autoConfirm(orderId, now);
     }
 
+    // 배송 완료 반영 (delivery.events 컨슈머)
+    @Transactional
+    public void markDelivered(Long orderId, LocalDateTime deliveredAt) {
+        orderMarkDeliveredUseCase.markDelivered(orderId, deliveredAt);
+    }
+
     // 결제 만료 대상 주문 id 조회 (스케줄러)
     @Transactional(readOnly = true)
     public List<Long> findExpireTargetIds(LocalDateTime now, Long afterId, int limit) {
@@ -148,6 +160,12 @@ public class OrderFacade {
         return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
     }
 
+    // 구매자 본인의 구매 확정 주문 항목 (OrderApi)
+    @Transactional(readOnly = true)
+    public Optional<ReviewableOrderItemDto> findConfirmedOrderItem(Long buyerId, Long orderItemId) {
+        return orderFindConfirmedOrderItemUseCase.find(buyerId, orderItemId);
+    }
+
     // 판매자 주문 항목 조회
     @Transactional(readOnly = true)
     public PageResponse<SellerOrderItemResponse> getSellerOrderItems(Long memberId, OrderStatus status,
@@ -160,5 +178,11 @@ public class OrderFacade {
     @Transactional
     public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
         return orderCancelPendingOrdersUseCase.cancel(productIds, cancelType, LocalDateTime.now());
+    }
+
+    // 장바구니 항목들의 현재 상품 금액 합계 (OrderApi, 장바구니 쿠폰 예상 할인액 계산용)
+    @Transactional(readOnly = true)
+    public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
+        return orderGetCartItemsAmountUseCase.getAmount(buyerId, cartItemIds);
     }
 }

@@ -42,5 +42,8 @@ out/
 !.env.example
 !.env.prod.example
 
+### Let's Encrypt 발급 확인용 파일 ###
+/infra/certbot/
+
 ### 상품 이미지 로컬 저장소 (custom.product.image.localDir) ###
 /uploads/

@@ -65,16 +65,19 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
                                              @Param("statuses") Collection<OrderStatus> statuses);
 
     // 자동 구매 확정 대상 주문 id
+    // 배송지가 있는 주문은 배송 완료 시각, 배송지 없는 주문(배송 기능 이전·프론트가 붙기 전)은 결제 시각이 before 이전인 것
+    // 배송지 있음 여부는 Order.hasShippingAddress()와 같이 수령인(receiver_name)으로 본다
     @Query("""
             select o.id
             from Order o
             where o.status = :status
-              and o.paidAt <= :paidBefore
+              and ((o.shippingAddress.receiverName is not null and o.deliveredAt <= :before)
+                or (o.shippingAddress.receiverName is null and o.paidAt <= :before))
               and o.id > :afterId
             order by o.id
             """)
     List<Long> findAutoConfirmTargetIds(@Param("status") OrderStatus status,
-                                        @Param("paidBefore") LocalDateTime paidBefore,
+                                        @Param("before") LocalDateTime before,
                                         @Param("afterId") Long afterId,
                                         Pageable pageable);
 
