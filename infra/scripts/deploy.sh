@@ -64,7 +64,8 @@ main() {
     DEPLOY_STAGE="빌드·재시작"
     if [ "${#BUILD_SERVICES[@]}" -gt 0 ]; then
         echo "▶ 빌드: ${BUILD_SERVICES[*]}"
-        "${compose[@]}" build "${BUILD_SERVICES[@]}"
+        # Dockerfile의 공통 빌드 단계가 바뀐 앱 jar만 만들게 한다(기본은 jar 전부). 예: "market-service"
+        "${compose[@]}" build --build-arg SERVICES="$(printf '%s-service ' "${BUILD_SERVICES[@]}")" "${BUILD_SERVICES[@]}"
     else
         echo "▶ 빌드: 바뀐 앱이 없어 건너뜁니다"
     fi

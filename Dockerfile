@@ -38,9 +38,11 @@ COPY notification-service/src notification-service/src
 # --mount=type=cache: Gradle 배포판·의존성·빌드 캐시(/root/.gradle)를 서버에 남겨 다음 배포에서 다시 쓴다.
 #   이미지에는 들어가지 않는다. 빌드 설정이 바뀌어도 받아 둔 의존성은 그대로 쓴다.
 #   지우려면 서버에서 docker builder prune
+# SERVICES: 만들 jar 목록. 기본은 전부. deploy.sh가 바뀐 앱만 빌드할 때 --build-arg로 그 앱만 넘긴다(예: "market-service").
+#   한 번의 배포에서 빌드하는 이미지는 모두 같은 값을 받으므로, 이 단계는 여전히 한 번만 돈다.
+ARG SERVICES="member-service market-service payment-service settlement-service delivery-service notification-service"
 RUN --mount=type=cache,target=/root/.gradle \
-    SERVICES="member-service market-service payment-service settlement-service delivery-service notification-service" \
-    && chmod +x gradlew \
+    chmod +x gradlew \
     && ./gradlew --no-daemon --parallel --build-cache -x test \
         $(for s in $SERVICES; do printf ':%s:bootJar ' "$s"; done) \
     && mkdir -p /jars \
