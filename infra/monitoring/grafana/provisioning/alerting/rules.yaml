@@ -1,12 +1,13 @@
 # 앱 ERROR 로그 알림 규칙. 1분마다 최근 5분의 ERROR 로그 수를 세고, 1건이라도 있으면 알린다.
-# 서비스가 분리되어 컨테이너가 늘면 아래 container=~ 목록에 추가한다(세 쿼리 모두).
+# 대상은 앱 컨테이너 전부(palette-*)에서 인프라 컨테이너(nginx·postgres·redis·kafka·모니터링)를 뺀 것이다(세 쿼리 모두).
+#   서비스가 분리되어 앱이 늘면 따로 고치지 않아도 자동으로 들어간다. 인프라 컨테이너가 늘면 제외 목록에 추가한다.
 # 앱 로그는 운영에서 JSON(ECS)으로 찍히므로(compose.prod.yaml의 LOGGING_STRUCTURED_FORMAT_CONSOLE)
 # | json 으로 필요한 필드만 라벨로 꺼낸다.
 #   log_level·log_logger      : 로그 레벨·로그를 남긴 클래스
 #   error_type                : 맨 위 예외 (예: CannotCreateTransactionException)
 #   root_cause                : 스택트레이스의 마지막 "Caused by:" 예외 (예: UnknownHostException). 없으면 error_type
 #   http_path                 : "Unhandled GET /api/v1/..." 메시지의 요청 경로. 숫자 ID는 {id}로 바꿔 경로마다 알림이 쪼개지지 않게 한다
-#   service_version           : 배포 커밋 SHA (deploy.sh가 APP_VERSION으로 넘기고 compose.prod.yaml이 로그에 넣는다)
+#   service_version           : 배포 커밋 SHA (deploy.sh가 APP_VERSION으로 넘기고 Dockerfile이 이미지에 넣는다)
 # 원인(root_cause)·배포 버전이 다르면 다른 알림이 된다. 메시지 전문은 ID 등이 섞여 알림이 폭증하므로 라벨로 쓰지 않는다.
 # 4xx는 GlobalExceptionHandler가 ERROR로 남기지 않으므로 알림 대상이 아니다.
 # 클라이언트가 응답을 받기 전에 연결을 끊은 경우(AsyncRequestNotUsableException, Broken pipe)는 대응할 것이 없어 뺀다.
@@ -35,7 +36,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
-                  count_over_time({container=~"palette-member|palette-market|palette-payment|palette-settlement|palette-delivery|palette-notification"}
+                  count_over_time({container=~"palette-.+", container!~"palette-(nginx|postgres|redis|kafka|loki|alloy|grafana)"}
                     |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
                     | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
                     | __error__="" | log_level="ERROR"
@@ -70,7 +71,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
-                  count_over_time({container=~"palette-member|palette-market|palette-payment|palette-settlement|palette-delivery|palette-notification"}
+                  count_over_time({container=~"palette-.+", container!~"palette-(nginx|postgres|redis|kafka|loki|alloy|grafana)"}
                     |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
                     | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
                     | __error__="" | log_level="ERROR"
@@ -95,7 +96,7 @@ groups:
               queryType: instant
               expr: >-
                 sum by (container, log_logger, error_type, root_cause, http_path, service_version) (
-                  count_over_time({container=~"palette-member|palette-market|palette-payment|palette-settlement|palette-delivery|palette-notification"}
+                  count_over_time({container=~"palette-.+", container!~"palette-(nginx|postgres|redis|kafka|loki|alloy|grafana)"}
                     |= `"level":"ERROR"` != `AsyncRequestNotUsableException`
                     | json log_level="log.level", log_logger="log.logger", error_type="error.type", stack="error.stack_trace", message="message", service_version="service.version"
                     | __error__="" | log_level="ERROR"
