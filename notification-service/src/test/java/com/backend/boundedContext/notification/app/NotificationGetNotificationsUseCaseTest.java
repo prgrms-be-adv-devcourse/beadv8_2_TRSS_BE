@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -29,6 +30,9 @@ class NotificationGetNotificationsUseCaseTest {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     @DisplayName("알림 목록: 내 알림만 최신순으로 size개씩, nextCursor로 이어서 조회함")
@@ -110,6 +114,29 @@ class NotificationGetNotificationsUseCaseTest {
         save(Notification.orderPaid(OTHER_MEMBER_ID, 20L, "립스틱", 1));
 
         assertThat(notificationFacade.getUnreadCount(MEMBER_ID)).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("최근 30일: 30일이 지난 알림은 목록·유형 목록·안 읽은 개수에서 빠짐")
+    void oldNotifications_hidden() {
+        Notification old = save(Notification.orderPaid(MEMBER_ID, 10L, "립스틱", 1));
+        Notification recent = save(Notification.orderPaid(MEMBER_ID, 11L, "틴트", 1));
+        Notification boundary = save(Notification.deliveryCompleted(MEMBER_ID, 11L, null));
+        createdDaysAgo(old, 31);
+        createdDaysAgo(recent, 29);
+        createdDaysAgo(boundary, 30);   // 지금 기준 정확히 30일 전보다 몇 초 뒤라 아직 보임
+
+        assertThat(ids(notificationFacade.getNotifications(MEMBER_ID, null, null, 20)))
+                .containsExactly(boundary.getId(), recent.getId());
+        assertThat(ids(notificationFacade.getNotifications(MEMBER_ID, NotificationType.ORDER_PAID, null, 20)))
+                .containsExactly(recent.getId());
+        assertThat(notificationFacade.getUnreadCount(MEMBER_ID)).isEqualTo(2L);
+    }
+
+    // 생성 시각은 Auditing이 채우므로 DB 값을 직접 과거로 옮김. 경계 확인을 위해 몇 초 여유를 둠
+    private void createdDaysAgo(Notification notification, int days) {
+        jdbcTemplate.update("update notification set created_at = ? where id = ?",
+                LocalDateTime.now().minusDays(days).plusSeconds(5), notification.getId());
     }
 
     private Notification save(Notification notification) {

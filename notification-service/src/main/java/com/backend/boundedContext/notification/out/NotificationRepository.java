@@ -13,14 +13,14 @@ import java.util.Optional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
-    // 회원의 알림 중 cursor보다 id가 작은 것을 최신순으로 limit개 (idx_notification_member_id)
-    List<Notification> findByMemberIdAndIdLessThanOrderByIdDesc(Long memberId, Long cursor, Limit limit);
+    // 회원의 알림 중 since 이후에 생겼고 cursor보다 id가 작은 것을 최신순으로 limit개 (idx_notification_member_id)
+    List<Notification> findByMemberIdAndCreatedAtGreaterThanEqualAndIdLessThanOrderByIdDesc(Long memberId, LocalDateTime since, Long cursor, Limit limit);
 
     // 위와 같고 유형 하나만 (idx_notification_member_id로 회원 범위를 좁힌 뒤 type을 거름)
-    List<Notification> findByMemberIdAndTypeAndIdLessThanOrderByIdDesc(Long memberId, NotificationType type, Long cursor, Limit limit);
+    List<Notification> findByMemberIdAndTypeAndCreatedAtGreaterThanEqualAndIdLessThanOrderByIdDesc(Long memberId, NotificationType type, LocalDateTime since, Long cursor, Limit limit);
 
-    // 안 읽은 알림 개수 (idx_notification_member_unread)
-    long countByMemberIdAndReadAtIsNull(Long memberId);
+    // since 이후에 생긴 안 읽은 알림 개수 (idx_notification_member_unread)
+    long countByMemberIdAndReadAtIsNullAndCreatedAtGreaterThanEqual(Long memberId, LocalDateTime since);
 
     // 회원의 같은 주문 알림 중 해당 유형 하나. 배송 알림이 결제 완료 알림의 상품명·개수를 가져올 때 씀 (idx_notification_member_id)
     Optional<Notification> findFirstByMemberIdAndOrderIdAndType(Long memberId, Long orderId, NotificationType type);
