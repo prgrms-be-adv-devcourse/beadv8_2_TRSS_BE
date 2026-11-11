@@ -50,7 +50,7 @@ class OrderExpireOrdersUseCaseTest {
     @BeforeEach
     void setUp() {
         // OrderPolicy는 값 객체라 실제로 만들고(만료 여유 1분), 재고 복원까지 보려고 OrderCancelSupport도 실제 객체를 쓴다
-        useCase = new OrderExpireOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100, 1),
+        useCase = new OrderExpireOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100, 1, 2500, 30000),
                 new OrderCancelSupport(productApi, orderCouponPort));
     }
 

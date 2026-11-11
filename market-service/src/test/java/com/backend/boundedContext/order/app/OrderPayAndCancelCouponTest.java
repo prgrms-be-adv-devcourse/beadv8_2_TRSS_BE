@@ -58,13 +58,14 @@ class OrderPayAndCancelCouponTest {
     @Mock OrderCouponPort orderCouponPort;
     @Mock ProductApi productApi;
 
-    /** 옵션 100, 20,000원 x 2 = 40,000원. 상품 쿠폰 10,000원, 장바구니 쿠폰 3,000원 → 결제 27,000원 */
+    /** 옵션 100, 20,000원 x 2 = 40,000원. 상품 쿠폰 10,000원 → 30,000원이라 배송비 0, 장바구니 쿠폰 3,000원 → 결제 27,000원 */
     private Order discountedOrder() {
         Order order = Order.create(BUYER_ID, List.of(
                 new OrderItemSpec(1L, 10L, 100L, 2L, "립스틱", "기본", "상점", 20_000, 2)), LocalDateTime.now(), 15);
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         ReflectionTestUtils.setField(order.getItems().getFirst(), "id", 1001L);
         order.applyProductCouponDiscount(1001L, 10_000);
+        order.applyShippingFee(0);
         order.applyCartCouponDiscount(3_000);
         return order;
     }
@@ -87,7 +88,32 @@ class OrderPayAndCancelCouponTest {
         assertThat(response.paidAmount()).isEqualTo(27_000);
         InOrder inOrder = inOrder(orderCouponPort, paymentApi);
         inOrder.verify(orderCouponPort).useReservedCoupons(eq(ORDER_ID), any(LocalDateTime.class));
-        inOrder.verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 27_000));
+        // 장바구니 쿠폰 할인은 플랫폼 부담이라 같은 금액을 지원금으로 보낸다
+        inOrder.verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 27_000
+                && cmd.shippingFee() == 0
+                && cmd.couponSubsidyAmount() == 3_000));
+    }
+
+    @Test
+    @DisplayName("결제: 상품 쿠폰 할인 후 30,000원 미만이면 배송비를 결제 금액에 포함하고 PayCommand.shippingFee로도 보낸다")
+    void payWithShippingFee() {
+        Order order = Order.create(BUYER_ID, List.of(
+                new OrderItemSpec(1L, 10L, 100L, 2L, "립스틱", "기본", "상점", 20_000, 2)), LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(order, "id", ORDER_ID);
+        ReflectionTestUtils.setField(order.getItems().getFirst(), "id", 1001L);
+        order.applyProductCouponDiscount(1001L, 15_000);   // 25,000원 → 배송비 2,500원
+        order.applyShippingFee(2_500);
+        order.applyCartCouponDiscount(2_000);
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.pay(any())).willReturn(new PayResultDto(77L, PayResultStatus.PAID, 0, 0));
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(mock(Cart.class)));
+
+        OrderPayResponse response = payUseCase().pay(BUYER_ID, ORDER_ID);
+
+        assertThat(response.paidAmount()).isEqualTo(40_000 - 15_000 - 2_000 + 2_500);
+        verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 25_500
+                && cmd.shippingFee() == 2_500
+                && cmd.couponSubsidyAmount() == 2_000));
     }
 
     @Test

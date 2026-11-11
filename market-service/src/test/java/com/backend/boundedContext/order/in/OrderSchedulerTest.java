@@ -29,7 +29,7 @@ class OrderSchedulerTest {
     @BeforeEach
     void setUp() {
         // 한 번에 2건씩 조회하도록 batchSize 2
-        scheduler = new OrderScheduler(orderFacade, new OrderPolicy(15, 7, 99, 2, 1));
+        scheduler = new OrderScheduler(orderFacade, new OrderPolicy(15, 7, 99, 2, 1, 2500, 30000));
     }
 
     @Test

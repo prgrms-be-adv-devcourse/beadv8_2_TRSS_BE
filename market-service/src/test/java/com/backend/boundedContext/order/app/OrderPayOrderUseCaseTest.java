@@ -17,6 +17,7 @@ import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.order.dto.PaidOrderItemDto;
 import com.backend.shared.order.dto.ShippingAddressDto;
 import com.backend.shared.order.event.OrderPaidEvent;
+import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
 import com.backend.shared.payment.dto.PayResultStatus;
 import com.backend.shared.payment.out.PaymentApi;
@@ -83,7 +84,10 @@ class OrderPayOrderUseCaseTest {
         assertThat(response.status()).isEqualTo(OrderStatus.PAID);
         assertThat(response.paymentId()).isEqualTo(77L);
         verify(orderSupport).getSaleableOptions(List.of(100L));
+        // 배송비·장바구니 쿠폰이 없는 주문은 둘 다 0으로 보낸다
         verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 20_000
+                && cmd.shippingFee() == 0
+                && cmd.couponSubsidyAmount() == 0
                 && cmd.orderId().equals(ORDER_ID)
                 && cmd.orderNumber().equals(order.getOrderNumber())));
         verify(cart).removeItems(List.of(1L));
@@ -103,6 +107,27 @@ class OrderPayOrderUseCaseTest {
         InOrder inOrder = inOrder(orderCouponPort, paymentApi);
         inOrder.verify(orderCouponPort).useReservedCoupons(eq(ORDER_ID), any());
         inOrder.verify(paymentApi).pay(argThat(cmd -> cmd.amount() == 15_000));
+    }
+
+    @Test
+    @DisplayName("결제 요청에 결제 금액(배송비 포함), 배송비, 장바구니 쿠폰 지원금(= 장바구니 쿠폰 할인액)을 싣는다")
+    void pay_sendsShippingFeeAndCouponSubsidy() {
+        Order order = order(LocalDateTime.now());   // 20,000원
+        order.applyShippingFee(2_500);
+        order.applyCartCouponDiscount(1_000);
+        Cart cart = mock(Cart.class);
+        given(orderRepository.findByIdAndBuyerIdForUpdate(ORDER_ID, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.pay(any())).willReturn(new PayResultDto(77L, PayResultStatus.PAID, 0, 0));
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cart));
+
+        OrderPayResponse response = useCase.pay(BUYER_ID, ORDER_ID);
+
+        ArgumentCaptor<PayCommand> command = ArgumentCaptor.forClass(PayCommand.class);
+        verify(paymentApi).pay(command.capture());
+        assertThat(command.getValue().amount()).isEqualTo(order.getPayAmount()).isEqualTo(21_500);
+        assertThat(command.getValue().shippingFee()).isEqualTo(order.getShippingFee()).isEqualTo(2_500);
+        assertThat(command.getValue().couponSubsidyAmount()).isEqualTo(order.getCartCouponDiscountAmount()).isEqualTo(1_000);
+        assertThat(response.paidAmount()).isEqualTo(21_500);
     }
 
     @Test
