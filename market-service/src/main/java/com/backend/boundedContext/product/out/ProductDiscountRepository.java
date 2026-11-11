@@ -16,8 +16,8 @@ public interface ProductDiscountRepository extends JpaRepository<ProductDiscount
             + "and d.startsAt <= :now and d.endsAt > :now")
     List<ProductDiscount> findAllActiveByProductIdIn(Collection<Long> productIds, LocalDateTime now);
 
-    /** 상품의 삭제되지 않은 할인 (시작 시각 최신순). 판매자 할인 목록과 기간 겹침 검사에 쓴다 */
-    List<ProductDiscount> findAllByProductIdAndDeletedAtIsNullOrderByStartsAtDesc(Long productId);
+    /** 상품의 삭제되지 않고 이 시각에 아직 끝나지 않은(진행 중·예약) 할인 (시작 시각 순). 판매자 할인 목록과 기간 겹침 검사에 쓴다 */
+    List<ProductDiscount> findAllByProductIdAndDeletedAtIsNullAndEndsAtAfterOrderByStartsAtAsc(Long productId, LocalDateTime now);
 
     /** 이 시각에 진행 중이거나 예약된(아직 끝나지 않은) 할인이 있는지 */
     boolean existsByProductIdAndDeletedAtIsNullAndEndsAtAfter(Long productId, LocalDateTime now);

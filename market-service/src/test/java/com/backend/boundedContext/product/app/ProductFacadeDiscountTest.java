@@ -159,9 +159,12 @@ class ProductFacadeDiscountTest {
         productFacade.endDiscount(MEMBER_ID, productId, discountId);
 
         assertThat(productFacade.getProductDetail(productId).salePrice()).isNull();
-        assertThat(productFacade.getSellerProductForm(MEMBER_ID, productId).discounts())
-                .extracting(SellerDiscountDto::status).containsExactly(ProductDiscountStatus.ENDED);
+        assertThat(productFacade.getSellerProductForm(MEMBER_ID, productId).discounts()).isEmpty();   // 끝난 할인은 폼에 없다
         assertCode(() -> productFacade.endDiscount(MEMBER_ID, productId, discountId), "409-DISCOUNT_NOT_ACTIVE");
+
+        // 끝난 할인과는 겹침을 보지 않으므로, 종료 직후 같은 분에 '지금 시작'으로 다시 걸 수 있다
+        LocalDateTime now = LocalDateTime.now().withSecond(0).withNano(0);
+        productFacade.createDiscount(MEMBER_ID, productId, 16_000, now, now.plusDays(1));
     }
 
     @Test

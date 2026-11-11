@@ -294,7 +294,7 @@ public class ProductSupport {
     /**
      * 판매자 상품 수정 폼을 채우는 값. 이미지 ID는 수정할 때 남길 상세 이미지를 고르는 데 쓴다.
      * 옵션은 삭제되지 않은 조합을 옵션 ID 순으로 재고와 함께 준다 (추가금 수정·재고 조정·옵션 삭제에 쓴다).
-     * 할인은 삭제되지 않은 것을 시작 시각 최신순으로, 지금 상태와 함께 준다.
+     * 할인은 진행 중·예약된 것만 시작 시각 순으로, 지금 상태와 함께 준다 (끝난 할인은 빼고).
      */
     public SellerProductFormDto getSellerProductForm(Long sellerId, Long productId) {
         Product product = getSellerProduct(sellerId, productId);
@@ -307,7 +307,7 @@ public class ProductSupport {
                 category.getParent().getId(), category.getId(),
                 productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId),
                 product.getOptionNames(), stocks.stream().map(SellerOptionDto::from).toList(),
-                productDiscountSupport.getDiscounts(productId).stream()
+                productDiscountSupport.getPendingDiscounts(productId, now).stream()
                         .map(discount -> SellerDiscountDto.from(discount, now)).toList());
     }
 

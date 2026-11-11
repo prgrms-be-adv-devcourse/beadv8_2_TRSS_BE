@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  * @param discountRate 지금 정가 기준 할인율 (%, 소수점 내림)
  * @param startsAt     시작 시각
  * @param endsAt       끝 시각 (이 시각부터 정가)
- * @param status       SCHEDULED(시작 전, 수정·삭제 가능) · ACTIVE(진행 중, 종료만 가능) · ENDED(끝남)
+ * @param status       SCHEDULED(시작 전, 수정·삭제 가능) · ACTIVE(진행 중, 끝 시각 수정·종료 가능). 끝난 할인은 목록에 오지 않는다
  */
 public record SellerDiscountDto(
         Long discountId,

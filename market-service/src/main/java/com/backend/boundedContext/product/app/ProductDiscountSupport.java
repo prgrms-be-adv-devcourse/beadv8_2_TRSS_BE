@@ -46,9 +46,9 @@ public class ProductDiscountSupport {
         return getPrices(Set.of(product)).get(product.getId());
     }
 
-    /** 상품의 삭제되지 않은 할인 (시작 시각 최신순) */
-    public List<ProductDiscount> getDiscounts(Long productId) {
-        return productDiscountRepository.findAllByProductIdAndDeletedAtIsNullOrderByStartsAtDesc(productId);
+    /** 상품의 진행 중·예약 할인 (시작 시각 순). 끝난 할인은 판매자가 더 바꿀 수 없어 빼고, 이력이 쌓여도 읽는 양이 늘지 않는다 */
+    public List<ProductDiscount> getPendingDiscounts(Long productId, LocalDateTime now) {
+        return productDiscountRepository.findAllByProductIdAndDeletedAtIsNullAndEndsAtAfterOrderByStartsAtAsc(productId, now);
     }
 
     /** 상품의 삭제되지 않은 할인. 없거나 다른 상품의 할인이면 404 */
@@ -58,11 +58,12 @@ public class ProductDiscountSupport {
     }
 
     /**
-     * [startsAt, endsAt)이 상품의 다른 할인(삭제되지 않은 것, excludeId 제외)과 겹치면 409.
+     * [startsAt, endsAt)이 상품의 다른 진행 중·예약 할인(excludeId 제외)과 겹치면 409.
+     * 끝난 할인은 다시 적용되지 않으므로 보지 않는다. 그래서 지금 종료한 직후 같은 분에 '지금 시작'으로 등록해도 된다.
      * 상품을 쓰기 잠금한 뒤 불러야 동시에 등록해도 겹치지 않는다.
      */
     public void checkNoOverlap(Long productId, LocalDateTime startsAt, LocalDateTime endsAt, Long excludeId) {
-        boolean overlapped = getDiscounts(productId).stream()
+        boolean overlapped = getPendingDiscounts(productId, LocalDateTime.now()).stream()
                 .filter(discount -> !discount.getId().equals(excludeId))
                 .anyMatch(discount -> discount.overlaps(startsAt, endsAt));
         if (overlapped) {
