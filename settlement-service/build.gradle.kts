@@ -10,6 +10,8 @@ dependencies {
 	// 월 정산 Job. 배치 메타 테이블은 Flyway(V1__settlement_baseline.sql)로 만든다
 	implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
+	// 정산서 엑셀 다운로드(.xlsx). SXSSF로 행을 임시 파일에 흘려 써서 행이 많아도 메모리를 적게 쓴다
+	implementation("org.apache.poi:poi-ooxml:5.4.1")
 
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("org.postgresql:postgresql")

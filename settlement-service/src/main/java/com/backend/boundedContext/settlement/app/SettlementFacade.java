@@ -1,5 +1,6 @@
 package com.backend.boundedContext.settlement.app;
 
+import com.backend.boundedContext.settlement.domain.SettlementAdminStatusGroup;
 import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
 import com.backend.boundedContext.settlement.domain.SettlementJudgement;
 import com.backend.boundedContext.settlement.domain.SettlementLedgerCheckResult;
@@ -12,6 +13,10 @@ import com.backend.boundedContext.settlement.in.dto.SellerSettlementResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementCandidateResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementDetailResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementExpectedResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementExportFile;
+import com.backend.boundedContext.settlement.in.dto.SettlementRunnableMonthResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementSummaryResponse;
+import com.backend.boundedContext.settlement.in.dto.SellerSettlementSummaryResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementHistoryResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
 import com.backend.boundedContext.settlement.in.dto.SettlementPreviewResponse;
@@ -34,7 +39,7 @@ import java.util.Set;
  *
  * in(리스너·DataInit·Adapter·컨트롤러·배치·스케줄러)은 이 클래스만 호출한다.
  * 구현 로직은 UseCase·Support에 두고 여기서는 트랜잭션 경계를 정해 위임만 한다.
- * 예외: 지급(payout·retry)과 Job 실행은 UseCase가 트랜잭션을 직접 나누므로 @Transactional을 붙이지 않는다.
+ * 예외: 지급(payout·retry), Job 실행, 엑셀 다운로드(export)는 UseCase가 트랜잭션을 직접 나누므로 @Transactional을 붙이지 않는다.
  */
 @Component
 @RequiredArgsConstructor
@@ -59,6 +64,9 @@ public class SettlementFacade {
     private final SettlementJudgeUseCase settlementJudgeUseCase;
     private final SettlementLedgerRecheckUseCase settlementLedgerRecheckUseCase;
     private final SettlementRecoverJobUseCase settlementRecoverJobUseCase;
+    private final SettlementExportUseCase settlementExportUseCase;
+    private final SettlementGetSummaryUseCase settlementGetSummaryUseCase;
+    private final SettlementGetRunnableMonthsUseCase settlementGetRunnableMonthsUseCase;
 
     // ================= 정산 후보 생성 (구매 확정 이벤트) =================
 
@@ -186,9 +194,21 @@ public class SettlementFacade {
     // ================= 관리자 조회 =================
 
     @Transactional(readOnly = true)
-    public PageResponse<SettlementResponse> getSettlements(String month, SettlementStatus status, Long sellerId,
-                                                           Pageable pageable) {
-        return settlementGetSettlementListUseCase.getSettlements(month, status, sellerId, pageable);
+    public PageResponse<SettlementResponse> getSettlements(String month, YearMonth from, YearMonth to,
+                                                           SettlementStatus status, SettlementAdminStatusGroup group,
+                                                           Long sellerId, Pageable pageable) {
+        return settlementGetSettlementListUseCase.getSettlements(month, from, to, status, group, sellerId, pageable);
+    }
+
+    /** 관리자 요약 카드: 조회 조건의 상태별 건수·지급 완료 금액 */
+    @Transactional(readOnly = true)
+    public SettlementSummaryResponse getSummary(String month, YearMonth from, YearMonth to, Long sellerId) {
+        return settlementGetSummaryUseCase.getSummary(month, from, to, sellerId);
+    }
+
+    /** 수동 실행 확인 창: 실패했거나 실행되지 않은 끝난 달. Spring Batch 메타 테이블만 읽는다 */
+    public List<SettlementRunnableMonthResponse> getRunnableMonths() {
+        return settlementGetRunnableMonthsUseCase.getRunnableMonths(LocalDateTime.now());
     }
 
     @Transactional(readOnly = true)
@@ -245,13 +265,35 @@ public class SettlementFacade {
         return settlementExcludeCandidateUseCase.exclude(candidateId, reason);
     }
 
+    /** 판매자 요약 카드: 조회 기간 지급 완료 건수·금액, 가장 최근 지급 정산서 */
+    @Transactional(readOnly = true)
+    public SellerSettlementSummaryResponse getSellerSummary(Long memberId, YearMonth from, YearMonth to) {
+        return settlementGetSummaryUseCase.getSellerSummary(memberId, from, to);
+    }
+
+    // ================= 엑셀 다운로드 (지급 완료 정산서) =================
+
+    /**
+     * 관리자 지급 완료 정산서 엑셀(전체, 판매자 ID로 거르기 가능)
+     * 트랜잭션은 UseCase가 묶음마다 연다(파일을 만드는 동안 DB 연결을 계속 잡지 않게, 회원 서비스 조회는 트랜잭션 밖에서)
+     */
+    public SettlementExportFile exportSettlements(Long adminMemberId, YearMonth from, YearMonth to, Long sellerId) {
+        return settlementExportUseCase.exportForAdmin(adminMemberId, from, to, sellerId);
+    }
+
+    /** 판매자 본인 지급 완료 정산서 엑셀. 트랜잭션은 UseCase가 묶음마다 연다 */
+    public SettlementExportFile exportSellerSettlements(Long memberId, YearMonth from, YearMonth to) {
+        return settlementExportUseCase.exportForSeller(memberId, from, to);
+    }
+
     // ================= 판매자 본인 조회 =================
 
     @Transactional(readOnly = true)
-    public PageResponse<SellerSettlementResponse> getSellerSettlements(Long memberId, String month,
-                                                                       SettlementSellerStatus status,
+    public PageResponse<SellerSettlementResponse> getSellerSettlements(Long memberId, String month, YearMonth from,
+                                                                       YearMonth to, SettlementSellerStatus status,
                                                                        Pageable pageable) {
-        return settlementGetSellerSettlementsUseCase.getSellerSettlements(memberId, month, status, pageable);
+        return settlementGetSellerSettlementsUseCase.getSellerSettlements(memberId, month, from, to, status,
+                pageable);
     }
 
     @Transactional(readOnly = true)
