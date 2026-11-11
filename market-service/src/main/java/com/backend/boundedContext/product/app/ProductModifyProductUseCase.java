@@ -25,13 +25,14 @@ public class ProductModifyProductUseCase {
     public Product modifyProduct(Long sellerId, Long productId, String name, Long price, Long categoryId,
                                  String description, List<Long> keepDetailImageIds, ProductImageFile thumbnail,
                                  List<ProductImageFile> newDetailImages) {
-        boolean priceGiven = price != null;
-        Product product = priceGiven
-                ? productSupport.lockSellerProduct(sellerId, productId)
-                : productSupport.getSellerProduct(sellerId, productId);
+        Product product = productSupport.getSellerProduct(sellerId, productId);
+        // 가격이 실제로 바뀔 때만 쓰기 잠금한다 (폼이 같은 가격을 보내도 주문 재고 차감과 기다리지 않게)
+        if (price != null && price != product.getPrice()) {
+            product = productSupport.lockSellerProduct(sellerId, productId);   // 잠근 뒤 DB 값으로 다시 읽는다
+        }
         Category category = categoryId == null ? null : productSupport.getCategory(categoryId);
 
-        if (priceGiven && price != product.getPrice()) {
+        if (price != null && price != product.getPrice()) {
             product.checkEditable();   // 판매 중지 상품은 할인보다 먼저 409(PRODUCT_NOT_EDITABLE)
             productDiscountSupport.checkNoPendingDiscount(productId);
         }
