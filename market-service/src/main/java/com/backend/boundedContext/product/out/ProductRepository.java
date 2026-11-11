@@ -28,7 +28,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
      */
     @Query("select new com.backend.boundedContext.product.out.CategoryProductCount(p.category.id, count(p)) "
             + "from Product p where p.status = :status "
-            + "and exists (select 1 from ProductOption o where o.product = p and o.deletedAt is null and o.stock > 0) "
+            + "and exists (select 1 from OptionStock s join s.option o where o.product = p and o.deletedAt is null and s.stock > 0) "
             + "group by p.category.id")
     List<CategoryProductCount> countByCategory(ProductSaleStatus status);
 

@@ -61,6 +61,19 @@ class OrderGetRecentOrdersUseCaseTest {
     }
 
     @Test
+    @DisplayName("주문 요약의 총액은 쿠폰 할인 후 결제 금액이다")
+    void recentOrdersUsePayAmount() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 15, 10, 0);
+        Order order = order(501L, createdAt);   // 20,000원
+        ReflectionTestUtils.setField(order.getItems().get(0), "id", 1L);
+        order.applyProductCouponDiscount(1L, 5_000);
+        given(orderRepository.findByBuyerId(eq(BUYER_ID), any(Pageable.class))).willReturn(List.of(order));
+
+        assertThat(useCase.getRecentOrders(BUYER_ID, 5))
+                .containsExactly(new OrderSummaryDto(501L, OrderStatus.CREATED, 15_000, createdAt));
+    }
+
+    @Test
     @DisplayName("주문이 없으면 빈 목록을 돌려준다")
     void empty() {
         given(orderRepository.findByBuyerId(eq(BUYER_ID), any(Pageable.class))).willReturn(List.of());

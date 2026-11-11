@@ -1,11 +1,13 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.StockChangeType;
 import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -51,6 +53,9 @@ class ProductFacadeStockTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     private Product product;
@@ -60,7 +65,7 @@ class ProductFacadeStockTest {
     void setUp() {
         product = productRepository.save(Product.create(
                 10L, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "수분 크림", "설명", 25_000));
-        option = productOptionRepository.save(ProductOption.createDefault(product, 5));
+        option = saveOption(product, 5);
     }
 
     @Test
@@ -82,6 +87,27 @@ class ProductFacadeStockTest {
     }
 
     @Test
+    @DisplayName("옵션 재고 저장: ID를 직접 넣어도 새 재고면 merge(SELECT) 없이 persist해서 넘긴 객체를 그대로 돌려준다")
+    void saveNewOptionStockPersists() {
+        ProductOption newOption = productOptionRepository.save(ProductOption.createDefault(product));
+        OptionStock newStock = OptionStock.init(newOption, 3);
+
+        assertThat(newStock.isNew()).isTrue();
+        assertThat(optionStockRepository.save(newStock)).isSameAs(newStock);   // merge였다면 복사본을 돌려준다
+        assertThat(newStock.isNew()).isFalse();
+    }
+
+    @Test
+    @DisplayName("getOptions: 재고 행이 없는 옵션은 없는 ID처럼 빠진다 (NPE 없이)")
+    void getOptionsWithoutStockRow() {
+        ProductOption noStock = productOptionRepository.save(ProductOption.createDefault(product));
+
+        assertThat(productFacade.getOptions(List.of(option.getId(), noStock.getId())))
+                .extracting(OptionSnapshotDto::optionId)
+                .containsExactly(option.getId());
+    }
+
+    @Test
     @DisplayName("getOptions: 삭제된 상품도 결과에 포함하고 판매 불가로 표시한다")
     void getOptionsDeletedProduct() {
         ReflectionTestUtils.setField(product, "status", ProductSaleStatus.DELETED);
@@ -98,7 +124,7 @@ class ProductFacadeStockTest {
         productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));
         productFacade.deductStock(List.of(item(ORDER_ITEM_ID, 2)));   // 중복 호출
 
-        assertThat(option.getStock()).isEqualTo(3);
+        assertThat(optionStock(option).getStock()).isEqualTo(3);
         assertThat(histories(StockChangeType.ORDER_DEDUCT)).singleElement().satisfies(history -> {
             assertThat(history.getChangeQty()).isEqualTo(-2);
             assertThat(history.getStockAfter()).isEqualTo(3);
@@ -131,7 +157,7 @@ class ProductFacadeStockTest {
         productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE);
         productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.ORDER_RESTORE);   // 중복 호출
 
-        assertThat(option.getStock()).isEqualTo(5);
+        assertThat(optionStock(option).getStock()).isEqualTo(5);
         assertThat(histories(StockChangeType.ORDER_RESTORE)).singleElement().satisfies(history -> {
             assertThat(history.getChangeQty()).isEqualTo(2);
             assertThat(history.getStockAfter()).isEqualTo(5);
@@ -165,5 +191,17 @@ class ProductFacadeStockTest {
         return stockHistoryRepository.findAll().stream()
                 .filter(h -> h.getOption().getId().equals(option.getId()) && h.getChangeType() == changeType)
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
+    }
+
+    /** 옵션의 재고 행 */
+    private OptionStock optionStock(ProductOption option) {
+        return optionStockRepository.findById(option.getId()).orElseThrow();
     }
 }

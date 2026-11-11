@@ -12,7 +12,7 @@ import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.LocalProductImageStorage;
 import com.backend.boundedContext.product.out.ProductImageRepository;
-import com.backend.boundedContext.product.out.ProductOptionRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.dto.SellerDto;
@@ -70,7 +70,7 @@ class ProductFacadeImageTest {
     private ProductImageRepository productImageRepository;
 
     @Autowired
-    private ProductOptionRepository productOptionRepository;
+    private OptionStockRepository optionStockRepository;
 
     @Autowired
     private LocalProductImageStorage localProductImageStorage;
@@ -269,7 +269,7 @@ class ProductFacadeImageTest {
     }
 
     private Long optionId(Long productId) {
-        return productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(productId)).getFirst().getId();
+        return optionStockRepository.findAllWithOptionByProductIdIn(List.of(productId)).getFirst().getOption().getId();
     }
 
     private List<Long> detailIds(Long productId) {

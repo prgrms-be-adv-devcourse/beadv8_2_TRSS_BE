@@ -99,13 +99,13 @@ class CouponFacadeIntegrationTest {
         assertThat(idsOf(CouponDisplayStatus.ENDED, mine)).containsExactly(ended);
         assertThat(idsOf(CouponDisplayStatus.STOPPED, mine)).containsExactly(stopped);
         assertThat(idsOf(null, mine)).containsExactlyInAnyOrderElementsOf(mine);
-        assertThat(couponFacade.getCouponsForAdmin(CouponType.PRODUCT, null, FIRST_PAGE).items())
+        assertThat(couponFacade.getCouponsForAdmin(CouponType.PRODUCT, null, null, null, FIRST_PAGE).items())
                 .extracting(AdminCouponSummaryDto::couponId).doesNotContainAnyElementsOf(mine);
     }
 
     // 테스트가 만든 쿠폰 중 이 상태로 조회되는 것 (다른 데이터가 있어도 영향받지 않게)
     private List<Long> idsOf(CouponDisplayStatus status, List<Long> mine) {
-        PageResponse<AdminCouponSummaryDto> page = couponFacade.getCouponsForAdmin(CouponType.CART, status, FIRST_PAGE);
+        PageResponse<AdminCouponSummaryDto> page = couponFacade.getCouponsForAdmin(CouponType.CART, status, null, null, FIRST_PAGE);
         return page.items().stream()
                 .map(AdminCouponSummaryDto::couponId)
                 .filter(mine::contains)

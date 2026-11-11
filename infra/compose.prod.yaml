@@ -13,7 +13,7 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
-# Spring 앱(payment·member·market·settlement) 기동 확인. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
+# Spring 앱(payment·member·market·settlement·delivery)이 제대로 실행됐는지 확인한다. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
 # 앱마다 컨테이너 안에서 로그인 없이 열리는 Swagger 문서(/v3/api-docs)가 200인지 본다.
 #   정산처럼 로그인 없이 열리는 API가 없는 앱도 같은 방식으로 확인하려고 nginx를 거치지 않는다.
 # 실행 이미지에 curl이 없어도 되게 bash로 HTTP 요청을 직접 보낸다. 포트만 앱마다 다르다(각 서비스의 test).
@@ -25,7 +25,9 @@ x-app-healthcheck: &app-healthcheck
   # 시간이 다 되면 Docker가 요청을 끊어 앱에 Broken pipe가 나므로 넉넉히 기다린다(평소 응답은 1초 미만)
   timeout: 15s
   retries: 3
-  start_period: 90s   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다
+  # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다. 이 시간 안에 응답하면 바로 healthy가 된다.
+  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초). 그보다 넉넉하게 둔다
+  start_period: 180s
 
 services:
   nginx:
@@ -47,13 +49,8 @@ services:
       # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
       # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
       - ../../palette-web:/usr/share/nginx/html:ro
-    # nginx는 시작할 때 member·market·payment·settlement의 이름을 찾으므로 먼저 떠 있어야 한다.
-    # grafana는 요청할 때 찾으므로(nginx/default.conf의 resolver) 꺼져 있어도 nginx는 뜬다.
-    depends_on:
-      - member
-      - market
-      - payment
-      - settlement
+    # 앱·grafana 주소는 요청할 때 찾으므로(nginx/default.conf의 resolver) 앱보다 먼저 떠도 되고, 앱이 꺼져 있어도 nginx는 뜬다.
+    # 그래서 앱에 depends_on을 걸지 않는다. 앱이 아직 뜨는 중이면 그 경로만 502가 난다
 
   # 회원·인증·판매자(member-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
   # DB는 member 스키마에 member_user로 접속한다(DB_USERNAME과 다른 계정).
@@ -65,6 +62,8 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: member-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
     image: palette-member
     container_name: palette-member
     restart: unless-stopped
@@ -109,6 +108,8 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: market-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
     image: palette-market
     container_name: palette-market
     restart: unless-stopped
@@ -126,9 +127,11 @@ services:
       # 결제 내부 API(/internal/v1/payments)를 부르는 payment-service 주소 (주문 결제·취소, 결제 시도 조회)
       # 지금은 결제 클라이언트가 임시 구현이라 읽지 않는다. HTTP로 바꿀 때 이 이름으로 읽는다
       PAYMENT_SERVICE_URL: http://payment:8083
+      # 배송 내부 API(/internal/v1/deliveries)를 부르는 delivery-service 주소 (주문 상세의 배송 정보)
+      # 응답하지 못하면 주문 상세는 배송 정보 없이(deliveryUnavailable: true) 응답한다
+      DELIVERY_SERVICE_URL: http://delivery:8085
       SERVER_FORWARD_HEADERS_STRATEGY: native
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # 서버 8GB를 다른 앱(각 1g)·Kafka(1g)·DB·모니터링과 나눠 쓴다
     mem_limit: 1g
     healthcheck:
@@ -151,6 +154,8 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: payment-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
     image: palette-payment
     container_name: palette-payment
     restart: unless-stopped
@@ -170,8 +175,6 @@ services:
       # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
       # 로컬은 이 값이 없어 지금처럼 사람이 읽는 형식으로 찍힌다.
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-      # 로그의 service.version에 배포 커밋 SHA를 넣는다(deploy.sh가 APP_VERSION을 넘김). Slack 에러 알림이 배포 커밋 링크로 쓴다
-      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # JVM 힙은 이 값의 75%(Dockerfile의 MaxRAMPercentage). member·market·settlement와 같은 1g(힙 768MB)
     mem_limit: 1g
     healthcheck:
@@ -195,6 +198,8 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: settlement-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
     image: palette-settlement
     container_name: palette-settlement
     restart: unless-stopped
@@ -214,12 +219,87 @@ services:
       PAYMENT_SERVICE_URL: http://payment:8083
       SERVER_FORWARD_HEADERS_STRATEGY: native
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-      LOGGING_STRUCTURED_ECS_SERVICE_VERSION: ${APP_VERSION:-unknown}
     # market과 같은 1g(힙 768MB). 월 1회 배치와 관리자 조회뿐이라 평소 사용량은 market(약 430MB)과 비슷하다
     mem_limit: 1g
     healthcheck:
       <<: *app-healthcheck
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # 배송(delivery-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 delivery 스키마에 delivery_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 새 스키마라 테이블 이전은 없다. 처음 띄우기 전에 운영 DB에 delivery 스키마·계정만 만든다(postgres/init/01-init-schemas.sh).
+  # 결제한 주문(OrderPaidEvent)을 Kafka로 받아 배송을 만들고, 배송 완료(DeliveryCompletedEvent)를 market에 보낸다.
+  # Delivery Tracker 값(DELIVERY_TRACKER_*)은 .env에서 읽는다. 비어 있으면 delivery가 뜨지 않는다.
+  delivery:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: delivery-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-delivery
+    container_name: palette-delivery
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:?DELIVERY_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # 다른 앱(1g)보다 작은 768m(힙 576MB). 송장 등록·배송 조회와 스케줄러뿐이라 요청이 적고, 서버 8GB에 앱이 5개가 되어 줄인다
+    mem_limit: 768m
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 배송은 Redis를 쓰지 않는다
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # 구매자 알림(notification-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 notification 스키마에 notification_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 새 스키마라 테이블 이전은 없다. 처음 띄우기 전에 운영 DB에 notification 스키마·계정만 만든다(postgres/init/01-init-schemas.sh).
+  # 주문 완료(order.events)·배송 시작·완료(delivery.events)를 Kafka로 받아 알림을 저장한다. 다른 서비스를 HTTP로 부르지 않는다.
+  notification:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: notification-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-notification
+    container_name: palette-notification
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?NOTIFICATION_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # delivery와 같은 768m(힙 576MB). 512m는 힙 밖 메모리(약 128MB)가 모자라 부하 때 강제 종료될 수 있다.
+    # 비슷한 앱(delivery·payment)이 평소 350~370MB를 쓴다(11/10 docker stats). 서버 8GB에 앱이 6개라 1g보다 작게 둔다
+    mem_limit: 768m
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8086 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 알림은 Redis를 쓰지 않는다
     depends_on:
       postgres:
         condition: service_healthy
@@ -241,6 +321,8 @@ services:
       MARKET_DB_PASSWORD: ${MARKET_DB_PASSWORD:?MARKET_DB_PASSWORD가 .env에 없습니다}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD가 .env에 없습니다}
       SETTLEMENT_DB_PASSWORD: ${SETTLEMENT_DB_PASSWORD:?SETTLEMENT_DB_PASSWORD가 .env에 없습니다}
+      DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD가 .env에 없습니다}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD가 .env에 없습니다}
       AI_DB_PASSWORD: ${AI_DB_PASSWORD:?AI_DB_PASSWORD가 .env에 없습니다}
       READONLY_DB_PASSWORD: ${READONLY_DB_PASSWORD:?READONLY_DB_PASSWORD가 .env에 없습니다}
     # 서버 안(127.0.0.1)에서만 접속된다. 외부에서 보려면 SSH 터널을 쓴다.

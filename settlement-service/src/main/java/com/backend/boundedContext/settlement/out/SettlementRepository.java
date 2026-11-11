@@ -51,6 +51,51 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
             """)
     List<Long> findRetryTargetIds(@Param("now") LocalDateTime now, Pageable pageable);
 
+    /**
+     * 원장 재대조 대상: 지급일이 since 이후인 PAID 정산서. afterId 커서로 한 번씩만 본다
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PAID
+               and s.paidAt >= :since
+               and s.id > :afterId
+             order by s.id
+            """)
+    List<Long> findLedgerRecheckTargetIds(@Param("since") LocalDateTime since, @Param("afterId") Long afterId,
+                                          Pageable pageable);
+
+    /**
+     * 이 판매자의 정산서 중 원장 재대조 불일치가 아직 풀리지 않은 것이 있는지
+     * (정산서별 가장 마지막 VERIFY 이력이 MANUAL_REQUIRED. SettlementProcessHistoryRepository.findUnresolvedLedgerMismatchSettlementIds와 같은 기준)
+     * 지급 직전 확인·보류 해제·불일치 해소 후 자동 해제가 쓴다
+     */
+    @Query("""
+            select count(s) > 0 from Settlement s
+             where s.sellerId = :sellerId
+               and s.id in (select h.targetId from SettlementProcessHistory h
+                             where h.targetType = com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType.SETTLEMENT
+                               and h.stage = com.backend.boundedContext.settlement.domain.SettlementHistoryStage.VERIFY
+                               and h.result = com.backend.boundedContext.settlement.domain.SettlementHistoryResult.MANUAL_REQUIRED
+                               and h.id = (select max(h2.id) from SettlementProcessHistory h2
+                                            where h2.targetType = h.targetType
+                                              and h2.stage = h.stage
+                                              and h2.targetId = h.targetId))
+            """)
+    boolean existsUnresolvedLedgerMismatchBySellerId(@Param("sellerId") Long sellerId);
+
+    /** 이 사유로 보류(HOLD)된 정산서가 있는 판매자 ID (원장 불일치 보류 정리: 불일치가 없는데 남은 보류를 찾는다) */
+    @Query("""
+            select distinct s.sellerId from Settlement s
+             where s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.HOLD
+               and s.holdReason = :holdReason
+             order by s.sellerId
+            """)
+    List<Long> findSellerIdsByHoldReason(@Param("holdReason") String holdReason);
+
+    /** 정산서 ID들의 판매자 ID (원장 불일치가 남은 판매자 찾기) */
+    @Query("select distinct s.sellerId from Settlement s where s.id in :ids")
+    List<Long> findSellerIdsByIdIn(@Param("ids") Collection<Long> ids);
+
     /** 판매자 본인 정산서 조회. 소유자를 조회 조건에 넣어 남의 정산서는 404가 되게 한다(예외 처리 5.1) */
     Optional<Settlement> findByIdAndSellerId(Long id, Long sellerId);
 

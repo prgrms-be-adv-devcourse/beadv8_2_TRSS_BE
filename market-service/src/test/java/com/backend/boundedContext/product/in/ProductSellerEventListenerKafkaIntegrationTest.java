@@ -22,10 +22,12 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.outbox.EventMessages;
@@ -62,6 +64,7 @@ class ProductSellerEventListenerKafkaIntegrationTest {
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private ProductRepository productRepository;
     @Autowired private ProductOptionRepository productOptionRepository;
+    @Autowired private OptionStockRepository optionStockRepository;
 
     // 다른 테스트·시드와 겹치지 않는 판매자 ID
     private final long sellerId = ThreadLocalRandom.current().nextLong(3_000_000_000L, 4_000_000_000L);
@@ -78,7 +81,7 @@ class ProductSellerEventListenerKafkaIntegrationTest {
             Product product = productRepository.save(Product.create(
                     sellerId, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "판매자 이벤트 테스트 크림", "설명", 10_000L));
             productId = product.getId();
-            optionId = productOptionRepository.save(ProductOption.createDefault(product, 10)).getId();
+            optionId = saveOption(product, 10).getId();
         });
     }
 
@@ -150,5 +153,12 @@ class ProductSellerEventListenerKafkaIntegrationTest {
 
     private ProductSaleStatus status() {
         return productRepository.findById(productId).orElseThrow().getStatus();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
     }
 }

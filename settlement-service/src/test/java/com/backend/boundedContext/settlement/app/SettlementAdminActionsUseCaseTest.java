@@ -9,6 +9,7 @@ import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
+import com.backend.boundedContext.settlement.domain.judge.LedgerMismatchRule;
 import com.backend.boundedContext.settlement.in.dto.SellerSettlementDetailResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementCandidateResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
@@ -55,6 +56,7 @@ class SettlementAdminActionsUseCaseTest {
     private final List<SettlementProcessHistory> histories = new ArrayList<>();
     private Long unsettledSum;
     private SellerStatus sellerStatus = SellerStatus.APPROVED;
+    private boolean ledgerMismatch;
 
     private final SettlementSupport support;
     private final SettlementHoldUseCase holdUseCase;
@@ -67,6 +69,7 @@ class SettlementAdminActionsUseCaseTest {
         SettlementRepository settlementRepository = fake(SettlementRepository.class, Map.of(
                 "findById", args -> Optional.ofNullable(settlements.get((Long) args[0])),
                 "findWithLockById", args -> Optional.ofNullable(settlements.get((Long) args[0])),
+                "existsUnresolvedLedgerMismatchBySellerId", args -> ledgerMismatch,
                 "findByIdAndSellerId", args -> Optional.ofNullable(settlements.get((Long) args[0]))
                         .filter(s -> s.getSellerId().equals(args[1])),
                 "findWithLockBySellerIdAndStatusIn", args -> settlements.values().stream()
@@ -162,6 +165,19 @@ class SettlementAdminActionsUseCaseTest {
                 assertThrows(DomainException.class, () -> releaseUseCase.release(31L)).getResultCode());
         assertEquals(SettlementStatus.HOLD, s.getStatus());
         assertEquals("판매자 제재", s.getHoldReason());
+        assertTrue(histories.isEmpty());
+    }
+
+    @Test
+    @DisplayName("해제: 판매자의 원장 재대조 불일치가 풀리지 않았으면 409이고 HOLD·이력을 그대로 둔다")
+    void release_ledgerMismatchUnresolved() {
+        Settlement s = save(31L, SELLER_ID, "2026-09");
+        s.hold(LedgerMismatchRule.REASON);
+        ledgerMismatch = true;
+
+        assertEquals("409-SETTLEMENT_LEDGER_MISMATCH_UNRESOLVED",
+                assertThrows(DomainException.class, () -> releaseUseCase.release(31L)).getResultCode());
+        assertEquals(SettlementStatus.HOLD, s.getStatus());
         assertTrue(histories.isEmpty());
     }
 

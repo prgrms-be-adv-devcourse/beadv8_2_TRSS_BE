@@ -32,6 +32,6 @@ public class OrderGetRecentOrdersUseCase {
     }
 
     private OrderSummaryDto toSummary(Order order) {
-        return new OrderSummaryDto(order.getId(), order.getStatus(), order.getTotalPrice(), order.getCreatedAt());
+        return new OrderSummaryDto(order.getId(), order.getStatus(), order.getPayAmount(), order.getCreatedAt());   // 쿠폰 할인 후 결제 금액
     }
 }

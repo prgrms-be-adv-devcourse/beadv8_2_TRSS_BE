@@ -1,8 +1,10 @@
 package com.backend.boundedContext.review.app;
 
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.review.app.dto.MyReviewDto;
@@ -70,6 +72,9 @@ class ReviewFacadeTest {
 
     @Autowired
     private ProductOptionRepository productOptionRepository;
+
+    @Autowired
+    private OptionStockRepository optionStockRepository;
 
     @MockitoBean
     private MemberApi memberApi;
@@ -245,7 +250,7 @@ class ReviewFacadeTest {
     void myReviews() {
         Product product = productRepository.save(Product.create(300L,
                 categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "리뷰 크림", "설명", 10_000));
-        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product, 10));
+        ProductOption option = saveOption(product, 10);
         given(orderApi.findConfirmedOrderItem(MEMBER_ID, 131L)).willReturn(Optional.of(
                 new ReviewableOrderItemDto(131L, product.getId(), option.getId(), "기본", LocalDateTime.now())));
         Long mine = reviewFacade.createReview(MEMBER_ID, 131L, 5, "실제 상품에 쓴 리뷰입니다.");
@@ -292,5 +297,12 @@ class ReviewFacadeTest {
         return outboxEventRepository.findAll().stream()
                 .filter(e -> e.getEventType().equals(eventType) && e.getAggregateId().equals(productId))
                 .toList();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
     }
 }

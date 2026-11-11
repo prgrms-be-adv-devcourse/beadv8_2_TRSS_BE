@@ -1,11 +1,13 @@
 package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.domain.Category;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStoppedBy;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.global.exception.DomainException;
@@ -58,6 +60,9 @@ class ProductFacadeSellerStopTest {
 
     @Autowired
     private ProductOptionRepository productOptionRepository;
+
+    @Autowired
+    private OptionStockRepository optionStockRepository;
 
     @MockitoBean
     private OrderApi orderApi;
@@ -118,7 +123,7 @@ class ProductFacadeSellerStopTest {
     @DisplayName("중지된 상품은 구매자 상세에서 404, 주문 쪽 옵션 조회에서는 판매 불가(PRODUCT_STOPPED)다")
     void stoppedProductIsNotSaleable() {
         Product product = create(SELLER_ID);
-        ProductOption option = productOptionRepository.findAllByProductIdInAndDeletedAtIsNullOrderByIdAsc(List.of(product.getId())).getFirst();
+        ProductOption option = optionStockRepository.findAllWithOptionByProductIdIn(List.of(product.getId())).getFirst().getOption();
 
         productApi.stopAllBySeller(SELLER_ID, "판매자 철회 요청");
 
@@ -168,7 +173,7 @@ class ProductFacadeSellerStopTest {
 
     private Product create(Long sellerId) {
         Product product = productRepository.save(Product.create(sellerId, skincare, "판매자 중지 테스트", "설명", 25_000));
-        productOptionRepository.save(ProductOption.createDefault(product, 10));
+        saveOption(product, 10);
         productRepository.flush();   // 잠금 조회가 DB 값을 다시 읽으므로 먼저 반영한다
         return product;
     }
@@ -179,5 +184,12 @@ class ProductFacadeSellerStopTest {
         ReflectionTestUtils.setField(product, "stoppedBy", ProductStoppedBy.ADMIN);
         ReflectionTestUtils.setField(product, "stoppedReason", "관리자 중지");
         productRepository.flush();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
     }
 }

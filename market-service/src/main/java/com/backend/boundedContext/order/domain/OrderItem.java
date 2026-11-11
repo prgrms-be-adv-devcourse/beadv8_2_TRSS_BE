@@ -3,6 +3,7 @@ package com.backend.boundedContext.order.domain;
 import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
 import com.backend.shared.order.dto.ConfirmedOrderItemDto;
+import com.backend.shared.order.dto.PaidOrderItemDto;
 import com.backend.shared.product.dto.StockChangeDto;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -53,6 +54,10 @@ public class OrderItem extends BaseIdAndTime {
     @Column(nullable = false)
     private long lineAmount;
 
+    // 상품 쿠폰 할인액 (상품 쿠폰이 붙지 않은 항목은 0). 항목 금액을 넘지 않는다
+    @Column(nullable = false)
+    private long discountAmount;
+
     private Boolean restoreStock;  // 재고 복원여부
 
     static OrderItem create(Order order, OrderItemSpec spec) {
@@ -76,6 +81,21 @@ public class OrderItem extends BaseIdAndTime {
         return item;
     }
 
+    // 상품 쿠폰 할인 적용 (주문 생성 때 한 번). 할인액은 0 이상, 항목 금액 이하
+    void applyCouponDiscount(long discountAmount) {
+        // 정책상 할인 후 금액이 0원이 되는 쿠폰은 없다(쿠폰 쪽이 막는다). 들어오면 코드 오류
+        if (discountAmount < 0 || discountAmount >= lineAmount) {
+            throw new IllegalArgumentException("상품 쿠폰 할인액이 항목 금액 범위를 벗어났습니다. orderItemId=" + getId()
+                    + ", lineAmount=" + lineAmount + ", discountAmount=" + discountAmount);
+        }
+        this.discountAmount = discountAmount;
+    }
+
+    // 상품 쿠폰 할인 후 항목 금액
+    public long getDiscountedLineAmount() {
+        return lineAmount - discountAmount;
+    }
+
     // 재고 차감, 복원 요청으로 변환
     public StockChangeDto toStockChangeDto() {
         return new StockChangeDto(order.getId(), getId(), optionId, quantity);
@@ -84,5 +104,10 @@ public class OrderItem extends BaseIdAndTime {
     // 구매 확정 이벤트 항목으로 변환 (정산 후보 생성용)
     public ConfirmedOrderItemDto toConfirmedOrderItemDto() {
         return new ConfirmedOrderItemDto(getId(), productId, sellerId, unitPrice, quantity, lineAmount);
+    }
+
+    // 결제 완료 이벤트 항목으로 변환 (배송 피킹 목록용)
+    public PaidOrderItemDto toPaidOrderItemDto() {
+        return new PaidOrderItemDto(getId(), productId, optionId, sellerId, sellerName, productName, optionName, quantity);
     }
 }

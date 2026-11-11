@@ -1,14 +1,17 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.order.app.OrderCouponSelection;
 import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.out.CartRepository;
 import com.backend.boundedContext.order.out.OrderRepository;
+import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStoppedBy;
 import com.backend.boundedContext.product.out.CategoryRepository;
+import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.StockHistoryRepository;
@@ -64,6 +67,9 @@ class SellerProductStopFlowIntegrationTest {
     private ProductOptionRepository productOptionRepository;
 
     @Autowired
+    private OptionStockRepository optionStockRepository;
+
+    @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
     @Autowired
@@ -95,7 +101,7 @@ class SellerProductStopFlowIntegrationTest {
             Product product = productRepository.save(Product.create(
                     sellerId, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "판매 중지 흐름 테스트 크림", "설명", PRICE));
             productId = product.getId();
-            optionId = productOptionRepository.save(ProductOption.createDefault(product, STOCK)).getId();
+            optionId = saveOption(product, STOCK).getId();
         });
     }
 
@@ -146,10 +152,18 @@ class SellerProductStopFlowIntegrationTest {
     private Long createPendingOrder() {
         orderFacade.addCartItem(buyerId, optionId, ORDER_QUANTITY);
         Long cartItemId = orderFacade.getCart(buyerId).items().getFirst().itemId();
-        return orderFacade.createOrder(buyerId, null, List.of(cartItemId), PRICE * ORDER_QUANTITY).orderId();
+        return orderFacade.createOrder(buyerId, null, List.of(cartItemId), PRICE * ORDER_QUANTITY, null,
+                OrderCouponSelection.NONE).orderId();
     }
 
     private int stock() {
-        return productOptionRepository.findById(optionId).orElseThrow().getStock();
+        return optionStockRepository.findById(optionId).orElseThrow().getStock();
+    }
+
+    /** 기본 옵션과 옵션 재고를 함께 저장한다 */
+    private ProductOption saveOption(Product product, int stock) {
+        ProductOption option = productOptionRepository.save(ProductOption.createDefault(product));
+        optionStockRepository.save(OptionStock.init(option, stock));
+        return option;
     }
 }

@@ -33,7 +33,11 @@ public class ApiV1OrderController {
 
     private final OrderFacade orderFacade;
 
-    @Operation(summary = "주문 생성", description = "주문을 생성하고 재고를 차감한다.")
+    @Operation(summary = "주문 생성", description = "주문을 생성하고 재고를 차감한다. 배송지는 선택 값이다(보내면 형식을 검증하고, 배송지가 있는 주문은 배송 완료 뒤에만 구매 확정된다). "
+            + "쿠폰(상품 쿠폰 1개, 장바구니 쿠폰 1개까지)은 재고 차감과 같은 트랜잭션에서 예약한다. "
+            + "결제 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. "
+            + "쿠폰은 서버 설정이 켜져 있을 때만 반영되고, 꺼져 있을 때 쿠폰을 보내면 409-ORDER_COUPON_NOT_AVAILABLE이다. "
+            + "expectedTotalPrice가 실제 결제 금액(쿠폰 할인 후)과 다르면 409-PRICE_CHANGED이고 data.currentAmount에 실제 결제 금액을 담는다.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RsData<OrderCreateResponse> createOrder(
@@ -42,7 +46,8 @@ public class ApiV1OrderController {
             @Valid @RequestBody OrderCreateRequest request
     ) {
         OrderCreateResponse response = orderFacade.createOrder(
-                authMember.memberId(), idempotencyKey, request.cartItemIds(), request.expectedTotalPrice());
+                authMember.memberId(), idempotencyKey, request.cartItemIds(), request.expectedTotalPrice(),
+                request.shippingAddress(), request.toCouponSelection());
         return RsData.of("201-1", "주문을 생성했습니다.", response);
     }
 
@@ -62,7 +67,7 @@ public class ApiV1OrderController {
                 orderFacade.getOrders(authMember.memberId(), status, from, to, pageable));
     }
 
-    @Operation(summary = "주문 상세", description = "주문 항목 스냅샷, 결제 남은 시간, 결제 내역을 조회한다.")
+    @Operation(summary = "주문 상세", description = "주문 항목 스냅샷, 결제 남은 시간, 결제 내역, 배송지·배송 정보를 조회한다.")
     @GetMapping("/{orderId}")
     public RsData<OrderDetailResponse> getOrder(
             @AuthenticationPrincipal AuthMember authMember,
@@ -99,10 +104,10 @@ public class ApiV1OrderController {
                 orderFacade.cancelOrder(authMember.memberId(), orderId));
     }
 
-    @Operation(summary = "구매 확정", description = "결제 완료(PAID) 주문을 구매자가 직접 확정한다. 확정되면 정산 후보가 만들어진다.")
+    @Operation(summary = "구매 확정", description = "결제 완료(PAID) 주문을 구매자가 직접 확정한다. 배송지가 있는 주문은 배송 완료 뒤에만 확정할 수 있다. 확정되면 정산 후보가 만들어진다.")
     @ApiResponse(responseCode = "200", description = "200-1 구매 확정 완료")
     @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND")
-    @ApiResponse(responseCode = "409", description = "409-ORDER_NOT_CONFIRMABLE 결제 전·반품 요청 중·이미 확정된 주문")
+    @ApiResponse(responseCode = "409", description = "409-ORDER_NOT_CONFIRMABLE 결제 전·반품 요청 중·이미 확정된 주문 / 409-ORDER_NOT_DELIVERED 배송지가 있는 주문의 배송 완료 전")
     @PostMapping("/{orderId}/confirm")
     public RsData<OrderConfirmResponse> confirmOrder(
             @AuthenticationPrincipal AuthMember authMember,

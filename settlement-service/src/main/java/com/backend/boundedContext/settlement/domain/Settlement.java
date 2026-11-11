@@ -2,6 +2,7 @@ package com.backend.boundedContext.settlement.domain;
 
 import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
+import com.backend.shared.payment.dto.TransferResultDto;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -33,11 +34,13 @@ public class Settlement extends BaseIdAndTime {
 
     private static final int REASON_MAX_LENGTH = 300;
 
-    @Column(nullable = false)
+    // 원장 무결성 1단계: 판매자·정산월은 UPDATE 문에서 빠진다. 합계는 집계(addCandidate)에서 늘어나므로 막지 않고
+    // 지급 직전 matchesCandidateTotals(정산서 합계 = 묶인 후보 합계)로 확인한다
+    @Column(nullable = false, updatable = false)
     private Long sellerId;
 
     @JdbcTypeCode(SqlTypes.CHAR)   // CHAR(7) 컬럼과 맞춤 (없으면 ddl-auto validate가 VARCHAR를 기대해 실패)
-    @Column(nullable = false, columnDefinition = "CHAR(7)")
+    @Column(nullable = false, updatable = false, columnDefinition = "CHAR(7)")
     private String settlementMonth;
 
     @Column(nullable = false)
@@ -155,6 +158,29 @@ public class Settlement extends BaseIdAndTime {
     /** 결제 컨텍스트가 돌려준(또는 이미 있던) 지급 내역의 금액이 이 정산서와 같은지 */
     public boolean matchesTransfer(long transferredPayoutAmount, long transferredFeeAmount) {
         return payoutAmount == transferredPayoutAmount && totalFee == transferredFeeAmount;
+    }
+
+    /**
+     * 원장 무결성 2단계 ②: 지급 영수증(이 정산서의 원장 행 ID·지급액·수수료)과 결제 원장을 다시 읽은 값을 비교한다
+     * 지급 당시 matchesTransfer로 금액이 같음을 확인하고 PAID가 됐으므로, 정산서 금액이 곧 지급 영수증이다
+     * @param ledger 결제 findTransfer 결과. 지급 기록이 없으면 null
+     */
+    public SettlementLedgerCheckResult checkLedger(TransferResultDto ledger) {
+        if (status != SettlementStatus.PAID) throw stateInvalid();
+        if (ledger == null) return SettlementLedgerCheckResult.MISSING;
+        if (walletTxId != null && !walletTxId.equals(ledger.walletTransactionId())) {
+            return SettlementLedgerCheckResult.REPLACED;
+        }
+        if (!matchesTransfer(ledger.payoutAmount(), ledger.feeAmount())) {
+            return SettlementLedgerCheckResult.AMOUNT_CHANGED;
+        }
+        return SettlementLedgerCheckResult.OK;
+    }
+
+    /** 원장 무결성 1단계: 정산서는 지우지 않는다(정정은 조정으로) */
+    @PreRemove
+    private void denyRemove() {
+        throw new IllegalStateException("정산서는 삭제할 수 없습니다. 보류·조정으로 정정하세요.");
     }
 
     /** ① 지급 성공 */

@@ -106,6 +106,20 @@ class CouponReserveCartCouponUseCaseTest {
     }
 
     @Test
+    @DisplayName("이 주문에 장바구니 쿠폰이 이미 있으면 409-COUPON_ORDER_LIMIT_EXCEEDED이고 수량을 건드리지 않는다(주문당 1개)")
+    void orderLimit() {
+        givenCoupon(10);
+        givenNotUsed();
+        given(couponUsageRepository.existsByOrderIdAndCouponTypeAndStatusIn(ORDER_ID, CouponType.CART, CouponUsage.OCCUPIED_STATUSES))
+                .willReturn(true);
+
+        assertThatThrownBy(() -> useCase.reserve(MEMBER_ID, COUPON_ID, ORDER_ID, 50_000, now))
+                .extracting("resultCode").isEqualTo("409-COUPON_ORDER_LIMIT_EXCEEDED");
+        verify(couponRepository, never()).decreaseRemainingQuantity(any());
+        verify(couponUsageRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     @DisplayName("상품 쿠폰을 장바구니 쿠폰으로 쓰면 400-COUPON_NOT_APPLICABLE")
     void productCoupon() {
         Coupon coupon = givenCoupon(null);

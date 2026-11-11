@@ -73,7 +73,7 @@ class ApiV1AdminCouponControllerTest {
     @Test
     @DisplayName("쿠폰 목록: 종류와 상태 조건을 그대로 넘기고 PageResponse로 돌려준다")
     void getCoupons() throws Exception {
-        given(couponFacade.getCouponsForAdmin(eq(CouponType.CART), eq(CouponDisplayStatus.SCHEDULED), any(Pageable.class)))
+        given(couponFacade.getCouponsForAdmin(eq(CouponType.CART), eq(CouponDisplayStatus.SCHEDULED), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
 
         perform(MemberRole.ADMIN, get("/api/v1/admin/coupons?type=CART&status=SCHEDULED"))
@@ -85,13 +85,13 @@ class ApiV1AdminCouponControllerTest {
     @Test
     @DisplayName("쿠폰 목록: 조건을 보내지 않으면 null로 넘긴다")
     void getCoupons_noCondition() throws Exception {
-        given(couponFacade.getCouponsForAdmin(isNull(), isNull(), any(Pageable.class)))
+        given(couponFacade.getCouponsForAdmin(isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
 
         perform(MemberRole.ADMIN, get("/api/v1/admin/coupons"))
                 .andExpect(status().isOk());
 
-        verify(couponFacade).getCouponsForAdmin(isNull(), isNull(), any(Pageable.class));
+        verify(couponFacade).getCouponsForAdmin(isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
@@ -122,7 +122,7 @@ class ApiV1AdminCouponControllerTest {
                 "11월 장바구니 쿠폰", CouponDisplayStatus.ACTIVE,
                 LocalDateTime.of(2026, 11, 8, 0, 0), LocalDateTime.of(2026, 11, 9, 18, 0),
                 false, null, null, List.of(), null, null, null, 3, 15_000,
-                LocalDateTime.of(2026, 11, 1, 9, 0), new PageResponse<>(List.of(), 0, 20, 0, 0));
+                LocalDateTime.of(2026, 11, 1, 9, 0), null, new PageResponse<>(List.of(), 0, 20, 0, 0));
         given(couponFacade.getCouponForAdmin(eq(10L), any(Pageable.class))).willReturn(detail);
 
         perform(MemberRole.ADMIN, get("/api/v1/admin/coupons/10"))

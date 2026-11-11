@@ -27,6 +27,7 @@ import com.backend.boundedContext.member.out.MemberOrderPort;
 import com.backend.boundedContext.member.out.MemberPaymentPort;
 import com.backend.boundedContext.member.out.MemberPortUnavailableException;
 import com.backend.global.exception.DomainException;
+import com.backend.global.exception.ErrorCode;
 import com.backend.shared.member.dto.MemberRole;
 import com.backend.shared.member.dto.SellerDto;
 import com.backend.shared.member.dto.SellerStatus;
@@ -51,6 +52,10 @@ class MemberGetMemberDetailUseCaseTest {
 
     @InjectMocks
     private MemberGetMemberDetailUseCase memberGetMemberDetailUseCase;
+
+    // 결제가 오류로 응답했을 때 MemberInternalApiClient가 만드는 것과 같은 resultCode
+    private static final ErrorCode WALLET_NOT_FOUND = new RemoteErrorCode(404, "WALLET_NOT_FOUND", "지갑을 찾을 수 없습니다.");
+    private static final ErrorCode PAYMENT_BAD_REQUEST = new RemoteErrorCode(400, "INVALID_REQUEST", "잘못된 요청입니다.");
 
     private final Member member = Member.signUp("user@palette.com", "encoded", "홍길동");
 
@@ -112,6 +117,34 @@ class MemberGetMemberDetailUseCaseTest {
     }
 
     @Test
+    @DisplayName("지갑이 없으면(404 WALLET_NOT_FOUND) 지갑만 null로 비우고, 회원 정보와 최근 주문은 그대로 돌려준다")
+    void getMemberDetail_walletNotFound() {
+        given(memberSupport.getMember(3L)).willReturn(member);
+        given(memberGetSellerUseCase.findSellerByMemberId(3L)).willReturn(Optional.empty());
+        given(memberPaymentPort.getWallet(3L)).willThrow(new DomainException(WALLET_NOT_FOUND));
+        given(memberOrderPort.getRecentOrders(3L, 5)).willReturn(List.of());
+
+        AdminMemberDetailDto detail = memberGetMemberDetailUseCase.getMemberDetail(3L);
+
+        assertThat(detail.email()).isEqualTo("user@palette.com");
+        assertThat(detail.wallet()).isNull();
+        assertThat(detail.recentOrders()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("지갑 없음이 아닌 결제 오류 응답은 그대로 던진다")
+    void getMemberDetail_paymentOtherError() {
+        given(memberSupport.getMember(3L)).willReturn(member);
+        given(memberGetSellerUseCase.findSellerByMemberId(3L)).willReturn(Optional.empty());
+        given(memberPaymentPort.getWallet(3L)).willThrow(new DomainException(PAYMENT_BAD_REQUEST));
+
+        assertThatThrownBy(() -> memberGetMemberDetailUseCase.getMemberDetail(3L))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode")
+                .isEqualTo("400-INVALID_REQUEST");
+    }
+
+    @Test
     @DisplayName("주문을 조회하지 못하면 최근 주문만 null로 비운다 (주문이 없는 빈 목록과 구분)")
     void getMemberDetail_orderUnavailable() {
         given(memberSupport.getMember(3L)).willReturn(member);
@@ -136,5 +169,8 @@ class MemberGetMemberDetailUseCaseTest {
                 .isEqualTo(MemberErrorCode.MEMBER_NOT_FOUND.resultCode());
 
         verify(memberPaymentPort, never()).getWallet(anyLong());
+    }
+
+    private record RemoteErrorCode(int status, String name, String msg) implements ErrorCode {
     }
 }

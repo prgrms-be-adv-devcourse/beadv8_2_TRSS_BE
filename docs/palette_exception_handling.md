@@ -285,7 +285,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-CATEGORY_NOT_SELECTABLE | 상품 등록·수정 시 사용 중인 소분류가 아닌 카테고리 선택 |
 | order (은정) | 400-SELF_PURCHASE_NOT_ALLOWED | 본인 상품 담기·주문 |
 | | 400-STOCK_EXCEEDED | 장바구니 수량 > 재고 |
-| | 409-PRICE_CHANGED | 예상 금액 ≠ 현재 금액 (`data.currentAmount`) |
+| | 409-PRICE_CHANGED | 예상 결제 금액(쿠폰 할인 후) ≠ 실제 결제 금액 (`data.currentAmount`) |
 | | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기 주문에 포함된 장바구니 항목 (`data.pendingOrderIds`: 그 결제 대기 주문 ID, 오름차순) |
 | | 400-IDEMPOTENCY_KEY_INVALID | 주문 생성 `Idempotency-Key`가 비어 있거나 64자 초과 |
 | | 409-IDEMPOTENCY_KEY_EXPIRED | 같은 `Idempotency-Key`로 만든 주문이 이미 취소(만료 포함)됨. 새 키로 다시 주문 |
@@ -293,6 +293,8 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
 | | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
+| | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정 |
+| | 409-ORDER_COUPON_NOT_AVAILABLE | 주문에 쿠폰 반영이 꺼져 있을 때(custom.order.couponEnabled = false) 주문 생성에 쿠폰을 보냄 |
 | payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족. API 응답은 주문 결제가 order의 `OrderErrorCode.INSUFFICIENT_BALANCE`로 던진다(`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`). payment 코드는 `Wallet` 출금 안전장치 |
 | | 400-PAYMENT_PERIOD_INVALID | 조회 시작일 > 종료일 (거래 내역, 관리자 결제·충전 조회) |
 | | 400-TOPUP_AMOUNT_INVALID | 1만 원 단위·1만~100만 원 위반 |
@@ -313,6 +315,12 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-SETTLEMENT_AMOUNT_MISMATCH | 정산 금액이 일치하지 않아서 정산할 수 없는 상태 |
 | | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
 | | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
+| | 409-SETTLEMENT_CANDIDATE_AMOUNT_TAMPERED | 판별 단계: 정산 후보 금액 스냅샷(판매가·수수료·지급액)이 서로 맞지 않아 확정하지 않음 (처리 이력에만 남음) |
+| | 409-SETTLEMENT_LEDGER_MISSING / 409-SETTLEMENT_LEDGER_REPLACED / 409-SETTLEMENT_LEDGER_AMOUNT_CHANGED | 원장 재대조: 지급된 정산서의 원장 기록 없음 / 원장 행 교체 / 금액 변경 (처리 이력에만 남고, 그 판매자의 다음 지급을 보류) |
+| delivery (은정) | 404-DELIVERY_NOT_FOUND | 없는 배송 건 (물류 상세·송장 등록·수정) |
+| | 409-DELIVERY_STATE_INVALID | READY가 아닌 배송에 송장 등록, SHIPPED가 아닌 배송의 송장 수정 |
+| | 409-DELIVERY_TRACKING_DUPLICATED | 같은 택배사·송장번호(정규화 후)가 다른 배송 건에 이미 있음. 동시에 등록해 DB 유니크에 걸리면 409-DATA_CONFLICT |
+| | 400-DELIVERY_TRACKING_NUMBER_INVALID | 공백·하이픈을 지운 송장번호가 영문·숫자 8~30자가 아님 |
 | coupon (다은) | 404-COUPON_NOT_FOUND | 없는 쿠폰 (관리자 상세, 강제 중지, 예약) |
 | | 400-COUPON_PERIOD_INVALID | 쿠폰 등록 시 시작이 종료보다 늦거나 같음, 종료가 현재 이전 |
 | | 400-COUPON_TIER_INVALID | 장바구니 쿠폰 구간 없음, 할인액이 최소 주문 금액 이상, 구간이 올라가도 최소 주문 금액이나 할인액이 커지지 않음 |
@@ -320,8 +328,22 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-COUPON_NOT_ACTIVE | 사용 기간 밖이거나 중지된 쿠폰을 예약, 또는 예약 뒤 중지됐거나 기간이 끝난 쿠폰으로 결제 (결제와 함께 롤백) |
 | | 409-COUPON_SOLD_OUT | 수량 제한 쿠폰의 남은 수량 없음 (조건부 UPDATE로 판단) |
 | | 409-COUPON_ALREADY_USED | 같은 회원이 같은 쿠폰을 이미 예약했거나 사용함 (1인 1회, 동시 요청은 부분 유니크 인덱스 위반을 이 코드로 바꿈) |
-| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등) |
+| | 409-COUPON_ORDER_LIMIT_EXCEEDED | 이 주문에 같은 종류의 쿠폰을 이미 예약했거나 사용함 (한 주문에 상품 쿠폰 1개 + 장바구니 쿠폰 1개까지, 동시 요청은 부분 유니크 인덱스 uk_coupon_usage_order_type 위반을 이 코드로 바꿈) |
+| | 400-COUPON_NOT_APPLICABLE | 주문에 적용할 수 없는 쿠폰 (장바구니 쿠폰 자리에 상품 쿠폰 등), 상품 쿠폰 코드 검증에서 지정한 장바구니 항목이 판매 중인 대상 상품이 아님, 할인 후 금액이 0원이 되는 쿠폰(정액 할인액 ≥ 항목 금액) |
 | | 400-COUPON_MIN_ORDER_NOT_MET | 장바구니 쿠폰의 가장 낮은 구간 최소 주문 금액에 못 미침 |
+| | 404-COUPON_CODE_NOT_FOUND | 없는 상품 쿠폰 코드 (코드 검증, 대소문자 구분 없음) |
+| | 409-COUPON_PERIOD_OVERLAPPED | 같은 인플루언서와 상품으로 유효 기간이 겹치는 운영 중 쿠폰이 있음 (발행, 수정) |
+| | 409-COUPON_NOT_EDITABLE | 시작 후 쿠폰을 종료 일시 연장 말고 다르게 수정, 끝났거나 중지된 쿠폰 수정 |
+| | 400-PRODUCT_NOT_OWNED | 상품 쿠폰 대상이 본인 상품이 아니거나 없는 상품 |
+| | 400-PRODUCT_NOT_PICKED | 상품 쿠폰 대상이 협약 인플루언서가 pick한 상품이 아님 |
+| | 409-PRODUCT_NOT_ON_SALE | 상품 쿠폰 대상 상품이 판매 중이 아님 |
+| | 404-PARTNERSHIP_NOT_FOUND | 없는 협약 |
+| | 409-PARTNERSHIP_ALREADY_EXISTS | 같은 인플루언서와 요청 중이거나 진행 중인 협약이 있음 (동시 요청은 부분 유니크 인덱스 위반을 이 코드로 바꿈) |
+| | 409-PARTNERSHIP_STATE_INVALID | 요청 중이 아닌 협약 수락, 거절이나 진행 중이 아닌 협약 종료 |
+| | 409-PARTNERSHIP_NOT_ACTIVE | 진행 중이 아닌 협약으로 쿠폰 발행, pick 상품 조회 |
+| | 404-INFLUENCER_NOT_FOUND | 협약 요청 대상 인플루언서가 없음 |
+| | 409-INFLUENCER_STATE_INVALID | 승인되지 않은 인플루언서에게 협약 요청 |
+| | 403-INFLUENCER_NOT_APPROVED | 승인된 인플루언서가 아닌 회원이 인플루언서 API 호출 |
 
 
 ## 9. 로그 규칙
