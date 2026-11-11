@@ -6,8 +6,8 @@
     "height": 5000,
     "scrollTop": -3599.164,
     "scrollLeft": -51.2482,
-    "originX": -1129.0822,
-    "originY": -690.141,
+    "originX": -3.3774,
+    "originY": -1584.1727,
     "zoomLevel": 0.8,
     "show": 431,
     "database": 16,
@@ -549,6 +549,7 @@
           "EU3uM3v6sYHVfben-UWac",
           "bXVQmYbPaNl9PV6wqYuQe",
           "Rbr1Le9PHXepyjFpCOrRk",
+          "DVAIeL2Vw6TkMS8vcJfl_",
           "SXSDLTN9napMHLvxAmARW",
           "XXy1QXYB-B9_aZ7fMyL6b",
           "3XyfyWL2RfIGBOb4mGnRH",
@@ -568,7 +569,7 @@
           "color": ""
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1794385130104,
           "createAt": 1791793118726
         }
       },
@@ -6584,6 +6585,26 @@
           "updateAt": 1793589213064,
           "createAt": 1793589213064
         }
+      },
+      "DVAIeL2Vw6TkMS8vcJfl_": {
+        "id": "DVAIeL2Vw6TkMS8vcJfl_",
+        "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
+        "name": "pg_provider",
+        "comment": "결제한 PG - 승인·조회(대사)·취소를 같은 PG로 보냄 (TOSS)",
+        "dataType": "VARCHAR(20)",
+        "default": "'TOSS'",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 71,
+          "widthComment": 298,
+          "widthDataType": 83,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1794385130104,
+          "createAt": 1794385130104
+        }
       }
     },
     "relationshipEntities": {
@@ -6929,7 +6950,7 @@
           "columnIds": [
             "HsLqULxj6j0aFTMmbMaC4"
           ],
-          "x": 378,
+          "x": 390,
           "y": 2356,
           "direction": 4
         },
@@ -6998,7 +7019,7 @@
           "columnIds": [
             "EU3uM3v6sYHVfben-UWac"
           ],
-          "x": 258,
+          "x": 270,
           "y": 2356,
           "direction": 4
         },
@@ -7478,7 +7499,7 @@
           "columnIds": [
             "KCnkzOPhfA7CkGS2nqF7Q"
           ],
-          "x": 498,
+          "x": 510,
           "y": 2356,
           "direction": 4
         },
