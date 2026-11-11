@@ -16,7 +16,7 @@ import java.util.Objects;
  * 주문 생성 요청
  *
  * @param cartItemIds        주문할 장바구니 항목 ID
- * @param expectedTotalPrice 예상 결제금액. 쿠폰을 쓰면 상품 쿠폰·장바구니 쿠폰 할인 후 금액(주문서에 보여 준 금액)이고, 실제 결제 금액과 다르면 409-PRICE_CHANGED
+ * @param expectedTotalPrice 예상 금액(배송비 제외). 쿠폰이 없으면 상품 금액 합계(장바구니의 expectedTotalPrice), 쿠폰을 쓰면 상품 쿠폰·장바구니 쿠폰 할인 후 금액이다.
  * @param shippingAddress    배송지. 프론트가 붙기 전까지 선택 값(생략하면 배송 없이 결제 기준으로 구매 확정되는 주문). 보내면 형식을 검증한다
  * @param productCoupons     상품 쿠폰 (선택, 한 주문에 1개까지). 주문할 장바구니 항목 중 하나에 붙인다
  * @param cartCouponId       장바구니 쿠폰 ID (선택, 한 주문에 1개)
