@@ -123,6 +123,8 @@ class ProductFacadeOptionTest {
 
         assertThat(snapshot.optionName()).isEqualTo("흰색 / L");
         assertThat(snapshot.price()).isEqualTo(22_000);
+        assertThat(snapshot.listPrice()).isEqualTo(22_000);
+        assertThat(snapshot.discountRate()).isNull();
     }
 
     @Test

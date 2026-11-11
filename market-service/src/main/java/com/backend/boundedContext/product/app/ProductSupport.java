@@ -63,7 +63,7 @@ public class ProductSupport {
      * 옵션 여러 개의 현재 정보. 삭제된 상품·옵션도 포함하고, 없는 ID만 빠진다.
      * 재고 행을 기준으로 옵션·상품을 함께 읽으므로, 재고 행이 없는 옵션도 없는 ID로 보고 뺀다 (재고 잠금의 404와 같은 기준).
      * 대표 이미지는 상품 ID를 모아 한 번에 조회하고, 대표 이미지가 없는 상품이면 null이다.
-     * 가격은 조회 시각에 진행 중인 할인을 적용한 단가이고, 정가 단가도 함께 준다.
+     * 가격은 조회 시각에 진행 중인 할인을 적용한 단가이고, 정가 단가와 할인율(기본가 기준)도 함께 준다.
      */
     public List<OptionSnapshotDto> getOptionSnapshots(Collection<Long> optionIds) {
         if (optionIds.isEmpty()) return List.of();
@@ -82,8 +82,8 @@ public class ProductSupport {
                     ProductUnsaleableReason reason = option.getUnsaleableReason();
                     return new OptionSnapshotDto(
                             option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getDisplayName(),
-                            price.unitPrice(option), price.listUnitPrice(option), stock.getStock(), reason == null, reason,
-                            thumbnailUrls.get(product.getId()));
+                            price.unitPrice(option), price.listUnitPrice(option), price.discountRate(), stock.getStock(),
+                            reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
                 .toList();
     }

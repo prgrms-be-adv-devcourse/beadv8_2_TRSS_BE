@@ -14,6 +14,8 @@ package com.backend.shared.product.dto;
  * @param optionName       옵션명. 옵션이 하나뿐인 상품은 "기본"
  * @param price            현재 단가 (원). 할인 중이면 할인가 + 추가금, 아니면 정가 + 추가금. 주문 금액·쿠폰·정산은 이 값을 쓴다
  * @param listPrice        정가 단가 (원) = 상품 가격 + 추가금. 할인이 없으면 price와 같다. 화면 표시용(취소선)
+ * @param discountRate     할인율 (%, 소수점 내림). 상품 가격(기본가) 기준이라 옵션 추가금과 무관하게 상품 상세의 할인율과 같다.
+ *                         할인 중이 아니면 null. 화면 표시용이고 (listPrice - price)로 다시 계산하지 않는다
  * @param stock            조회 시점의 옵션 재고. 잠그지 않은 값이라 최종 재고 검사는 deductStock이 한다
  * @param saleable         판매 가능 여부
  * @param unsaleableReason 판매 불가 이유. saleable이 true면 null.
@@ -28,19 +30,20 @@ public record OptionSnapshotDto(
         String optionName,
         long price,
         long listPrice,
+        Integer discountRate,
         int stock,
         boolean saleable,
         ProductUnsaleableReason unsaleableReason,
         String thumbnailUrl
 ) {
     /**
-     * listPrice 없이 만드는 생성자 (listPrice = price). 주문 모듈의 기존 코드·테스트가 깨지지 않게 둔다.
-     * 주문 모듈이 listPrice를 쓰게 되면 지운다.
+     * listPrice·discountRate 없이 만드는 생성자 (listPrice = price, discountRate = null).
+     * 주문 모듈의 기존 코드·테스트가 깨지지 않게 둔다. 주문 모듈이 두 값을 쓰게 되면 지운다.
      */
     public OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
                              long price, int stock, boolean saleable, ProductUnsaleableReason unsaleableReason,
                              String thumbnailUrl) {
-        this(optionId, productId, sellerId, productName, optionName, price, price, stock, saleable, unsaleableReason,
-                thumbnailUrl);
+        this(optionId, productId, sellerId, productName, optionName, price, price, null, stock, saleable,
+                unsaleableReason, thumbnailUrl);
     }
 }

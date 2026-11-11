@@ -129,8 +129,9 @@ class ProductFacadeDiscountTest {
                 .containsExactly(tuple(15_000L, 20_000L, 0L), tuple(18_000L, 23_000L, 3_000L));
 
         List<OptionSnapshotDto> snapshots = productFacade.getOptions(options(productId).stream().map(ProductOption::getId).toList());
-        assertThat(snapshots).extracting(OptionSnapshotDto::price, OptionSnapshotDto::listPrice)
-                .containsExactlyInAnyOrder(tuple(15_000L, 20_000L), tuple(18_000L, 23_000L));
+        // 할인율은 추가금이 있는 옵션도 기본가 기준(25%)이다 (23,000 → 18,000을 다시 계산한 21%가 아니다)
+        assertThat(snapshots).extracting(OptionSnapshotDto::price, OptionSnapshotDto::listPrice, OptionSnapshotDto::discountRate)
+                .containsExactlyInAnyOrder(tuple(15_000L, 20_000L, 25), tuple(18_000L, 23_000L, 25));
 
         ProductSummaryDto summary = productFacade.searchProducts(NAME, null, ProductSort.LATEST, false, PageRequest.of(0, 20))
                 .items().stream().filter(item -> item.productId().equals(productId)).findFirst().orElseThrow();

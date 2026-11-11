@@ -296,12 +296,14 @@ package com.backend.shared.product.dto;
  * price는 옵션 하나의 단가 = (할인 중이면 할인가, 아니면 상품 가격) + 옵션 추가금이다.
  * 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)·정산도 이 값이다.
  * listPrice는 정가 단가 = 상품 가격 + 옵션 추가금이다. 화면 표시용이고, 할인 중이 아니면 price와 같다.
+송 * discountRate는 할인율(%, 소수점 내림)이고 할인 중이 아니면 null이다. 상품 가격 기준이라 옵션 추가금과 무관하게 상품 상세의 할인율과 같다.
+ * 화면 표시용이며 (listPrice - price)로 다시 계산하지 않는다(추가금이 있으면 값이 달라진다).
  * thumbnailUrl은 대표 이미지가 없으면 null.
  */
 public record OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
-                                long price, long listPrice, int stock, boolean saleable,
+                                long price, long listPrice, Integer discountRate, int stock, boolean saleable,
                                 ProductUnsaleableReason unsaleableReason, String thumbnailUrl) {
-    /** listPrice = price로 채우는 호환 생성자. 주문 컨텍스트가 listPrice를 쓰게 되면 지운다 */
+    /** listPrice = price, discountRate = null로 채우는 호환 생성자. 주문 컨텍스트가 두 값을 쓰게 되면 지운다 */
     public OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
                              long price, int stock, boolean saleable,
                              ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { ... }
@@ -351,7 +353,7 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 
 - 할인이 시작되거나 끝나는 순간 장바구니에서 본 금액과 주문 생성 때 금액이 달라지면 주문 생성은 409 `PRICE_CHANGED`다. 잘못된 가격으로 주문되지 않게 하려는 의도된 동작이다.
 - 주문 금액은 주문 생성 때의 스냅샷으로 고정된다. 할인 중에 만든 주문은 할인이 끝난 뒤 결제해도 할인가다.
-- 주문 컨텍스트 후속(금액과 무관, 표시용): 주문 항목에 정가 단가를 저장하고 장바구니·주문 상세 응답에 정가와 할인율을 추가한 뒤 호환 생성자를 지운다. 그 전까지 장바구니·주문 화면에는 할인가만 보인다.
+- 주문 컨텍스트 후속(금액과 무관, 표시용): 주문 항목에 정가 단가와 할인율을 저장하고 장바구니·주문 상세 응답에 `listPrice`·`discountRate`를 그대로 추가한 뒤 호환 생성자를 지운다. 그 전까지 장바구니·주문 화면에는 할인가만 보인다.
 
 ### 받는 이벤트
 
@@ -837,5 +839,5 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
 - [x] 결제 `PROCESSING`은 쓰지 않아 제거 (지은)
-- [ ] 주문 항목에 정가 단가를 저장하고 장바구니·주문 상세에 정가·할인율 표시, 이후 `OptionSnapshotDto` 호환 생성자 제거 (유진·은정)
+- [ ] 주문 항목에 정가 단가·할인율을 저장하고 장바구니·주문 상세에 정가·할인율 표시, 이후 `OptionSnapshotDto` 호환 생성자 제거 (유진·은정)
 - [x] 판매자의 회원 탈퇴: 판매자는 판매자 철회 완료(WITHDRAWN) 후에만 회원 탈퇴할 수 있다. 철회 승인 시점에 진행 중인 판매(`OrderApi.hasActiveSales`)와 미정산 금액(`SettlementApi.getUnsettledAmount`)이 없어야 한다. 탈퇴 후 정산금이 탈퇴 회원 지갑으로 들어가는 것을 막기 위함 (시연·지은·은정·다은)
