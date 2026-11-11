@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,6 +57,33 @@ public interface SettlementCandidateRepository extends JpaRepository<SettlementC
             """)
     List<SettlementCandidate> findReadyBySellerIdUntilMonth(@Param("sellerId") Long sellerId,
                                                              @Param("month") String month);
+
+    /**
+     * 엑셀 다운로드: 정산서 여러 건에 묶인 품목을 한 번에 (정산서 ID, 품목 ID) 순으로
+     * 엔티티가 아니라 필요한 값만(SettlementExportItemRow) 읽어 영속성 컨텍스트에 쌓이지 않게 한다
+     */
+    @Query("""
+            select new com.backend.boundedContext.settlement.out.SettlementExportItemRow(
+                       c.settlement.id, c.orderId, c.orderItemId, c.salePrice, c.feeRate, c.fee, c.payoutAmount,
+                       c.confirmedAt, c.settlementMonth)
+              from SettlementCandidate c
+             where c.settlement.id in :settlementIds
+             order by c.settlement.id, c.id
+            """)
+    List<SettlementExportItemRow> findExportItemRows(@Param("settlementIds") Collection<Long> settlementIds);
+
+    /**
+     * 엑셀 다운로드 전 품목 수 상한 검사: 정산월 기간의 지급 완료(PAID) 정산서에 묶인 품목 수
+     * 정산서 조건은 SettlementRepository.findPaidExportRows와 같다(sellerId가 null이면 판매자 조건 없음)
+     */
+    @Query("""
+            select count(c) from SettlementCandidate c join c.settlement s
+             where s.settlementMonth between :fromMonth and :toMonth
+               and s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PAID
+               and (:sellerId is null or s.sellerId = :sellerId)
+            """)
+    long countPaidExportItems(@Param("fromMonth") String fromMonth, @Param("toMonth") String toMonth,
+                              @Param("sellerId") Long sellerId);
 
     @Query("select c from SettlementCandidate c where c.settlement.id = :settlementId order by c.id")
     List<SettlementCandidate> findBySettlementIdOrderByIdAsc(@Param("settlementId") Long settlementId);

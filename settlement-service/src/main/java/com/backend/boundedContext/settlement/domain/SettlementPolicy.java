@@ -1,5 +1,6 @@
 package com.backend.boundedContext.settlement.domain;
 
+import com.backend.global.exception.DomainException;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,13 +9,14 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 
 /**
  * 정산 컨텍스트 정책 값과 업무 규칙
  *
  * 값은 인스턴스, 규칙은 정적
- *   값(application.yaml의 custom.settlement.* 8개): 생성자에서 @Value로 받아 final 인스턴스 필드에 둔다.
+ *   값(application.yaml의 custom.settlement.* 9개): 생성자에서 @Value로 받아 final 인스턴스 필드에 둔다.
  *       필요한 UseCase·배치·스케줄러가 이 빈을 생성자로 주입받아 getFeeRate()처럼 꺼내 쓴다.
  *   규칙(calculateFee·isValidLineAmount·isNonRetryable 등): 정책 값에 기대지 않는 순수 계산식이라 정적 메서드로 둔다.
  *       필요한 값(수수료율 등)은 인자로 받으므로 엔티티·테스트 어디서든 스프링 없이 부를 수 있다.
@@ -80,18 +82,25 @@ public class SettlementPolicy {
     // 지급일이 오늘부터 며칠 전까지인 PAID 정산서를 다시 읽을지. 기본 2(T+1, 늦은 시각 지급 포함). 1 이상
     private final int ledgerRecheckLookbackDays;
 
+    // 정산서 목록 기간 조회·엑셀 다운로드에서 한 번에 볼 수 있는 최대 개월 수(시작월·끝월 포함). 1 이상
+    private final int maxSearchMonths;
+
+    // 엑셀 다운로드 한 번에 담을 수 있는 최대 품목 수. 넘으면 파일을 만들기 전에 400 SETTLEMENT_EXPORT_TOO_LARGE. 1 이상
+    private final int exportMaxRows;
+
     /**
      * 단위 테스트용: new SettlementPolicy(10, 10, 3, 10, 100, 50)처럼 직접 만든다. 원장 재대조는 꺼짐(lookback 2일)
      * 인자 순서: feeRate, payDayOfMonth, maxAttempts, retryIntervalMinutes, batchChunkSize, retryBatchSize
      */
     public SettlementPolicy(int feeRate, int payDayOfMonth, int maxAttempts, int retryIntervalMinutes,
                             int batchChunkSize, int retryBatchSize) {
-        this(feeRate, payDayOfMonth, maxAttempts, retryIntervalMinutes, batchChunkSize, retryBatchSize, false, 2);
+        this(feeRate, payDayOfMonth, maxAttempts, retryIntervalMinutes, batchChunkSize, retryBatchSize, false, 2, 12,
+                200_000);
     }
 
     /**
      * 스프링은 application.yaml 값을 넣어 이 생성자로 한 번 만든다.
-     * 인자 순서: 위 6개 + ledgerRecheckEnabled, ledgerRecheckLookbackDays
+     * 인자 순서: 위 6개 + ledgerRecheckEnabled, ledgerRecheckLookbackDays, maxSearchMonths, exportMaxRows
      */
     @Autowired
     public SettlementPolicy(
@@ -102,7 +111,9 @@ public class SettlementPolicy {
             @Value("${custom.settlement.batchChunkSize}") int batchChunkSize,
             @Value("${custom.settlement.retryBatchSize}") int retryBatchSize,
             @Value("${custom.settlement.ledgerRecheck.enabled:false}") boolean ledgerRecheckEnabled,
-            @Value("${custom.settlement.ledgerRecheck.lookbackDays:2}") int ledgerRecheckLookbackDays
+            @Value("${custom.settlement.ledgerRecheck.lookbackDays:2}") int ledgerRecheckLookbackDays,
+            @Value("${custom.settlement.maxSearchMonths:12}") int maxSearchMonths,
+            @Value("${custom.settlement.exportMaxRows:200000}") int exportMaxRows
     ) {
         // 10/14 리뷰 반영: @ConfigurationProperties + @Validated(@Min·@Max)가 하던 범위 검사를 생성자에서 직접 한다
         this.feeRate = requireRange("custom.settlement.feeRate", feeRate, 0, 100);
@@ -114,6 +125,29 @@ public class SettlementPolicy {
         this.ledgerRecheckEnabled = ledgerRecheckEnabled;
         this.ledgerRecheckLookbackDays = requirePositive("custom.settlement.ledgerRecheck.lookbackDays",
                 ledgerRecheckLookbackDays);
+        this.maxSearchMonths = requirePositive("custom.settlement.maxSearchMonths", maxSearchMonths);
+        this.exportMaxRows = requirePositive("custom.settlement.exportMaxRows", exportMaxRows);
+    }
+
+    /**
+     * 정산서 목록 조건 검사: 정산월 하나(month)와 기간(from·to) 중 하나만 쓴다
+     * 기간을 쓰면 from·to를 둘 다 주고 validateMonthRange를 통과해야 한다
+     */
+    public void validateMonthFilter(String month, YearMonth from, YearMonth to) {
+        if (from == null && to == null) return;
+        if (month != null) throw new DomainException(SettlementErrorCode.SETTLEMENT_MONTH_RANGE_INVALID);
+        validateMonthRange(from, to);
+    }
+
+    /**
+     * 정산서 기간 조회·엑셀 다운로드의 정산월 구간 검사
+     * 시작월 ≤ 끝월이고, 개월 수(양 끝 포함)가 maxSearchMonths 이하여야 한다. 아니면 400 SETTLEMENT_MONTH_RANGE_INVALID
+     */
+    public void validateMonthRange(YearMonth from, YearMonth to) {
+        if (from == null || to == null || from.isAfter(to)
+                || ChronoUnit.MONTHS.between(from, to) + 1 > maxSearchMonths) {
+            throw new DomainException(SettlementErrorCode.SETTLEMENT_MONTH_RANGE_INVALID);
+        }
     }
 
     /** 범위를 벗어나면 어떤 설정 키가 잘못됐는지 담아 예외를 던진다(빈 생성 실패 → 앱 기동 실패) */

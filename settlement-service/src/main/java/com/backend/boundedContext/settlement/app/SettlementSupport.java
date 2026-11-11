@@ -91,11 +91,13 @@ public class SettlementSupport {
                 .orElseThrow(() -> new DomainException(SettlementErrorCode.SETTLEMENT_NOT_FOUND));
     }
 
-    /** 관리자 목록. 조건은 모두 선택(null이면 그 조건을 빼고 조회), 최신순 */
-    public Page<Settlement> findSettlements(String month, SettlementStatus status, Long sellerId, Pageable pageable) {
+    /** 관리자 목록. 조건은 모두 선택(null이면 그 조건을 빼고 조회), 최신순. from·to는 정산월 기간(양 끝 포함) */
+    public Page<Settlement> findSettlements(String month, YearMonth from, YearMonth to,
+                                            Collection<SettlementStatus> statuses, Long sellerId, Pageable pageable) {
         List<Specification<Settlement>> specs = new ArrayList<>();
         if (month != null) specs.add((root, query, cb) -> cb.equal(root.get("settlementMonth"), month));
-        if (status != null) specs.add((root, query, cb) -> cb.equal(root.get("status"), status));
+        if (from != null && to != null) specs.add(monthBetween(from, to));
+        if (statuses != null) specs.add((root, query, cb) -> root.get("status").in(statuses));
         if (sellerId != null) specs.add((root, query, cb) -> cb.equal(root.get("sellerId"), sellerId));
         return settlementRepository.findAll(Specification.allOf(specs),
                 PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), LATEST));
@@ -117,12 +119,13 @@ public class SettlementSupport {
                 .orElseThrow(() -> new DomainException(SettlementErrorCode.SETTLEMENT_NOT_FOUND));
     }
 
-    /** 판매자 본인 정산서 목록. month·statuses는 선택(null이면 그 조건을 빼고 조회), 최근 정산월부터 */
-    public Page<Settlement> findSellerSettlements(Long sellerId, String month, Collection<SettlementStatus> statuses,
-                                                  Pageable pageable) {
+    /** 판매자 본인 정산서 목록. month·기간·statuses는 선택(null이면 그 조건을 빼고 조회), 최근 정산월부터 */
+    public Page<Settlement> findSellerSettlements(Long sellerId, String month, YearMonth from, YearMonth to,
+                                                  Collection<SettlementStatus> statuses, Pageable pageable) {
         List<Specification<Settlement>> specs = new ArrayList<>();
         specs.add((root, query, cb) -> cb.equal(root.get("sellerId"), sellerId));
         if (month != null) specs.add((root, query, cb) -> cb.equal(root.get("settlementMonth"), month));
+        if (from != null && to != null) specs.add(monthBetween(from, to));
         if (statuses != null) specs.add((root, query, cb) -> root.get("status").in(statuses));
         return settlementRepository.findAll(Specification.allOf(specs),
                 PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), SELLER_LATEST));
@@ -178,4 +181,10 @@ public class SettlementSupport {
     public List<Long> findRetryTargetIds(LocalDateTime now, int limit) {
         return settlementRepository.findRetryTargetIds(now, PageRequest.of(0, limit));
     }
+
+    /** 정산월 기간(양 끝 포함). 정산월은 yyyy-MM 문자열이라 문자열 비교로 순서가 맞다 */
+    private static Specification<Settlement> monthBetween(YearMonth from, YearMonth to) {
+        return (root, query, cb) -> cb.between(root.get("settlementMonth"), from.toString(), to.toString());
+    }
+
 }
