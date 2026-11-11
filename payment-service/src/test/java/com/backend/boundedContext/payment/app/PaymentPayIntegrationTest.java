@@ -19,6 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupUsage;
 import com.backend.boundedContext.payment.domain.Wallet;
@@ -148,7 +149,7 @@ class PaymentPayIntegrationTest {
 
     // 승인 완료(DONE)된 충전 건 (지갑 잔액은 setUp에서 따로 넣었으므로 여기서는 충전 건 기록만 만든다)
     private Topup doneTopup(long amount, LocalDateTime approvedAt) {
-        Topup topup = Topup.create(buyerMemberId, wallet, amount);
+        Topup topup = Topup.create(buyerMemberId, wallet, amount, PgProvider.TOSS);
         topup.markProcessing("TEST-PK-" + UUID.randomUUID());
         topup.approve(approvedAt);
         Topup saved = topupRepository.save(topup);

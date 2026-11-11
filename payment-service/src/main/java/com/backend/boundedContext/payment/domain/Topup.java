@@ -42,6 +42,11 @@ public class Topup extends BaseIdAndTime {
     @Column(unique = true, length = 200)
     private String paymentKey;
 
+    // 결제한 PG. 승인·조회(대사)·취소를 같은 PG로 보냄
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private PgProvider pgProvider;
+
     @Column(nullable = false)
     private long amount;
 
@@ -60,10 +65,11 @@ public class Topup extends BaseIdAndTime {
 
     private LocalDateTime canceledAt;
 
-    public static Topup create(Long memberId, Wallet wallet, long amount) {
+    public static Topup create(Long memberId, Wallet wallet, long amount, PgProvider pgProvider) {
         Topup topup = new Topup();
         topup.memberId = memberId;
         topup.wallet = wallet;
+        topup.pgProvider = pgProvider;
         topup.tossOrderId = TOSS_ORDER_ID_PREFIX + UUID.randomUUID();
         topup.amount = amount;
         topup.remainingAmount = 0;

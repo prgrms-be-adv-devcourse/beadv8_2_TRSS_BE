@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 import com.backend.boundedContext.payment.domain.PaymentPolicy;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.out.toss.TossPaymentException;
 import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
@@ -27,7 +28,7 @@ import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
 class PaymentReconcileTopupsUseCaseTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 14, 10, 0);
-    private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "TOPUP-7");
+    private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "TOPUP-7", PgProvider.TOSS);
 
     private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
@@ -62,7 +63,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("토스에서 승인되지 않음(ABORTED·EXPIRED)이 확정되면 FAILED_PG_DECLINED로 기록한다")
     void notApproved() {
-        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8"));
+        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS));
         given(tossPaymentsClient.getPaymentByOrderId("TOPUP-7")).willReturn(toss("ABORTED"));
         given(tossPaymentsClient.getPaymentByOrderId("TOPUP-8")).willReturn(toss("EXPIRED"));
 
@@ -102,7 +103,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("토스 응답이 없거나 5xx이거나 아직 진행 중이면 PROCESSING으로 두고 다음 회차에 다시 확인한다")
     void pending() {
-        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8"), new TopupReconcileTarget(9L, "TOPUP-9"));
+        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS), new TopupReconcileTarget(9L, "TOPUP-9", PgProvider.TOSS));
         given(tossPaymentsClient.getPaymentByOrderId("TOPUP-7"))
                 .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
         given(tossPaymentsClient.getPaymentByOrderId("TOPUP-8"))
@@ -119,7 +120,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("한 건에서 오류가 나도 나머지 건은 계속 처리한다")
     void errorDoesNotStopOthers() {
-        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8"));
+        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS));
         TossPaymentResponse done7 = toss("DONE");
         TossPaymentResponse done8 = toss("DONE");
         given(tossPaymentsClient.getPaymentByOrderId("TOPUP-7")).willReturn(done7);
