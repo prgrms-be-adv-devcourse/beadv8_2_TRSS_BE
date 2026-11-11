@@ -32,8 +32,8 @@ class NotificationReadUseCaseTest {
     @Test
     @DisplayName("읽음 처리: 내 알림이 읽음이 되고 안 읽은 개수가 줄어듦")
     void read() {
-        Notification notification = save(Notification.orderPaid(MEMBER_ID, 10L));
-        save(Notification.deliveryCompleted(MEMBER_ID, 10L));
+        Notification notification = save(Notification.orderPaid(MEMBER_ID, 10L, "립스틱", 1));
+        save(Notification.deliveryCompleted(MEMBER_ID, 10L, null));
 
         notificationFacade.read(MEMBER_ID, notification.getId());
 
@@ -44,7 +44,7 @@ class NotificationReadUseCaseTest {
     @Test
     @DisplayName("읽음 처리: 다른 회원의 알림이면 404 NOTIFICATION_NOT_FOUND, 그 알림은 그대로 둠")
     void read_otherMember() {
-        Notification notification = save(Notification.orderPaid(OTHER_MEMBER_ID, 20L));
+        Notification notification = save(Notification.orderPaid(OTHER_MEMBER_ID, 20L, "립스틱", 1));
 
         assertThatThrownBy(() -> notificationFacade.read(MEMBER_ID, notification.getId()))
                 .isInstanceOf(DomainException.class)
@@ -56,12 +56,12 @@ class NotificationReadUseCaseTest {
     @Test
     @DisplayName("모두 읽음: 내 안 읽은 알림만 읽음이 되고, 이미 읽은 알림의 시각과 다른 회원 알림은 그대로 둠")
     void readAll() {
-        save(Notification.orderPaid(MEMBER_ID, 10L));
-        save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123"));
-        Notification alreadyRead = Notification.deliveryCompleted(MEMBER_ID, 10L);
+        save(Notification.orderPaid(MEMBER_ID, 10L, "립스틱", 1));
+        save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123", null));
+        Notification alreadyRead = Notification.deliveryCompleted(MEMBER_ID, 10L, null);
         alreadyRead.read(READ_BEFORE);
         save(alreadyRead);
-        save(Notification.orderPaid(OTHER_MEMBER_ID, 20L));
+        save(Notification.orderPaid(OTHER_MEMBER_ID, 20L, "립스틱", 1));
 
         notificationFacade.readAll(MEMBER_ID);
 

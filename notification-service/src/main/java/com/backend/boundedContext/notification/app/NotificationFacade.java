@@ -21,8 +21,8 @@ public class NotificationFacade {
     private final NotificationReadUseCase notificationReadUseCase;
 
     @Transactional
-    public void createOrderPaid(Long memberId, Long orderId) {
-        notificationCreateUseCase.createOrderPaid(memberId, orderId);
+    public void createOrderPaid(Long memberId, Long orderId, String productName, Integer itemCount) {
+        notificationCreateUseCase.createOrderPaid(memberId, orderId, productName, itemCount);
     }
 
     @Transactional

@@ -32,10 +32,10 @@ class NotificationGetNotificationsUseCaseTest {
     @Test
     @DisplayName("알림 목록: 내 알림만 최신순으로 size개씩, nextCursor로 이어서 조회함")
     void getNotifications_cursor() {
-        Notification first = save(Notification.orderPaid(MEMBER_ID, 10L));
-        Notification second = save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123"));
-        Notification third = save(Notification.deliveryCompleted(MEMBER_ID, 10L));
-        save(Notification.orderPaid(OTHER_MEMBER_ID, 20L));
+        Notification first = save(Notification.orderPaid(MEMBER_ID, 10L, "립스틱", 1));
+        Notification second = save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123", null));
+        Notification third = save(Notification.deliveryCompleted(MEMBER_ID, 10L, null));
+        save(Notification.orderPaid(OTHER_MEMBER_ID, 20L, "립스틱", 1));
 
         NotificationListDto page1 = notificationFacade.getNotifications(MEMBER_ID, null, 2);
         assertThat(ids(page1)).containsExactly(third.getId(), second.getId());
@@ -59,24 +59,25 @@ class NotificationGetNotificationsUseCaseTest {
     }
 
     @Test
-    @DisplayName("알림 목록: 배송 시작 알림만 택배사·송장번호가 내려가고 나머지는 null")
-    void getNotifications_trackingFields() {
-        save(Notification.orderPaid(MEMBER_ID, 10L));
-        save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123456789012"));
+    @DisplayName("알림 목록: 상품명·개수가 내려가고, 택배사·송장번호는 배송 시작 알림만 있음")
+    void getNotifications_displayFields() {
+        Notification paid = save(Notification.orderPaid(MEMBER_ID, 10L, "립스틱", 1));
+        save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123456789012", paid));
 
         List<NotificationDto> items = notificationFacade.getNotifications(MEMBER_ID, null, 20).items();
-        assertThat(items).extracting(NotificationDto::carrierName, NotificationDto::trackingNumber)
-                .containsExactly(tuple("CJ대한통운", "123456789012"), tuple(null, null));
+        assertThat(items).extracting(NotificationDto::productName, NotificationDto::itemCount,
+                        NotificationDto::carrierName, NotificationDto::trackingNumber)
+                .containsExactly(tuple("립스틱", 1, "CJ대한통운", "123456789012"), tuple("립스틱", 1, null, null));
     }
 
     @Test
     @DisplayName("안 읽은 개수: 내 알림 중 읽지 않은 것만 셈")
     void getUnreadCount() {
-        save(Notification.orderPaid(MEMBER_ID, 10L));
-        Notification read = Notification.deliveryCompleted(MEMBER_ID, 10L);
+        save(Notification.orderPaid(MEMBER_ID, 10L, "립스틱", 1));
+        Notification read = Notification.deliveryCompleted(MEMBER_ID, 10L, null);
         read.read(LocalDateTime.of(2026, 11, 6, 12, 0));
         save(read);
-        save(Notification.orderPaid(OTHER_MEMBER_ID, 20L));
+        save(Notification.orderPaid(OTHER_MEMBER_ID, 20L, "립스틱", 1));
 
         assertThat(notificationFacade.getUnreadCount(MEMBER_ID)).isEqualTo(1L);
     }
