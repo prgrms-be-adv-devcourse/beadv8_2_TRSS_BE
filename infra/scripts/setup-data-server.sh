@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 데이터 서버(EC2-B)를 처음 준비한다: Docker 설치, 스왑 만들기, ES가 요구하는 커널 설정.
+# 데이터 서버(EC2-B)를 처음 준비한다: 서울 시간대, Docker 설치, 스왑 만들기, ES가 요구하는 커널 설정.
 # 이미 된 단계는 건너뛰므로 여러 번 실행해도 결과가 같다. 중간에 끊기면 그냥 다시 실행하면 된다.
 #
 # 실행(EC2-B, 레포 루트에서): sudo bash infra/scripts/setup-data-server.sh
@@ -10,6 +10,7 @@ set -euo pipefail
 SWAP_FILE="/swapfile"
 SWAP_SIZE="2G"
 SYSCTL_FILE="/etc/sysctl.d/99-elasticsearch.conf"
+TIMEZONE="Asia/Seoul"
 
 main() {
     if [[ $EUID -ne 0 ]]; then
@@ -17,17 +18,29 @@ main() {
         exit 1
     fi
 
+    set_timezone
     install_docker
     create_swap
     apply_sysctl
 
     echo
     echo "✔ 준비 완료"
+    echo "  시간대 : $(timedatectl show -p Timezone --value) (지금 $(date '+%F %T %Z'))"
     echo "  docker : $(docker --version)"
     echo "  compose: $(docker compose version --short)"
     echo "  스왑   : $(swapon --show=NAME,SIZE --noheadings | tr -s ' ')"
     echo "  커널   : $(sysctl -n vm.max_map_count) (vm.max_map_count), $(sysctl -n vm.swappiness) (vm.swappiness)"
     echo "  docker 그룹은 다시 로그인해야 적용된다(그 전까지는 sudo docker ...)"
+}
+
+set_timezone() {
+    # 서버 시계(로그·cron 시각)를 서울 시간으로 맞춘다. 컨테이너 안의 시간대는 각 컨테이너 설정(TZ)을 따르므로 바뀌지 않는다
+    if [[ "$(timedatectl show -p Timezone --value)" == "$TIMEZONE" ]]; then
+        echo "• 시간대가 이미 ${TIMEZONE}이라 건너뜀"
+    else
+        echo "▶ 시간대를 ${TIMEZONE}로 설정"
+        timedatectl set-timezone "$TIMEZONE"
+    fi
 }
 
 install_docker() {
