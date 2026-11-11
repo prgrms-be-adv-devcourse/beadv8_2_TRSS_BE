@@ -84,7 +84,7 @@ class TossPaymentsClientTest {
         server.verify();
         assertThat(response.paymentKey()).isEqualTo("pk_1");
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
-        assertThat(response.isApproved()).isTrue();
+        assertThat(response.status()).isEqualTo("DONE");
         assertThat(response.totalAmount()).isEqualTo(20_000);
         assertThat(response.method()).isEqualTo("카드");
         assertThat(response.approvedAtKst()).isEqualTo(LocalDateTime.of(2026, 10, 12, 15, 0));
@@ -151,7 +151,7 @@ class TossPaymentsClientTest {
 
         server.verify();
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
-        assertThat(response.isApproved()).isTrue();
+        assertThat(response.status()).isEqualTo("DONE");
     }
 
     @Test
@@ -178,7 +178,7 @@ class TossPaymentsClientTest {
             TossPaymentResponse response = realClient(httpServer.getAddress().getPort()).confirm("pk_1", ORDER_ID, 20_000);
 
             assertThat(response.orderId()).isEqualTo(ORDER_ID);
-            assertThat(response.isApproved()).isTrue();
+            assertThat(response.status()).isEqualTo("DONE");
         } finally {
             httpServer.stop(0);
         }
