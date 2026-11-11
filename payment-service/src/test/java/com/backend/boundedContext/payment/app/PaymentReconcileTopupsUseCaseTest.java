@@ -72,15 +72,17 @@ class PaymentReconcileTopupsUseCaseTest {
     }
 
     @Test
-    @DisplayName("PG에서 승인되지 않음(NOT_APPROVED)이 확정되면 FAILED_PG_DECLINED로 기록한다")
+    @DisplayName("PG에서 승인되지 않음(NOT_APPROVED)이 확정되면 FAILED_PG_DECLINED로 기록하고, 실패 사유에 PG 원래 상태값을 남긴다")
     void notApproved() {
-        targets(TARGET);
-        given(gateway.getPaymentByOrderId("TOPUP-7")).willReturn(pg(PgPaymentStatus.NOT_APPROVED));
+        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS));
+        given(gateway.getPaymentByOrderId("TOPUP-7")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "ABORTED", "TOPUP-7"));
+        given(gateway.getPaymentByOrderId("TOPUP-8")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "EXPIRED", "TOPUP-8"));
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
-        verify(processor).fail(7L, TopupStatus.FAILED_PG_DECLINED, "PG에서 결제가 승인되지 않았습니다.");
-        assertThat(result.failed()).isEqualTo(1);
+        verify(processor).fail(7L, TopupStatus.FAILED_PG_DECLINED, "PG에서 결제가 승인되지 않았습니다. (ABORTED)");
+        verify(processor).fail(8L, TopupStatus.FAILED_PG_DECLINED, "PG에서 결제가 승인되지 않았습니다. (EXPIRED)");
+        assertThat(result.failed()).isEqualTo(2);
     }
 
     @Test
@@ -149,6 +151,10 @@ class PaymentReconcileTopupsUseCaseTest {
     }
 
     private static PgPaymentResult pg(PgPaymentStatus status, String orderId) {
-        return new PgPaymentResult("pk_1", orderId, status, 20_000, PgPaymentMethod.CARD, null);
+        return pg(status, status.name(), orderId);
+    }
+
+    private static PgPaymentResult pg(PgPaymentStatus status, String pgStatus, String orderId) {
+        return new PgPaymentResult("pk_1", orderId, status, pgStatus, 20_000, PgPaymentMethod.CARD, null);
     }
 }

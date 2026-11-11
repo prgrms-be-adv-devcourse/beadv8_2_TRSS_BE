@@ -50,7 +50,7 @@ class PaymentConfirmTopupUseCaseTest {
     private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, topupGateways, memberPort);
 
     private final PgPaymentResult approved =
-            new PgPaymentResult(PAYMENT_KEY, ORDER_ID, PgPaymentStatus.APPROVED, AMOUNT, PgPaymentMethod.CARD, null);
+            new PgPaymentResult(PAYMENT_KEY, ORDER_ID, PgPaymentStatus.APPROVED, "DONE", AMOUNT, PgPaymentMethod.CARD, null);
 
     @BeforeEach
     void setUp() {

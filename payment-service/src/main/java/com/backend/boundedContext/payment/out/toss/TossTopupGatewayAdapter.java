@@ -105,6 +105,7 @@ public class TossTopupGatewayAdapter implements TopupGatewayPort {
                 toss.paymentKey(),
                 toss.orderId(),
                 STATUSES.getOrDefault(toss.status(), PgPaymentStatus.PENDING),
+                toss.status(),
                 toss.totalAmount(),
                 toMethod(toss),
                 toss.approvedAtKst()

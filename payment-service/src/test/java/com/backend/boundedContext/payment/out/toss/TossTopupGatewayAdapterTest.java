@@ -71,11 +71,14 @@ class TossTopupGatewayAdapterTest {
             "READY, PENDING",
             "PARTIAL_CANCELED, PENDING",
     })
-    @DisplayName("토스 결제 status를 PG 결제 상태로 바꾼다")
+    @DisplayName("토스 결제 status를 PG 결제 상태로 바꾸고, 원래 값도 담는다")
     void status(String tossStatus, PgPaymentStatus expected) {
         given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss(tossStatus, "카드", null));
 
-        assertThat(adapter.getPaymentByOrderId(ORDER_ID).status()).isEqualTo(expected);
+        PgPaymentResult result = adapter.getPaymentByOrderId(ORDER_ID);
+
+        assertThat(result.status()).isEqualTo(expected);
+        assertThat(result.pgStatus()).isEqualTo(tossStatus);   // 원래 값은 기록용으로 그대로 담음
     }
 
     @ParameterizedTest(name = "토스 method {0} → {1}")

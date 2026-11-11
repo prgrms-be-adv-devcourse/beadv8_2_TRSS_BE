@@ -172,7 +172,7 @@ class PaymentTopupConfirmProcessorTest {
     @DisplayName("승인 반영: PG 결제가 승인(APPROVED)이 아니면 반영할 수 없다")
     void complete_notApproved() {
         Topup topup = processingTopup(Wallet.create(MEMBER_ID), 20_000);
-        PgPaymentResult aborted = new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.NOT_APPROVED, 20_000, PgPaymentMethod.CARD, null);
+        PgPaymentResult aborted = new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.NOT_APPROVED, "ABORTED", 20_000, PgPaymentMethod.CARD, null);
 
         assertThatThrownBy(() -> processor.complete(TOPUP_ID, aborted))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -213,7 +213,7 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     private PgPaymentResult approved(Topup topup, long amount, PgPaymentMethod method) {
-        return new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.APPROVED, amount, method, APPROVED_AT);
+        return new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.APPROVED, "DONE", amount, method, APPROVED_AT);
     }
 
     // 잠금 조회로 돌려줄 READY 충전 건

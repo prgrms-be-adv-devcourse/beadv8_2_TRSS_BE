@@ -114,7 +114,7 @@ class TopupReconcileIntegrationTest {
         moveUpdatedAtMinutesAgo(topup.topupId(), 6);
         TossPaymentResponse toss = tossDone(topup);
         given(tossPaymentsClient.getPaymentByOrderId(topup.orderId())).willReturn(toss);
-        PgPaymentResult approved = new PgPaymentResult(toss.paymentKey(), toss.orderId(), PgPaymentStatus.APPROVED,
+        PgPaymentResult approved = new PgPaymentResult(toss.paymentKey(), toss.orderId(), PgPaymentStatus.APPROVED, toss.status(),
                 toss.totalAmount(), PgPaymentMethod.CARD, toss.approvedAtKst());
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
