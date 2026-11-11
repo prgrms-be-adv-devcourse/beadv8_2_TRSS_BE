@@ -12,7 +12,8 @@ package com.backend.shared.product.dto;
  * @param sellerId         판매자 ID (회원 ID가 아님)
  * @param productName      상품명
  * @param optionName       옵션명. 옵션이 하나뿐인 상품은 "기본"
- * @param price            현재 가격 (원)
+ * @param price            현재 단가 (원). 할인 중이면 할인가 + 추가금, 아니면 정가 + 추가금. 주문 금액·쿠폰·정산은 이 값을 쓴다
+ * @param listPrice        정가 단가 (원) = 상품 가격 + 추가금. 할인이 없으면 price와 같다. 화면 표시용(취소선)
  * @param stock            조회 시점의 옵션 재고. 잠그지 않은 값이라 최종 재고 검사는 deductStock이 한다
  * @param saleable         판매 가능 여부
  * @param unsaleableReason 판매 불가 이유. saleable이 true면 null.
@@ -26,9 +27,20 @@ public record OptionSnapshotDto(
         String productName,
         String optionName,
         long price,
+        long listPrice,
         int stock,
         boolean saleable,
         ProductUnsaleableReason unsaleableReason,
         String thumbnailUrl
 ) {
+    /**
+     * listPrice 없이 만드는 생성자 (listPrice = price). 주문 모듈의 기존 코드·테스트가 깨지지 않게 둔다.
+     * 주문 모듈이 listPrice를 쓰게 되면 지운다.
+     */
+    public OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
+                             long price, int stock, boolean saleable, ProductUnsaleableReason unsaleableReason,
+                             String thumbnailUrl) {
+        this(optionId, productId, sellerId, productName, optionName, price, price, stock, saleable, unsaleableReason,
+                thumbnailUrl);
+    }
 }

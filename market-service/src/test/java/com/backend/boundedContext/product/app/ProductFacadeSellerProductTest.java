@@ -153,7 +153,7 @@ class ProductFacadeSellerProductTest {
 
         assertThat(form).isEqualTo(new SellerProductFormDto(
                 product.getId(), "수분 크림", 25_000, "설명", skincare.getParent().getId(), skincare.getId(), null, List.of(),
-                List.of(), List.of(new SellerOptionDto(option(product).getId(), "기본", List.of(), 0, 25_000, 10))));
+                List.of(), List.of(new SellerOptionDto(option(product).getId(), "기본", List.of(), 0, 25_000, 10)), List.of()));
     }
 
     @Test

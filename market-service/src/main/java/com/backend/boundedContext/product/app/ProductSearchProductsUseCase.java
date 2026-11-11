@@ -2,6 +2,7 @@ package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.ProductSummaryDto;
 import com.backend.boundedContext.product.domain.Product;
+import com.backend.boundedContext.product.domain.ProductPrice;
 import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.boundedContext.product.out.ProductRepository;
@@ -27,12 +28,14 @@ public class ProductSearchProductsUseCase {
 
     private final ProductSupport productSupport;
     private final ProductImageSupport productImageSupport;
+    private final ProductDiscountSupport productDiscountSupport;
     private final ProductSearchPort productSearchPort;
     private final ProductRepository productRepository;
 
     /**
      * 판매 중이고 사용 중인 카테고리의 상품을 검색한다.
      * 검색 구현은 상품 ID만 찾고, 화면에 쓸 값(가격·품절 여부·상호명)은 여기서 DB와 회원 컨텍스트로 채운다.
+     * 할인가는 조회 시각에 진행 중인 할인으로 채운다. 가격 정렬은 정가 기준이다.
      */
     public PageResponse<ProductSummaryDto> searchProducts(String keyword, Long categoryId, ProductSort sort,
                                                           boolean excludeSoldOut, Pageable pageable) {
@@ -56,12 +59,15 @@ public class ProductSearchProductsUseCase {
         Map<Long, String> businessNames = productSupport.getBusinessNames(
                 products.stream().map(Product::getSellerId).collect(Collectors.toSet()));
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
+        Map<Long, ProductPrice> prices = productDiscountSupport.getPrices(products);
 
         return products.stream()
                 .map(product -> {
                     List<OptionStock> optionStocks = stocks.getOrDefault(product.getId(), List.of());
+                    ProductPrice price = prices.get(product.getId());
                     return new ProductSummaryDto(
-                            product.getId(), product.getName(), product.getPrice(), product.getCategory().getId(),
+                            product.getId(), product.getName(), product.getPrice(), price.salePrice(), price.discountRate(),
+                            product.getCategory().getId(),
                             product.getSellerId(), businessNames.get(product.getSellerId()),
                             thumbnailUrls.get(product.getId()),
                             ProductSupport.isSoldOut(optionStocks),
