@@ -41,6 +41,7 @@ out/
 .env.*
 !.env.example
 !.env.prod.example
+!.env.data.example
 
 ### Let's Encrypt 발급 확인용 파일 ###
 /infra/certbot/
