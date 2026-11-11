@@ -52,6 +52,25 @@ services:
     # 앱·grafana 주소는 요청할 때 찾으므로(nginx/default.conf의 resolver) 앱보다 먼저 떠도 되고, 앱이 꺼져 있어도 nginx는 뜬다.
     # 그래서 앱에 depends_on을 걸지 않는다. 앱이 아직 뜨는 중이면 그 경로만 502가 난다
 
+  # Swagger 화면만 띄우는 컨테이너. 앱 하나가 죽어도 다른 서비스 문서는 볼 수 있게 앱 밖에 둔다.
+  # nginx가 /swagger-ui를 여기로 넘기고, 각 문서(/v3/api-docs/{서비스})는 nginx가 서비스로 넘긴다(nginx/default.conf)
+  swagger:
+    image: swaggerapi/swagger-ui:v5.17.14
+    container_name: palette-swagger
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      BASE_URL: /swagger-ui   # nginx가 /swagger-ui를 떼지 않고 넘기므로 같은 경로 아래에서 동작한다
+      URLS_PRIMARY_NAME: member   # 처음 열 때 선택된 서비스. 로그인(토큰 발급)부터 하므로 member
+      URLS: >-
+        [{"name":"member","url":"/v3/api-docs/member"},
+        {"name":"market","url":"/v3/api-docs/market"},
+        {"name":"payment","url":"/v3/api-docs/payment"},
+        {"name":"settlement","url":"/v3/api-docs/settlement"},
+        {"name":"delivery","url":"/v3/api-docs/delivery"},
+        {"name":"notification","url":"/v3/api-docs/notification"}]
+    mem_limit: 64m
+
   # 회원·인증·판매자(member-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
   # DB는 member 스키마에 member_user로 접속한다(DB_USERNAME과 다른 계정).
   # 처음 띄우기 전에 운영 DB의 회원 테이블을 public에서 member로 옮겨야 한다(member-service V1 파일 주석 참고).
