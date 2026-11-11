@@ -92,7 +92,8 @@ public class OrderGetOrderDetailUseCase {
                 delivery.unavailable(),
                 order.getProductDiscountAmount(),
                 order.getCartCouponDiscountAmount(),
-                order.getPayAmount()
+                order.getPayAmount(),
+                order.getShippingFee()
         );
     }
 

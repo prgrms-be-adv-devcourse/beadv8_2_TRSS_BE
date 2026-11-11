@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.CartItem;
+import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.domain.UnorderableReason;
 import com.backend.boundedContext.order.in.dto.CartItemResponse;
 import com.backend.boundedContext.order.in.dto.CartResponse;
@@ -31,6 +32,7 @@ public class OrderGetCartUseCase {
     private final OrderSupport orderSupport;
     private final ProductApi productApi;
     private final MemberApi memberApi;
+    private final OrderPolicy orderPolicy;
 
     public CartResponse getCart(Long memberId) {
         Optional<Cart> cart = orderSupport.findCart(memberId);
@@ -110,6 +112,12 @@ public class OrderGetCartUseCase {
 
         boolean orderable = !selected.isEmpty() && selected.stream().allMatch(CartItemResponse::orderable);
 
-        return new CartResponse(items, selected.size(), expectedTotalPrice, orderable);
+        // 배송비는 주문 생성과 같은 규칙(OrderPolicy)으로 계산한다. 담을 항목이 없으면 배송비·남은 금액을 보여 주지 않는다(0)
+        boolean hasOrderableSelection = selected.stream().anyMatch(CartItemResponse::orderable);
+        long shippingFee = hasOrderableSelection ? orderPolicy.shippingFeeFor(expectedTotalPrice) : 0;
+        long remainingForFreeShipping = hasOrderableSelection ? orderPolicy.remainingForFreeShipping(expectedTotalPrice) : 0;
+
+        return new CartResponse(items, selected.size(), expectedTotalPrice, orderable,
+                shippingFee, expectedTotalPrice + shippingFee, remainingForFreeShipping);
     }
 }

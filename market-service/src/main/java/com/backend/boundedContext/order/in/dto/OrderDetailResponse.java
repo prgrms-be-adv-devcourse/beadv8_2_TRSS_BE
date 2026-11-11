@@ -17,7 +17,8 @@ import java.util.List;
  * @param totalPrice          상품 금액 합계 (할인 전)
  * @param productDiscountAmount    상품 쿠폰 할인 합계
  * @param cartCouponDiscountAmount 장바구니 쿠폰 할인액
- * @param payAmount                결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인
+ * @param payAmount                결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인 + 배송비
+ * @param shippingFee              배송비. 상품 쿠폰 할인 후 상품 금액 합계가 30,000원 이상이면 0원, 미만이면 2,500원 (배송비 도입 전 주문은 0)
  */
 public record OrderDetailResponse(
         Long orderId,
@@ -38,6 +39,7 @@ public record OrderDetailResponse(
         boolean deliveryUnavailable,
         long productDiscountAmount,
         long cartCouponDiscountAmount,
-        long payAmount
+        long payAmount,
+        long shippingFee
 ) {
 }
