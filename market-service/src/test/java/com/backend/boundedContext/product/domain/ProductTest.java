@@ -50,7 +50,7 @@ class ProductTest {
         ProductOption option = savedDefaultOption(product);
         OptionStock stock = OptionStock.init(option, 30);
 
-        assertThat(option.getName()).isEqualTo(ProductOption.DEFAULT_NAME).isEqualTo("기본");
+        assertThat(option.getDisplayName()).isEqualTo(ProductOption.DEFAULT_NAME).isEqualTo("기본");
         assertThat(option.getProduct()).isSameAs(product);
         assertThat(stock.getId()).isEqualTo(option.getId());
         assertThat(stock.getOption()).isSameAs(option);

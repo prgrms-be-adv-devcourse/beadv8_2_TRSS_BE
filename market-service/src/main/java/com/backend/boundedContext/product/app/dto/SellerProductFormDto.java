@@ -7,6 +7,8 @@ import java.util.List;
  *
  * @param thumbnail    대표 이미지. 이미지 기능 전까지 null
  * @param detailImages 상세 이미지 (순서대로). 이미지 기능 전까지 빈 목록
+ * @param optionNames  옵션 이름 (순서대로). 옵션이 없는 상품이면 빈 목록
+ * @param options      삭제되지 않은 옵션 조합 (옵션 ID 순)
  */
 public record SellerProductFormDto(
         Long productId,
@@ -16,6 +18,8 @@ public record SellerProductFormDto(
         Long parentCategoryId,
         Long categoryId,
         ProductImageDto thumbnail,
-        List<ProductImageDto> detailImages
+        List<ProductImageDto> detailImages,
+        List<String> optionNames,
+        List<SellerOptionDto> options
 ) {
 }

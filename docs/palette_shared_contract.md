@@ -242,7 +242,8 @@ public interface ProductApi {
 
     /**
      * 주문 생성 시 재고 차감(ORDER_DEDUCT). 주문 항목을 저장해 orderItemId가 생긴 뒤 같은 트랜잭션에서 호출한다.
-     * 상품(읽기 잠금) → 옵션(쓰기 잠금) 순서로, 각각 ID 오름차순으로 잠근다.
+     * 상품(읽기 잠금) → 옵션 재고(쓰기 잠금) 순서로, 각각 ID 오름차순으로 잠근다. 옵션 행은 잠그지 않는다
+     * (재고는 option_stock에 따로 있어서, 판매자의 옵션 추가금 수정과 서로 기다리지 않는다).
      * 실패: 409 PRODUCT_NOT_ON_SALE(판매 불가), 400 OUT_OF_STOCK(재고 부족), 404 PRODUCT_NOT_FOUND (하나라도 실패하면 전체 롤백)
      * 재고만 바꾸고 상품 상태는 바꾸지 않는다(품절은 재고로 계산).
      * 이미 차감한 주문 항목으로 다시 호출하면 아무것도 하지 않고 정상 종료한다.
@@ -290,7 +291,9 @@ package com.backend.shared.product.dto;
  * 옵션 하나의 현재 정보. saleable = 상품 ON_SALE + 옵션 삭제 안 됨 + 카테고리 사용 중 (재고와는 무관).
  * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 따로 판단한다.
  * unsaleableReason은 saleable이면 null, 여러 개에 해당하면 enum 선언 순서가 우선순위다.
- * optionName은 옵션이 하나뿐인 상품이면 "기본". thumbnailUrl은 대표 이미지가 없으면 null.
+ * optionName은 옵션 값을 " / "로 이은 표시 이름(예: "흰색 / M", 최대 48자)이고, 옵션이 없는 상품이면 "기본".
+ * price는 옵션 하나의 단가 = 상품 가격 + 옵션 추가금이다. 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)도 이 값이다.
+ * thumbnailUrl은 대표 이미지가 없으면 null.
  */
 public record OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
                                 long price, int stock, boolean saleable,
@@ -305,8 +308,13 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 ```
 
 - 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
-- 잠금 순서는 항상 **상품 → 주문(→ 옵션)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
+- 잠금 순서는 항상 **상품 → 주문(→ 옵션 재고)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
 - 구현 상태: 모든 메서드가 `ProductApiAdapter`에 구현되어 있습니다.
+- 옵션(TRSS-200): 상품은 옵션 이름을 최대 3개(예: 색상·사이즈) 갖고, 옵션 하나는 값의 조합 한 줄(SKU)이다. 옵션이 없는 상품은 값 없는 옵션 1개다.
+  옵션 값은 하나에 14자까지라, 표시 이름이 주문·리뷰의 `option_name`(varchar(50))에 그대로 들어간다.
+- 판매자가 옵션을 지우면 그 옵션은 `saleable = false`(`OPTION_DELETED`)가 된다. `cancelPendingOrders`는 상품 단위라 옵션 삭제로는 부르지 않는다.
+  그 옵션이 담긴 결제 대기 주문은 결제 때 `getOptions`로 판매 가능 여부를 다시 보므로 결제되지 않고(409 PRODUCT_NOT_ON_SALE),
+  구매자 취소나 결제 만료로 취소될 때 재고가 복원된다(ORDER_RESTORE는 삭제된 옵션도 재고를 늘린다).
 
 ### 받는 이벤트
 
@@ -432,6 +440,7 @@ public interface CouponApi {
 }
 ```
 
+- 상품 금액은 옵션 단가(상품 가격 + 옵션 추가금) x 수량이다. 상품 쿠폰도 추가금을 포함한 이 금액에 할인을 적용한다.
 - 주문 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. 결제 요청(PayCommand.amount)은 이 결제 금액(payAmount)이다.
   배송비는 배송비 작업에서 상품 쿠폰 할인 후 금액을 기준으로 더한다(장바구니 쿠폰 기준 금액은 배송비 제외라 바뀌지 않는다).
 - 쿠폰은 설정 custom.order.couponEnabled(환경변수 ORDER_COUPON_ENABLED, 기본 false)가 켜져 있을 때만 주문에 반영한다.

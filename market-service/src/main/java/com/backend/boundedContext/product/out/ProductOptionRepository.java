@@ -12,4 +12,7 @@ public interface ProductOptionRepository extends JpaRepository<ProductOption, Lo
     /** 옵션들이 속한 상품 ID (재고를 잠그기 전에 상품부터 잠그려고 쓴다) */
     @Query("select distinct o.product.id from ProductOption o where o.id in :ids")
     List<Long> findProductIdsByIdIn(Collection<Long> ids);
+
+    /** 상품의 삭제되지 않은 옵션 (옵션 ID 순) */
+    List<ProductOption> findAllByProductIdAndDeletedAtIsNullOrderByIdAsc(Long productId);
 }

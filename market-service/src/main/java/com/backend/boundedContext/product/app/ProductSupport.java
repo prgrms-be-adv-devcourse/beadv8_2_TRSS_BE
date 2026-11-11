@@ -2,6 +2,8 @@ package com.backend.boundedContext.product.app;
 
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
+import com.backend.boundedContext.product.app.dto.ProductOptionSpec;
+import com.backend.boundedContext.product.app.dto.SellerOptionDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.domain.Category;
 import com.backend.boundedContext.product.domain.OptionStock;
@@ -11,6 +13,7 @@ import com.backend.boundedContext.product.domain.ProductOption;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequest;
 import com.backend.boundedContext.product.domain.StockChangeType;
+import com.backend.boundedContext.product.domain.StockHistory;
 import com.backend.boundedContext.product.out.CategoryProductCount;
 import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.OptionStockRepository;
@@ -70,8 +73,8 @@ public class ProductSupport {
                     Product product = option.getProduct();
                     ProductUnsaleableReason reason = option.getUnsaleableReason();
                     return new OptionSnapshotDto(
-                            option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getName(),
-                            product.getPrice(), stock.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
+                            option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getDisplayName(),
+                            option.getUnitPrice(), stock.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
                 .toList();
     }
@@ -279,15 +282,45 @@ public class ProductSupport {
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
 
-    /** 판매자 상품 수정 폼을 채우는 값. 이미지 ID는 수정할 때 남길 상세 이미지를 고르는 데 쓴다. */
+    /**
+     * 판매자 상품 수정 폼을 채우는 값. 이미지 ID는 수정할 때 남길 상세 이미지를 고르는 데 쓴다.
+     * 옵션은 삭제되지 않은 조합을 옵션 ID 순으로 재고와 함께 준다 (추가금 수정·재고 조정·옵션 삭제에 쓴다).
+     */
     public SellerProductFormDto getSellerProductForm(Long sellerId, Long productId) {
         Product product = getSellerProduct(sellerId, productId);
         Category category = product.getCategory();
+        List<OptionStock> stocks = getOptionStocksByProductId(Set.of(productId)).getOrDefault(productId, List.of());
 
         return new SellerProductFormDto(
                 product.getId(), product.getName(), product.getPrice(), product.getDescription(),
                 category.getParent().getId(), category.getId(),
-                productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId));
+                productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId),
+                product.getOptionNames(), stocks.stream().map(SellerOptionDto::from).toList());
+    }
+
+    /** 옵션 조합 하나를 만들고 초기 재고와 재고 이력 INIT을 남긴다. 값이 옵션 이름과 맞지 않거나 초기 재고가 범위 밖이면 예외. */
+    public OptionStock addOption(Product product, ProductOptionSpec spec) {
+        ProductOption option = productOptionRepository.save(ProductOption.create(product, spec.values(), spec.additionalPrice()));
+        OptionStock stock = optionStockRepository.save(OptionStock.init(option, spec.stock()));
+        stockHistoryRepository.save(StockHistory.ofInit(stock));
+        return stock;
+    }
+
+    /**
+     * 한 상품의 삭제되지 않은 옵션 조합 전체(정리된 값)를 검사한다.
+     * 없으면 400(OPTION_VALUE_INVALID), {@value ProductOption#MAX_OPTIONS_PER_PRODUCT}개를 넘으면 400, 같은 조합이 있으면 409.
+     * 저장 전에 검사해서 DB 유니크 인덱스 위반(500)까지 가지 않게 한다.
+     */
+    public void checkOptionCombinations(List<List<String>> combinations) {
+        if (combinations.isEmpty()) {
+            throw new DomainException(ProductErrorCode.OPTION_VALUE_INVALID);
+        }
+        if (combinations.size() > ProductOption.MAX_OPTIONS_PER_PRODUCT) {
+            throw new DomainException(ProductErrorCode.OPTION_LIMIT_EXCEEDED);
+        }
+        if (new HashSet<>(combinations).size() != combinations.size()) {
+            throw new DomainException(ProductErrorCode.OPTION_DUPLICATED);
+        }
     }
 
     /** 삭제되지 않은 옵션이 없거나 모두 재고 0이면 품절 */

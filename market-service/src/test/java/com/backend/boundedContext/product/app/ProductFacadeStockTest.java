@@ -89,7 +89,7 @@ class ProductFacadeStockTest {
     @Test
     @DisplayName("옵션 재고 저장: ID를 직접 넣어도 새 재고면 merge(SELECT) 없이 persist해서 넘긴 객체를 그대로 돌려준다")
     void saveNewOptionStockPersists() {
-        ProductOption newOption = productOptionRepository.save(ProductOption.createDefault(product));
+        ProductOption newOption = productOptionRepository.save(ProductOption.createDefault(otherProduct()));
         OptionStock newStock = OptionStock.init(newOption, 3);
 
         assertThat(newStock.isNew()).isTrue();
@@ -100,7 +100,7 @@ class ProductFacadeStockTest {
     @Test
     @DisplayName("getOptions: 재고 행이 없는 옵션은 없는 ID처럼 빠진다 (NPE 없이)")
     void getOptionsWithoutStockRow() {
-        ProductOption noStock = productOptionRepository.save(ProductOption.createDefault(product));
+        ProductOption noStock = productOptionRepository.save(ProductOption.createDefault(otherProduct()));
 
         assertThat(productFacade.getOptions(List.of(option.getId(), noStock.getId())))
                 .extracting(OptionSnapshotDto::optionId)
@@ -181,6 +181,12 @@ class ProductFacadeStockTest {
         assertThatThrownBy(() -> productFacade.restoreStock(List.of(item(ORDER_ITEM_ID, 2)), StockRestoreReason.RETURN_RESTORE))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("409-PRODUCT_DELETED");
+    }
+
+    /** 옵션을 하나 더 만들 상품. 한 상품에는 같은 조합(값 없는 기본 옵션)을 둘 둘 수 없다 */
+    private Product otherProduct() {
+        return productRepository.save(Product.create(
+                10L, categoryRepository.findByParentNameAndName("뷰티", "스킨케어").orElseThrow(), "다른 크림", "설명", 25_000));
     }
 
     private StockChangeDto item(Long orderItemId, int quantity) {
