@@ -130,10 +130,12 @@ public class TossPaymentsClient {
      * 실제 HTTP 연결을 담당하는 부품 (자바 HttpClient). 요청을 보낼 때 응답 헤더까지 기다리므로 응답 대기 시간 초과가 요청 단계에서 남
      * - connectTimeout: 토스 서버에 접속하는 데 걸리는 제한 시간. 넘으면 요청이 도착하지 못했을 가능성이 큼
      * - readTimeout: 요청 후 응답을 기다리는 제한 시간. 넘으면 토스가 이미 승인했을 수 있음
+     * - version: HTTP/1.1로 고정함. HttpClient 기본값은 HTTP/2인데, 이전(HttpURLConnection)과 같은 방식으로 통신하려는 것
      * 테스트에서 짧은 제한 시간으로 실제 HTTP 서버에 붙일 수 있게 열어 둠
      */
     static JdkClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(connectTimeout)
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);

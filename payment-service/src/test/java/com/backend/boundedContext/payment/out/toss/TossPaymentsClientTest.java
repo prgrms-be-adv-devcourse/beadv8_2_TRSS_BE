@@ -44,6 +44,10 @@ class TossPaymentsClientTest {
     private static final Duration TEST_CONNECT_TIMEOUT = Duration.ofSeconds(1);
     private static final Duration TEST_READ_TIMEOUT = Duration.ofMillis(500);
 
+    // 실제 HTTP 서버가 마지막으로 받은 요청의 프로토콜·Upgrade 헤더
+    private static volatile String lastRequestProtocol;
+    private static volatile String lastRequestUpgradeHeader;
+
     private static final String PAYMENT_JSON = """
             {
               "paymentKey": "pk_1",
@@ -171,12 +175,14 @@ class TossPaymentsClientTest {
     // ── 실제 HTTP 서버로 확인: MockRestServiceServer는 예외를 요청을 보내는 단계에서 던져서 실제 네트워크의 응답 대기 시간 초과·연결 끊김과 동작이 다름 ──
 
     @Test
-    @DisplayName("실제 HTTP 서버: 승인 응답을 받아 결제 결과로 변환한다")
+    @DisplayName("실제 HTTP 서버: HTTP/1.1로 승인 요청을 보내고 응답을 결제 결과로 변환한다")
     void realServer_confirm_success() throws IOException {
         HttpServer httpServer = startHttpServer(Duration.ZERO);
         try {
             TossPaymentResponse response = realClient(httpServer.getAddress().getPort()).confirm("pk_1", ORDER_ID, 20_000);
 
+            assertThat(lastRequestProtocol).isEqualTo("HTTP/1.1");
+            assertThat(lastRequestUpgradeHeader).isNull();   // HTTP/2 업그레이드(h2c)를 시도하지 않음
             assertThat(response.orderId()).isEqualTo(ORDER_ID);
             assertThat(response.status()).isEqualTo("DONE");
         } finally {
@@ -220,6 +226,8 @@ class TossPaymentsClientTest {
         HttpServer httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         httpServer.createContext("/v1/payments/confirm", exchange -> {
             try {
+                lastRequestProtocol = exchange.getProtocol();
+                lastRequestUpgradeHeader = exchange.getRequestHeaders().getFirst("Upgrade");
                 exchange.getRequestBody().readAllBytes();
                 Thread.sleep(delay);
                 byte[] body = PAYMENT_JSON.getBytes(StandardCharsets.UTF_8);
