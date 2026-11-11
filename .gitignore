@@ -46,4 +46,4 @@ out/
 /infra/certbot/
 
 ### 상품 이미지 로컬 저장소 (custom.product.image.localDir) ###
-/uploads/
+uploads/
