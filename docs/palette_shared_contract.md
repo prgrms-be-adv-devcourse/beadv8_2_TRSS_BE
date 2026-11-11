@@ -66,7 +66,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 장바구니 조회 | order | `ProductApi.getOptions(optionIds)` → 현재 가격·판매 가능 여부·대표 이미지로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
-| 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
+| 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)`: 배송비는 구매자 지갑 → 플랫폼 지갑(SHIPPING_FEE), 나머지는 홀딩(PAYMENT), 장바구니 쿠폰 지원금은 플랫폼 지갑 → 홀딩(COUPON_SUBSIDY) → 실패면 함께 롤백 | 동기, 같은 Tx |
 | 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
 | 배송 시작 | delivery | 물류 담당 송장 등록 → 배송 SHIPPED → `DeliveryShippedEvent` → (Kafka `delivery.events`) 알림이 구매자에게 배송 시작 알림 | 이벤트, 별도 Tx (송장 수정은 이벤트 없음) |
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
@@ -434,6 +434,11 @@ public interface CouponApi {
 
 - 주문 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. 결제 요청(PayCommand.amount)은 이 결제 금액(payAmount)이다.
   배송비는 배송비 작업에서 상품 쿠폰 할인 후 금액을 기준으로 더한다(장바구니 쿠폰 기준 금액은 배송비 제외라 바뀌지 않는다).
+- 장바구니 쿠폰 할인은 플랫폼 부담이다. 주문의 장바구니 쿠폰 할인액을 PayCommand.couponSubsidyAmount로 보내고, 결제가 플랫폼 지갑에서 홀딩으로 채운다.
+  상품 쿠폰 할인은 판매자 부담이라 지원금이 없고, 정산이 할인 후 금액으로 지급한다.
+- 반품해도 사용한 쿠폰(상품·장바구니)은 복원하지 않는다. 구매자는 낸 금액(PayCommand.amount)만 돌려받고,
+  장바구니 쿠폰 지원금은 반품 환불 때 홀딩에서 관리자 지갑으로 돌려받는다(COUPON_SUBSIDY_CANCEL).
+  결제 전 취소·만료는 지금처럼 예약 쿠폰을 해제해 복원한다(releaseReservedCoupons).
 - 쿠폰은 설정 custom.order.couponEnabled(환경변수 ORDER_COUPON_ENABLED, 기본 false)가 켜져 있을 때만 주문에 반영한다.
   꺼져 있을 때 쿠폰을 보내면 409-ORDER_COUPON_NOT_AVAILABLE이라 결제 금액은 상품 금액 합계와 같다.
   결제 서비스의 장바구니 쿠폰 지원금(COUPON_SUBSIDY)과 정산의 상품 쿠폰 할인 후 금액 반영이 끝난 뒤에 켠다.
@@ -497,6 +502,10 @@ public interface PaymentApi {
 
     /**
      * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.
+     * command.amount는 배송비를 포함한 결제 금액이다. 배송비(command.shippingFee)는 구매자 지갑 → 플랫폼 지갑(원장 SHIPPING_FEE)으로 옮기고,
+     * 나머지(amount − shippingFee)는 홀딩에 넣는다. 장바구니 쿠폰 지원금(command.couponSubsidyAmount)은 플랫폼 지갑 → 홀딩(원장 COUPON_SUBSIDY).
+     * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount.
+     * (배송비·지원금 처리는 결제 담당 구현 예정. 그 전까지는 amount 전체가 홀딩에 들어가고 두 필드는 쓰이지 않는다)
      * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.
      * 주문 쪽은 결과가 PAID가 아니면 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
      * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다.
@@ -530,8 +539,18 @@ package com.backend.shared.payment.dto;
 
 public record WalletSummaryDto(Long memberId, long balance, long heldAmount) { }
 
-public record PayCommand(Long orderId, String orderNumber, Long buyerId, long amount,
-                         LocalDateTime orderExpiresAt, String idempotencyKey) { }
+/**
+ * amount: 구매자 결제 금액(배송비 포함, 쿠폰 할인 후), shippingFee: 그중 배송비(0 이상, amount 미만).
+ * couponSubsidyAmount: 장바구니 쿠폰 지원금 = 주문의 장바구니 쿠폰 할인액(0 이상). 장바구니 쿠폰은 플랫폼 부담이다.
+ * 결제는 배송비를 홀딩에 넣지 않고 플랫폼 지갑으로 옮기고(SHIPPING_FEE), 지원금을 플랫폼 지갑에서 홀딩으로 옮긴다(COUPON_SUBSIDY).
+ * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount. 정산은 이 홀딩에서 판매자·수수료를 지급한다(배송비는 정산 대상 아님).
+ * (두 필드의 처리는 결제 담당 구현 예정)
+ * 두 필드 없이 부르던 6인자 생성자는 둘 다 0으로 남겨 둔다.
+ * HTTP 본문에서 두 필드는 필수다. 값이 없으면 0을 보낸다. 빠지거나 null이면 400(Jackson 3 기본 설정).
+ * 그래서 market과 payment는 같은 버전으로 함께 배포한다(옛 market이 새 payment를 부르면 400).
+ */
+public record PayCommand(Long orderId, String orderNumber, Long buyerId, long amount, long shippingFee,
+                         long couponSubsidyAmount, LocalDateTime orderExpiresAt, String idempotencyKey) { }
 
 /** shortage: 잔액 부족일 때 모자란 금액, chargeAmount: 1만 원 단위로 올린 충전 권장 금액 */
 public record PayResultDto(Long paymentId, PayResultStatus status, long shortage, long chargeAmount) {
