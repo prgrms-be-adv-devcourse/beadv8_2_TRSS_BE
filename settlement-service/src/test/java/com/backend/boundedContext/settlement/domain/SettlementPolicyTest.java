@@ -1,5 +1,6 @@
 package com.backend.boundedContext.settlement.domain;
 
+import com.backend.global.exception.DomainException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -92,5 +93,25 @@ class SettlementPolicyTest {
         assertEquals(10, policy.getFeeRate());
         assertEquals(3, policy.getMaxAttempts());
         assertEquals(1_000L, SettlementPolicy.calculateFee(10_000L, policy.getFeeRate()));
+    }
+
+    @Test
+    @DisplayName("정산월 기간: 시작 ≤ 끝, 양 끝 포함 최대 12개월. 정산월 하나(month)와 기간은 같이 쓸 수 없다")
+    void validateMonthRange() {
+        SettlementPolicy policy = new SettlementPolicy(10, 10, 3, 10, 100, 50);
+
+        policy.validateMonthRange(YearMonth.of(2026, 1), YearMonth.of(2026, 12));      // 12개월
+        policy.validateMonthRange(YearMonth.of(2026, 9), YearMonth.of(2026, 9));       // 한 달
+        policy.validateMonthFilter("2026-09", null, null);                             // 정산월 하나
+        policy.validateMonthFilter(null, null, null);                                  // 조건 없음
+
+        assertThrows(DomainException.class,
+                () -> policy.validateMonthRange(YearMonth.of(2025, 12), YearMonth.of(2026, 12)));   // 13개월
+        assertThrows(DomainException.class,
+                () -> policy.validateMonthRange(YearMonth.of(2026, 10), YearMonth.of(2026, 9)));    // 거꾸로
+        assertThrows(DomainException.class,
+                () -> policy.validateMonthFilter(null, YearMonth.of(2026, 9), null));                // 끝월 없음
+        assertThrows(DomainException.class,
+                () -> policy.validateMonthFilter("2026-09", YearMonth.of(2026, 8), YearMonth.of(2026, 9)));
     }
 }

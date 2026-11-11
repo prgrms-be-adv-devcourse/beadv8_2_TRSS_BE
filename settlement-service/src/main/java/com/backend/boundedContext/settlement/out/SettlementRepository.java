@@ -96,6 +96,49 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
     @Query("select distinct s.sellerId from Settlement s where s.id in :ids")
     List<Long> findSellerIdsByIdIn(@Param("ids") Collection<Long> ids);
 
+    /**
+     * 엑셀 다운로드 대상: 정산월 기간의 지급 완료(PAID) 정산서를 (정산월, ID) 순으로 끊어 읽는다
+     * 엔티티가 아니라 필요한 값만(SettlementExportRow) 읽어 영속성 컨텍스트에 쌓이지 않게 한다
+     * 커서는 마지막으로 읽은 (정산월, ID). 처음에는 afterMonth = "", afterId = 0
+     * sellerId가 null이면 판매자 조건을 빼고 읽는다(관리자 전체)
+     */
+    @Query("""
+            select new com.backend.boundedContext.settlement.out.SettlementExportRow(
+                       s.id, s.settlementMonth, s.sellerId, s.totalSalePrice, s.totalFee, s.payoutAmount,
+                       s.itemCount, s.paidAt, s.walletTxId)
+              from Settlement s
+             where s.settlementMonth between :fromMonth and :toMonth
+               and s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PAID
+               and (:sellerId is null or s.sellerId = :sellerId)
+               and (s.settlementMonth > :afterMonth
+                    or (s.settlementMonth = :afterMonth and s.id > :afterId))
+             order by s.settlementMonth, s.id
+            """)
+    List<SettlementExportRow> findPaidExportRows(@Param("fromMonth") String fromMonth,
+                                                 @Param("toMonth") String toMonth, @Param("sellerId") Long sellerId,
+                                                 @Param("afterMonth") String afterMonth, @Param("afterId") Long afterId,
+                                                 Pageable pageable);
+
+    /**
+     * 상태별 건수·지급액 합 (요약 카드). 조건은 모두 선택(null이면 그 조건을 빼고 센다)
+     * 정산월 하나를 볼 때는 fromMonth = toMonth
+     */
+    @Query("""
+            select new com.backend.boundedContext.settlement.out.SettlementStatusAmountRow(
+                       s.status, count(s), sum(s.payoutAmount))
+              from Settlement s
+             where (:fromMonth is null or s.settlementMonth >= :fromMonth)
+               and (:toMonth is null or s.settlementMonth <= :toMonth)
+               and (:sellerId is null or s.sellerId = :sellerId)
+             group by s.status
+            """)
+    List<SettlementStatusAmountRow> sumByStatus(@Param("fromMonth") String fromMonth,
+                                                @Param("toMonth") String toMonth,
+                                                @Param("sellerId") Long sellerId);
+
+    /** 판매자의 가장 최근 지급 정산서 (지급 일시 기준) */
+    Optional<Settlement> findFirstBySellerIdAndStatusOrderByPaidAtDesc(Long sellerId, SettlementStatus status);
+
     /** 판매자 본인 정산서 조회. 소유자를 조회 조건에 넣어 남의 정산서는 404가 되게 한다(예외 처리 5.1) */
     Optional<Settlement> findByIdAndSellerId(Long id, Long sellerId);
 

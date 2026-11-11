@@ -32,6 +32,9 @@ public enum SettlementErrorCode implements ErrorCode {
     SETTLEMENT_LEDGER_MISSING(409, "지급된 정산서의 원장 기록을 찾을 수 없습니다."),
     SETTLEMENT_LEDGER_REPLACED(409, "지급된 정산서의 원장 행이 지급 당시와 다릅니다."),
     SETTLEMENT_LEDGER_AMOUNT_CHANGED(409, "지급된 정산서의 원장 금액이 지급 당시와 다릅니다."),
+    SETTLEMENT_MONTH_RANGE_INVALID(400, "조회 기간이 올바르지 않습니다. 시작월은 끝월보다 늦을 수 없고, 정해진 개월 수까지만 볼 수 있습니다."),
+    SETTLEMENT_EXPORT_TOO_LARGE(400, "내려받을 행이 너무 많습니다. 기간이나 조건을 줄여 주세요."),
+    SETTLEMENT_EXPORT_FAILED(500, "엑셀 파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요."),
     SETTLEMENT_JOB_FAILED(500, "정산 작업을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.");
 
     private final int status;
