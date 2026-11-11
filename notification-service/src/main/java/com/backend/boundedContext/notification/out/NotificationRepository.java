@@ -16,6 +16,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     // 회원의 알림 중 cursor보다 id가 작은 것을 최신순으로 limit개 (idx_notification_member_id)
     List<Notification> findByMemberIdAndIdLessThanOrderByIdDesc(Long memberId, Long cursor, Limit limit);
 
+    // 위와 같고 유형 하나만 (idx_notification_member_id로 회원 범위를 좁힌 뒤 type을 거름)
+    List<Notification> findByMemberIdAndTypeAndIdLessThanOrderByIdDesc(Long memberId, NotificationType type, Long cursor, Limit limit);
+
     // 안 읽은 알림 개수 (idx_notification_member_unread)
     long countByMemberIdAndReadAtIsNull(Long memberId);
 
