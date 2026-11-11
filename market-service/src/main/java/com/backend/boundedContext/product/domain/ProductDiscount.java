@@ -130,10 +130,6 @@ public class ProductDiscount extends BaseIdAndTime {
         return ProductDiscountStatus.ENDED;
     }
 
-    public boolean isActiveAt(LocalDateTime now) {
-        return getStatus(now) == ProductDiscountStatus.ACTIVE;
-    }
-
     /** 이 할인의 기간이 [startsAt, endsAt)과 겹치는지 */
     public boolean overlaps(LocalDateTime startsAt, LocalDateTime endsAt) {
         return this.startsAt.isBefore(endsAt) && startsAt.isBefore(this.endsAt);

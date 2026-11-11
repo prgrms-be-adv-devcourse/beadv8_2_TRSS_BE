@@ -190,7 +190,7 @@ class ProductDiscountTest {
         assertThat(discounted.unitPrice(option)).isEqualTo(18_000);
         assertThat(discounted.listUnitPrice(option)).isEqualTo(23_000);
 
-        ProductPrice listOnly = ProductPrice.listOnly(active.getProduct());
+        ProductPrice listOnly = ProductPrice.of(active.getProduct(), null);
         assertThat(listOnly.salePrice()).isNull();
         assertThat(listOnly.discountRate()).isNull();
         assertThat(listOnly.discountEndsAt()).isNull();

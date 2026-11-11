@@ -15,11 +15,6 @@ public record ProductPrice(long listPrice, ProductDiscount activeDiscount) {
         return new ProductPrice(product.getPrice(), activeDiscount);
     }
 
-    /** 할인 없는 가격 */
-    public static ProductPrice listOnly(Product product) {
-        return of(product, null);
-    }
-
     public boolean isDiscounted() {
         return activeDiscount != null;
     }
