@@ -109,6 +109,8 @@ custom:
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
     couponEnabled: ${ORDER_COUPON_ENABLED:false}   # 주문에 쿠폰을 반영하는지. 결제(COUPON_SUBSIDY)와 정산(할인 후 금액)이 지원한 뒤에 켠다
+    shippingFee: 2500                  # 배송비(원). 주문당 한 번
+    freeShippingThreshold: 30000       # 무료 배송 기준(원). 상품 쿠폰 할인 후 상품 금액 합계가 이 금액 이상이면 배송비 0 (장바구니 쿠폰은 기준에 영향 없음)
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다

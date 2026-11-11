@@ -64,7 +64,11 @@ public class Order extends BaseIdAndTime {
     @Column(nullable = false)
     private long cartCouponDiscountAmount;
 
-    // 결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인
+    // 배송비. 주문 생성 때 상품 쿠폰 할인 후 상품 금액 합계로 정하고 다시 계산하지 않는다
+    @Column(nullable = false)
+    private long shippingFee;
+
+    // 결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인 + 배송비
     @Column(nullable = false)
     private long payAmount;
 
@@ -150,7 +154,7 @@ public class Order extends BaseIdAndTime {
         order.totalPrice = order.items.stream()
                 .mapToLong(OrderItem::getLineAmount)
                 .sum();
-        order.payAmount = order.totalPrice;   // 할인은 applyProductCouponDiscount, applyCartCouponDiscount로 반영
+        order.payAmount = order.totalPrice;   // 할인·배송비는 applyProductCouponDiscount, applyShippingFee, applyCartCouponDiscount로 반영
 
         return order;
     }
@@ -170,7 +174,7 @@ public class Order extends BaseIdAndTime {
         recalculatePayAmount();
     }
 
-    // 상품 쿠폰 할인 후 상품 금액 합계 (장바구니 쿠폰 최소 주문 금액의 기준)
+    // 상품 쿠폰 할인 후 상품 금액 합계 (장바구니 쿠폰 최소 주문 금액과 배송비의 기준)
     public long getProductSubtotal() {
         return totalPrice - productDiscountAmount;
     }
@@ -188,8 +192,24 @@ public class Order extends BaseIdAndTime {
         recalculatePayAmount();
     }
 
+    /**
+     * 배송비를 반영한다 (주문 생성 때, 상품 쿠폰 할인 다음). 배송비는 OrderPolicy.shippingFeeFor(getProductSubtotal())로 정한다.
+     */
+    public void applyShippingFee(long shippingFee) {
+        if (shippingFee < 0) {
+            throw new IllegalArgumentException("배송비가 올바르지 않습니다. orderId=" + getId() + ", shippingFee=" + shippingFee);
+        }
+        this.shippingFee = shippingFee;
+        recalculatePayAmount();
+    }
+
+    // 배송비를 뺀 결제 금액 (쿠폰 할인 후). 주문 생성 때 장바구니의 예상 금액(expectedTotalPrice)과 비교하는 값
+    public long getPayAmountBeforeShipping() {
+        return payAmount - shippingFee;
+    }
+
     private void recalculatePayAmount() {
-        this.payAmount = totalPrice - productDiscountAmount - cartCouponDiscountAmount;
+        this.payAmount = totalPrice - productDiscountAmount - cartCouponDiscountAmount + shippingFee;
     }
 
     // 결제 대기 상태 확인
