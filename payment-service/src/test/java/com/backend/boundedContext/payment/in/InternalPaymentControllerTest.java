@@ -80,6 +80,7 @@ class InternalPaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"orderId": 500, "orderNumber": "ORD-500", "buyerId": 3, "amount": 48000,
+                                 "shippingFee": 0, "couponSubsidyAmount": 0,
                                  "orderExpiresAt": "2026-11-02T10:15:00", "idempotencyKey": "ORDER-500-PAY-abc"}
                                 """))
                 .andExpect(status().isOk())
@@ -101,6 +102,7 @@ class InternalPaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"orderId": 500, "orderNumber": "ORD-500", "buyerId": 3, "amount": 48000,
+                                 "shippingFee": 0, "couponSubsidyAmount": 0,
                                  "orderExpiresAt": "2026-11-02T10:15:00", "idempotencyKey": "ORDER-500-PAY-abc"}
                                 """))
                 .andExpect(status().isConflict())
