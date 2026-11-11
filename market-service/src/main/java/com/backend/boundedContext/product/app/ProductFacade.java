@@ -254,9 +254,9 @@ public class ProductFacade {
         return productCreateDiscountUseCase.createDiscount(sellerId, productId, salePrice, startsAt, endsAt).getId();
     }
 
-    /** 승인된 판매자가 본인 상품의 시작 전인 할인을 바꾼다. */
+    /** 승인된 판매자가 본인 상품의 할인을 부분 수정한다 (null인 값은 그대로, 진행 중이면 끝 시각만). */
     @Transactional
-    public void modifyDiscount(Long memberId, Long productId, Long discountId, long salePrice,
+    public void modifyDiscount(Long memberId, Long productId, Long discountId, Long salePrice,
                                LocalDateTime startsAt, LocalDateTime endsAt) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         productModifyDiscountUseCase.modifyDiscount(sellerId, productId, discountId, salePrice, startsAt, endsAt);

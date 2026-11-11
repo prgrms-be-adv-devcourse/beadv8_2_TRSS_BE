@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Positive;
 import java.time.LocalDateTime;
 
 /**
- * 할인 등록·수정 요청. 수정할 때도 세 값을 모두 보낸다.
+ * 할인 등록 요청. 세 값 모두 필수다. 수정은 {@link DiscountModifyRequest}로 바꿀 값만 보낸다.
  *
  * @param salePrice 할인가 (원). 정가의 10~99% (할인율 1~90%)
  * @param startsAt  시작 시각 (KST). 지금 이후 (지금이 속한 분까지 허용)

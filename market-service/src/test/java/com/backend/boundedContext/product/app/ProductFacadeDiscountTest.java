@@ -175,8 +175,8 @@ class ProductFacadeDiscountTest {
         productFacade.createDiscount(MEMBER_ID, productId, 16_000, start.plusDays(7), start.plusDays(9));
 
         // 수정할 때는 자기 자신과는 겹쳐도 되고, 다른 할인과 겹치면 안 된다
-        productFacade.modifyDiscount(MEMBER_ID, productId, first, 14_000, start.plusDays(1), start.plusDays(7));
-        assertCode(() -> productFacade.modifyDiscount(MEMBER_ID, productId, first, 14_000, start, start.plusDays(8)),
+        productFacade.modifyDiscount(MEMBER_ID, productId, first, 14_000L, start.plusDays(1), null);
+        assertCode(() -> productFacade.modifyDiscount(MEMBER_ID, productId, first, null, null, start.plusDays(8)),
                 "409-DISCOUNT_PERIOD_OVERLAPPED");
 
         productFacade.deleteDiscount(MEMBER_ID, productId, first);
@@ -184,13 +184,13 @@ class ProductFacadeDiscountTest {
     }
 
     @Test
-    @DisplayName("수정·삭제: 시작 전만 되고, 진행 중이면 DISCOUNT_NOT_SCHEDULED. 지운 할인은 DISCOUNT_NOT_FOUND")
+    @DisplayName("수정·삭제: 시작 전은 부분 수정·삭제, 진행 중은 끝 시각만 수정. 지운 할인은 DISCOUNT_NOT_FOUND")
     void modifyAndDelete() {
         Long productId = create();
         LocalDateTime start = tomorrow();
         Long scheduled = productFacade.createDiscount(MEMBER_ID, productId, 15_000, start, start.plusDays(7));
 
-        productFacade.modifyDiscount(MEMBER_ID, productId, scheduled, 10_000, start.plusDays(1), start.plusDays(2));
+        productFacade.modifyDiscount(MEMBER_ID, productId, scheduled, 10_000L, start.plusDays(1), start.plusDays(2));
         assertThat(productFacade.getSellerProductForm(MEMBER_ID, productId).discounts())
                 .extracting(SellerDiscountDto::salePrice, SellerDiscountDto::discountRate, SellerDiscountDto::startsAt)
                 .containsExactly(tuple(10_000L, 50, start.plusDays(1)));
@@ -200,9 +200,15 @@ class ProductFacadeDiscountTest {
         assertCode(() -> productFacade.deleteDiscount(MEMBER_ID, productId, scheduled), "404-DISCOUNT_NOT_FOUND");
 
         Long active = createActive(productId, 15_000);
-        assertCode(() -> productFacade.modifyDiscount(MEMBER_ID, productId, active, 14_000, start, start.plusDays(1)),
+        assertCode(() -> productFacade.modifyDiscount(MEMBER_ID, productId, active, 14_000L, null, null),
                 "409-DISCOUNT_NOT_SCHEDULED");
         assertCode(() -> productFacade.deleteDiscount(MEMBER_ID, productId, active), "409-DISCOUNT_NOT_SCHEDULED");
+
+        // 진행 중인 할인의 끝 시각만 연장하면 가격은 그대로이고 끝 시각만 바뀐다
+        productFacade.modifyDiscount(MEMBER_ID, productId, active, null, null, start.plusDays(30));
+        ProductDetailDto detail = productFacade.getProductDetail(productId);
+        assertThat(detail.salePrice()).isEqualTo(15_000);
+        assertThat(detail.discountEndsAt()).isEqualTo(start.plusDays(30));
     }
 
     @Test

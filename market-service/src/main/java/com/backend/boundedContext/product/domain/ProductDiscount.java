@@ -75,14 +75,38 @@ public class ProductDiscount extends BaseIdAndTime {
         return discount;
     }
 
-    /** 시작 전인 할인의 할인가와 기간을 바꾼다. 시작했거나 끝났으면 409. 검사 규칙은 {@link #create}와 같다. */
-    public void modify(long salePrice, LocalDateTime startsAt, LocalDateTime endsAt, LocalDateTime now) {
-        checkScheduled(now);
-        checkSalePrice(product.getPrice(), salePrice);
-        checkPeriod(startsAt, endsAt, now);
-        this.salePrice = salePrice;
-        this.startsAt = startsAt;
-        this.endsAt = endsAt;
+    /**
+     * 보낸 값만 바꾼다 (null이면 그대로). 지금 값과 같은 값은 바꾸지 않은 것으로 본다.
+     * <ul>
+     *   <li>시작 전: 할인가·시작·끝 모두 바꿀 수 있고, 검사 규칙은 {@link #create}와 같다.</li>
+     *   <li>진행 중: 끝 시각만 바꿀 수 있다(연장·단축). 할인가·시작 시각을 바꾸려 하면 409(DISCOUNT_NOT_SCHEDULED).
+     *       새 끝 시각은 지금 이후이고 시작 시각 뒤 1년 이내여야 한다(아니면 400). 지금 끝내려면 {@link #end}를 쓴다.</li>
+     *   <li>끝남: 409(DISCOUNT_ENDED).</li>
+     * </ul>
+     * 판매 중지·삭제된 상품이면 409(PRODUCT_NOT_EDITABLE). 다른 할인과 겹치는지는 app 계층이 본다.
+     */
+    public void modify(Long salePrice, LocalDateTime startsAt, LocalDateTime endsAt, LocalDateTime now) {
+        product.checkEditable();
+        long newSalePrice = salePrice == null ? this.salePrice : salePrice;
+        LocalDateTime newStartsAt = startsAt == null ? this.startsAt : startsAt;
+        LocalDateTime newEndsAt = endsAt == null ? this.endsAt : endsAt;
+
+        switch (getStatus(now)) {
+            case SCHEDULED -> {
+                checkSalePrice(product.getPrice(), newSalePrice);
+                checkPeriod(newStartsAt, newEndsAt, now);
+            }
+            case ACTIVE -> {
+                if (newSalePrice != this.salePrice || !newStartsAt.isEqual(this.startsAt)) {
+                    throw new DomainException(ProductErrorCode.DISCOUNT_NOT_SCHEDULED);
+                }
+                checkActiveEnd(newEndsAt, now);
+            }
+            case ENDED -> throw new DomainException(ProductErrorCode.DISCOUNT_ENDED);
+        }
+        this.salePrice = newSalePrice;
+        this.startsAt = newStartsAt;
+        this.endsAt = newEndsAt;
     }
 
     /** 시작 전인 할인을 지운다 (소프트 삭제). 시작했거나 끝났으면 409. */
@@ -151,6 +175,13 @@ public class ProductDiscount extends BaseIdAndTime {
         boolean invalidOrder = !startsAt.isBefore(endsAt);
         boolean tooLong = endsAt.isAfter(startsAt.plusYears(MAX_PERIOD_YEARS));
         if (startsInPast || invalidOrder || tooLong) {
+            throw new DomainException(ProductErrorCode.DISCOUNT_PERIOD_INVALID);
+        }
+    }
+
+    /** 진행 중인 할인의 새 끝 시각: 지금 이후이고 시작 시각 뒤 {@value #MAX_PERIOD_YEARS}년 이내. 아니면 400 */
+    private void checkActiveEnd(LocalDateTime endsAt, LocalDateTime now) {
+        if (!endsAt.isAfter(now) || endsAt.isAfter(startsAt.plusYears(MAX_PERIOD_YEARS))) {
             throw new DomainException(ProductErrorCode.DISCOUNT_PERIOD_INVALID);
         }
     }

@@ -101,22 +101,65 @@ class ProductDiscountTest {
     }
 
     @Test
-    @DisplayName("수정·삭제는 시작 전만, 종료는 진행 중만 된다")
+    @DisplayName("삭제는 시작 전만, 종료는 진행 중만 된다")
     void transitions() {
         ProductDiscount scheduled = scheduled();
-        scheduled.modify(14_000, NOW.plusDays(2), NOW.plusDays(3), NOW);
-        assertThat(scheduled.getSalePrice()).isEqualTo(14_000);
         assertCode(() -> scheduled.end(NOW), "409-DISCOUNT_NOT_ACTIVE");
         scheduled.delete(NOW);
         assertThat(scheduled.isDeleted()).isTrue();
 
         ProductDiscount active = active();
-        assertCode(() -> active.modify(14_000, NOW.plusDays(2), NOW.plusDays(3), NOW), "409-DISCOUNT_NOT_SCHEDULED");
         assertCode(() -> active.delete(NOW), "409-DISCOUNT_NOT_SCHEDULED");
         active.end(NOW);
         assertThat(active.getEndsAt()).isEqualTo(NOW);
         assertThat(active.getStatus(NOW)).isEqualTo(ProductDiscountStatus.ENDED);
         assertCode(() -> active.end(NOW), "409-DISCOUNT_NOT_ACTIVE");
+    }
+
+    @Test
+    @DisplayName("수정(시작 전): 보낸 값만 바꾸고, 바뀐 값으로 등록과 같은 규칙을 검사한다")
+    void modifyScheduled() {
+        ProductDiscount discount = scheduled();   // 15,000원, [+1일, +8일)
+
+        discount.modify(14_000L, null, null, NOW);
+        assertThat(discount.getSalePrice()).isEqualTo(14_000);
+        assertThat(discount.getStartsAt()).isEqualTo(NOW.plusDays(1));
+
+        discount.modify(null, NOW.plusDays(2), NOW.plusDays(3), NOW);
+        assertThat(discount.getSalePrice()).isEqualTo(14_000);
+        assertThat(discount.getEndsAt()).isEqualTo(NOW.plusDays(3));
+
+        assertCode(() -> discount.modify(1_999L, null, null, NOW), "400-DISCOUNT_PRICE_INVALID");
+        assertCode(() -> discount.modify(null, NOW.plusDays(4), null, NOW), "400-DISCOUNT_PERIOD_INVALID");   // 시작이 끝 뒤
+        assertCode(() -> discount.modify(null, NOW.minusDays(1), null, NOW), "400-DISCOUNT_PERIOD_INVALID");
+    }
+
+    @Test
+    @DisplayName("수정(진행 중): 끝 시각만 연장·단축할 수 있고, 할인가·시작을 바꾸려 하면 DISCOUNT_NOT_SCHEDULED")
+    void modifyActive() {
+        ProductDiscount discount = active();   // 시작 -1시간, 끝 +8일
+
+        discount.modify(null, null, NOW.plusDays(30), NOW);
+        assertThat(discount.getEndsAt()).isEqualTo(NOW.plusDays(30));
+        discount.modify(15_000L, discount.getStartsAt(), NOW.plusDays(2), NOW);   // 지금과 같은 값은 함께 보내도 된다
+        assertThat(discount.getEndsAt()).isEqualTo(NOW.plusDays(2));
+
+        assertCode(() -> discount.modify(14_000L, null, null, NOW), "409-DISCOUNT_NOT_SCHEDULED");
+        assertCode(() -> discount.modify(null, NOW.plusDays(1), null, NOW), "409-DISCOUNT_NOT_SCHEDULED");
+        assertCode(() -> discount.modify(null, null, NOW, NOW), "400-DISCOUNT_PERIOD_INVALID");   // 지금 끝내기는 종료로
+        assertCode(() -> discount.modify(null, null, NOW.minusMinutes(1), NOW), "400-DISCOUNT_PERIOD_INVALID");
+        assertCode(() -> discount.modify(null, null, discount.getStartsAt().plusYears(1).plusSeconds(1), NOW),
+                "400-DISCOUNT_PERIOD_INVALID");
+        assertThat(discount.getEndsAt()).isEqualTo(NOW.plusDays(2));
+    }
+
+    @Test
+    @DisplayName("수정(끝남): DISCOUNT_ENDED")
+    void modifyEnded() {
+        ProductDiscount discount = active();
+        discount.end(NOW);
+
+        assertCode(() -> discount.modify(null, null, NOW.plusDays(1), NOW.plusSeconds(1)), "409-DISCOUNT_ENDED");
     }
 
     @Test
@@ -129,7 +172,7 @@ class ProductDiscountTest {
         ReflectionTestUtils.setField(active.getProduct(), "status", ProductSaleStatus.STOPPED);
 
         assertCode(() -> discount(product, 15_000, NOW.plusDays(3), NOW.plusDays(4)), "409-PRODUCT_NOT_EDITABLE");
-        assertCode(() -> scheduled.modify(14_000, NOW.plusDays(1), NOW.plusDays(2), NOW), "409-PRODUCT_NOT_EDITABLE");
+        assertCode(() -> scheduled.modify(14_000L, null, null, NOW), "409-PRODUCT_NOT_EDITABLE");
         assertCode(() -> scheduled.delete(NOW), "409-PRODUCT_NOT_EDITABLE");
         assertCode(() -> active.end(NOW), "409-PRODUCT_NOT_EDITABLE");
     }

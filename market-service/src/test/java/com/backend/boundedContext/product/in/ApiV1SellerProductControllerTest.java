@@ -423,7 +423,7 @@ class ApiV1SellerProductControllerTest {
     }
 
     @Test
-    @DisplayName("할인 등록·수정: 할인가·시작·끝 중 하나라도 없거나 할인가가 0 이하면 400 VALIDATION_FAILED")
+    @DisplayName("할인 등록은 세 값 모두 필수, 수정은 하나 이상. 할인가가 0 이하면 400 VALIDATION_FAILED")
     void discountValidation() throws Exception {
         for (String json : List.of(
                 """
@@ -437,6 +437,10 @@ class ApiV1SellerProductControllerTest {
             sendAsSeller(post("/api/v1/seller/products/11/discounts"), json)
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        }
+
+        // 수정은 바꿀 값만 보내지만, 하나도 없거나 할인가가 0 이하면 400
+        for (String json : List.of("{}", "{\"salePrice\":0}")) {
             sendAsSeller(patch("/api/v1/seller/products/11/discounts/41"), json)
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
@@ -451,6 +455,11 @@ class ApiV1SellerProductControllerTest {
                 {"salePrice":14000,"startsAt":"2026-12-01T00:00:00","endsAt":"2026-12-08T00:00:00"}""")
                 .andExpect(status().isOk());
         verify(productFacade).modifyDiscount(2L, 11L, 41L, 14_000L, start, start.plusDays(7));
+
+        // 끝 시각만 보내면 나머지는 null로 넘긴다
+        sendAsSeller(patch("/api/v1/seller/products/11/discounts/41"), "{\"endsAt\":\"2026-12-15T00:00:00\"}")
+                .andExpect(status().isOk());
+        verify(productFacade).modifyDiscount(2L, 11L, 41L, null, null, start.plusDays(14));
 
         String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
         mockMvc.perform(delete("/api/v1/seller/products/11/discounts/41").header("Authorization", "Bearer " + token))

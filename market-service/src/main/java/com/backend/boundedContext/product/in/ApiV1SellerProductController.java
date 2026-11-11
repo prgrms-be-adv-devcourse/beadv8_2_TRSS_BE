@@ -12,6 +12,7 @@ import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.in.dto.ProductCreateRequest;
 import com.backend.boundedContext.product.in.dto.ProductCreateResponse;
 import com.backend.boundedContext.product.in.dto.DiscountCreateResponse;
+import com.backend.boundedContext.product.in.dto.DiscountModifyRequest;
 import com.backend.boundedContext.product.in.dto.DiscountRequest;
 import com.backend.boundedContext.product.in.dto.OptionCreateResponse;
 import com.backend.boundedContext.product.in.dto.OptionModifyRequest;
@@ -227,13 +228,16 @@ public class ApiV1SellerProductController {
 
     @Operation(
             summary = "할인 수정",
-            description = "시작 전인 할인의 할인가와 기간을 바꿉니다(세 값 모두 보냄). 규칙은 등록과 같습니다. "
-                    + "이미 시작했거나 끝난 할인은 409-DISCOUNT_NOT_SCHEDULED입니다.")
+            description = "바꿀 값만 보냅니다(보내지 않은 값은 그대로, 하나도 없으면 400). "
+                    + "시작 전인 할인은 할인가·시작·끝을 모두 바꿀 수 있고 규칙은 등록과 같습니다. "
+                    + "진행 중인 할인은 끝 시각만 바꿀 수 있고(연장·단축, 지금 이후·시작 뒤 1년 이내), "
+                    + "할인가·시작 시각을 바꾸려 하면 409-DISCOUNT_NOT_SCHEDULED입니다(지금과 같은 값은 괜찮음). "
+                    + "끝난 할인은 409-DISCOUNT_ENDED, 다른 할인과 겹치면 409-DISCOUNT_PERIOD_OVERLAPPED입니다.")
     @PatchMapping("/{productId}/discounts/{discountId}")
     public RsData<Void> modifyDiscount(@AuthenticationPrincipal AuthMember authMember,
                                        @PathVariable Long productId,
                                        @PathVariable Long discountId,
-                                       @Valid @RequestBody DiscountRequest request) {
+                                       @Valid @RequestBody DiscountModifyRequest request) {
         productFacade.modifyDiscount(authMember.memberId(), productId, discountId,
                 request.salePrice(), request.startsAt(), request.endsAt());
         return RsData.of("200-1", "할인을 수정했습니다.");
