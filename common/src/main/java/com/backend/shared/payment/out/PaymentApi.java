@@ -25,6 +25,9 @@ public interface PaymentApi {
 
     /**
      * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.
+     * command.amount는 배송비를 포함한 결제 금액이다. 배송비(command.shippingFee)는 구매자 지갑 → 플랫폼 지갑(원장 SHIPPING_FEE)으로 옮기고,
+     * 나머지(amount − shippingFee)는 홀딩에 넣는다. 장바구니 쿠폰 지원금(command.couponSubsidyAmount)은 플랫폼 지갑 → 홀딩(원장 COUPON_SUBSIDY).
+     * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount.
      * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.
      * 주문 쪽은 결과가 PAID가 아니면 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
      * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다.
