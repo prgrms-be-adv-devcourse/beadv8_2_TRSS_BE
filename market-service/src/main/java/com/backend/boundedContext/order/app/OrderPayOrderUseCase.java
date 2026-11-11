@@ -57,8 +57,10 @@ public class OrderPayOrderUseCase {
         validateSaleable(order.getItems());
         orderCouponPort.useReservedCoupons(order.getId(), now);
 
+        // 장바구니 쿠폰 할인은 플랫폼 부담이라 같은 금액을 지원금으로 보낸다 (쿠폰 반영이 꺼져 있으면 0)
         PayResultDto result = paymentApi.pay(new PayCommand(order.getId(), order.getOrderNumber(), buyerId,
-                order.getPayAmount(), order.getExpiresAt(), newIdempotencyKey(order)));
+                order.getPayAmount(), order.getShippingFee(), order.getCartCouponDiscountAmount(),
+                order.getExpiresAt(), newIdempotencyKey(order)));
         handleFailure(result, remainingSeconds);
         publishPaidEvent(order);
         removeCartItems(buyerId, order.getItems());
