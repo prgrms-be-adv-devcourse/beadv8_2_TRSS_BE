@@ -1,5 +1,6 @@
 package com.backend.boundedContext.payment.out.toss;
 
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
@@ -9,20 +10,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
  * 토스페이먼츠 결제 API 클라이언트. 호출은 DB 트랜잭션 밖에서 진행
  * - 토스가 오류로 응답하면 TossPaymentException (결과가 확정된 실패)
- * - 응답을 받지 못하면 TossTimeoutException (결과를 알 수 없음)
+ * - 응답을 받지 못하거나 해석하지 못하면 TossTimeoutException (결과를 알 수 없음)
  *
  * 구조
  * - RestClient: 요청 조립, 객체 ↔ JSON 변환, 4xx·5xx 응답을 예외로 바꾸는 상위 계층
- * - SimpleClientHttpRequestFactory: 실제 HTTP 연결을 열고 데이터를 주고받는 하위 계층 (타임아웃은 여기서 설정)
+ * - JdkClientHttpRequestFactory: 실제 HTTP 연결을 열고 데이터를 주고받는 하위 계층 (타임아웃은 여기서 설정)
  */
 @Component
 public class TossPaymentsClient {
@@ -43,7 +44,7 @@ public class TossPaymentsClient {
             @Value("${custom.toss.connectTimeoutSeconds}") long connectTimeoutSeconds,
             @Value("${custom.toss.readTimeoutSeconds}") long readTimeoutSeconds
     ) {
-        this(RestClient.builder().requestFactory(requestFactory(connectTimeoutSeconds, readTimeoutSeconds)), baseUrl, secretKey);
+        this(RestClient.builder().requestFactory(requestFactory(Duration.ofSeconds(connectTimeoutSeconds), Duration.ofSeconds(readTimeoutSeconds))), baseUrl, secretKey);
     }
 
     /**
@@ -94,8 +95,9 @@ public class TossPaymentsClient {
             // 토스가 4xx·5xx로 응답함 → 결과가 확정된 실패. 본문의 오류 코드·메시지를 꺼내 담음
             TossErrorResponse error = parseError(e);
             throw new TossPaymentException(e.getStatusCode().value(), error.code(), error.message(), e);
-        } catch (ResourceAccessException e) {
-            // 응답을 받지 못함 (접속 실패·응답 대기 시간 초과·연결 끊김) → 토스에서 처리됐는지 알 수 없음
+        } catch (RestClientException e) {
+            // 토스 오류 응답이 아닌 모든 실패 (접속 실패·응답 대기 시간 초과·연결 끊김·응답 해석 실패) → 토스에서 처리됐는지 알 수 없음
+            // 시간 초과는 요청을 보낼 때(ResourceAccessException)뿐 아니라 응답을 읽을 때(RestClientException)도 날 수 있어 둘 다 잡음
             throw new TossTimeoutException(e);
         }
     }
@@ -125,14 +127,17 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 실제 HTTP 연결을 담당하는 부품
+     * 실제 HTTP 연결을 담당하는 부품 (자바 HttpClient). 요청을 보낼 때 응답 헤더까지 기다리므로 응답 대기 시간 초과가 요청 단계에서 남
      * - connectTimeout: 토스 서버에 접속하는 데 걸리는 제한 시간. 넘으면 요청이 도착하지 못했을 가능성이 큼
-     * - readTimeout: 요청 후 응답 데이터를 기다리는 제한 시간. 넘으면 토스가 이미 승인했을 수 있음
+     * - readTimeout: 요청 후 응답을 기다리는 제한 시간. 넘으면 토스가 이미 승인했을 수 있음
+     * 테스트에서 짧은 제한 시간으로 실제 HTTP 서버에 붙일 수 있게 열어 둠
      */
-    private static SimpleClientHttpRequestFactory requestFactory(long connectTimeoutSeconds, long readTimeoutSeconds) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
-        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+    static JdkClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(connectTimeout)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(readTimeout);
         return factory;
     }
 
