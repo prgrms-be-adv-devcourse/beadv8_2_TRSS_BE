@@ -2,6 +2,7 @@ package com.backend.boundedContext.settlement.in.batch;
 
 import com.backend.boundedContext.settlement.app.SettlementFacade;
 import com.backend.boundedContext.settlement.app.SettlementJobNames;
+import com.backend.boundedContext.settlement.domain.SettlementJudgement;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import lombok.RequiredArgsConstructor;
@@ -15,9 +16,11 @@ import org.springframework.stereotype.Component;
 
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 월 정산 Job 1단계(집계)
+ * 월 정산 Job 2단계(확정 = 집계)
+ * 판별 Step의 판정(Job 실행 컨텍스트)을 판매자마다 넘긴다. 판정이 없는 판매자는 null(제재 여부만 보고 확정)
  *
  * 한 번 실행에 판매자 BATCH_CHUNK_SIZE(100)명을 처리하고, 남았으면 CONTINUABLE로 다시 불린다
  * 판매자 ID 커서를 Step 실행 컨텍스트에 남기므로 실패한 판매자를 무한 반복하지 않고, 재시작하면 이어서 처리한다
@@ -40,6 +43,8 @@ public class SettlementAggregateTasklet implements Tasklet {
         SettlementTrigger trigger = SettlementBatchSupport.trigger(contribution);
         ExecutionContext context = contribution.getStepExecution().getExecutionContext();
         long afterSellerId = context.getLong(SettlementJobNames.CURSOR_SELLER_ID, 0L);
+        Map<Long, String> judgements = SettlementJudgeTasklet.judgementsOf(
+                contribution.getStepExecution().getJobExecution().getExecutionContext());
 
         List<Long> sellerIds = settlementFacade.findAggregatableSellerIds(targetMonth, afterSellerId,
                 settlementPolicy.getBatchChunkSize());
@@ -48,7 +53,9 @@ public class SettlementAggregateTasklet implements Tasklet {
         long aggregatedCandidates = 0;
         for (Long sellerId : sellerIds) {
             try {
-                int count = settlementFacade.aggregateSeller(sellerId, targetMonth, jobExecutionId, trigger);
+                String encoded = judgements == null ? null : judgements.get(sellerId);
+                SettlementJudgement judgement = encoded == null ? null : SettlementJudgement.decode(encoded);
+                int count = settlementFacade.aggregateSeller(sellerId, targetMonth, jobExecutionId, trigger, judgement);
                 aggregatedCandidates += count;
                 if (count > 0) SettlementBatchSupport.add(context, SettlementJobNames.AGGREGATED_SELLER_COUNT, 1);
             } catch (Exception e) {

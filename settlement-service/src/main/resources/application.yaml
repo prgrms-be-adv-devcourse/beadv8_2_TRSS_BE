@@ -86,6 +86,9 @@ custom:
     retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
     batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
     retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+    ledgerRecheck:
+      enabled: false           # 원장 재대조(매일 03:35 스케줄러). payment-service 연결 후 true로 켠다(연결 전엔 findTransfer가 예외)
+      lookbackDays: 2          # 지급일이 오늘부터 며칠 전까지인 PAID 정산서를 다시 읽을지(2 = T+1, 늦은 시각 지급 포함)
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다

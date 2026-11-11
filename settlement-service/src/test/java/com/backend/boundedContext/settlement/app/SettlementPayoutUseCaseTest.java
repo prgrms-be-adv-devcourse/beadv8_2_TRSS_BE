@@ -8,6 +8,7 @@ import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
+import com.backend.boundedContext.settlement.domain.judge.LedgerMismatchRule;
 import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
 import com.backend.boundedContext.settlement.out.SettlementCandidateTotalsRow;
@@ -57,12 +58,14 @@ class SettlementPayoutUseCaseTest {
     private final FakePayment paymentApi = new FakePayment();
     private SettlementCandidateTotalsRow totals;
     private Supplier<SellerDto> seller = () -> new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.APPROVED);
+    private boolean ledgerMismatch;   // 이 판매자에게 풀리지 않은 원장 재대조 불일치가 있는지
     private final SettlementPayoutUseCase useCase;
 
     SettlementPayoutUseCaseTest() {
         SettlementRepository settlementRepository = fake(SettlementRepository.class, Map.of(
                 "findById", args -> Optional.ofNullable(table.get((Long) args[0])),
-                "findWithLockById", args -> Optional.ofNullable(table.get((Long) args[0]))));
+                "findWithLockById", args -> Optional.ofNullable(table.get((Long) args[0])),
+                "existsUnresolvedLedgerMismatchBySellerId", args -> ledgerMismatch));
         SettlementCandidateRepository candidateRepository = fake(SettlementCandidateRepository.class, Map.of(
                 "sumIncludedTotals", args -> totals,
                 "sumSalePriceByOrder", args -> List.of(new SettlementOrderAmountRow(101L, 10_000L),
@@ -297,6 +300,23 @@ class SettlementPayoutUseCaseTest {
         assertEquals(SettlementTrigger.ADMIN, last.getTriggerType());
         assertEquals("원인 수정 후 재처리", last.getAdminReason());
         assertEquals(3, last.getAttemptNo());
+    }
+
+    @Test
+    @DisplayName("지급 직전 판매자의 원장 재대조 불일치가 풀리지 않았으면 결제 쪽을 호출하지 않고 원장 불일치 사유로 HOLD")
+    void payout_ledgerMismatchUnresolved() {
+        Settlement s = saveReady();
+        ledgerMismatch = true;
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
+
+        assertFalse(result.processed());
+        assertEquals(SettlementStatus.HOLD, s.getStatus());
+        assertEquals(LedgerMismatchRule.REASON, s.getHoldReason());
+        assertEquals(0, paymentApi.transferCalls);
+        SettlementProcessHistory h = histories.get(0);
+        assertEquals(SettlementHistoryStage.HOLD, h.getStage());
+        assertEquals(SettlementTrigger.RETRY_SCHEDULER, h.getTriggerType());
     }
 
     @Test

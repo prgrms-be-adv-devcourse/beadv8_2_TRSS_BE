@@ -20,4 +20,6 @@ dependencies {
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
+	// 원장 무결성 1단계 규칙(정산 리포지토리 삭제 금지, JdbcTemplate 금지)을 테스트로 강제
+	testImplementation("com.tngtech.archunit:archunit-junit5:1.4.1")
 }

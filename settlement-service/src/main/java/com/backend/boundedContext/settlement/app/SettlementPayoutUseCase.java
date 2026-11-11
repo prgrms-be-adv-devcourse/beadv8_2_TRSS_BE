@@ -6,6 +6,7 @@ import com.backend.boundedContext.settlement.domain.SettlementHistoryResult;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
+import com.backend.boundedContext.settlement.domain.judge.LedgerMismatchRule;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
 import com.backend.boundedContext.settlement.out.SettlementCandidateRepository;
@@ -32,7 +33,8 @@ import java.util.List;
  * 정산서 1건 지급 (판매자 1명 = 정산서 1건 = 처리 단위 1개)
  *
  * ① 지급 (하나의 트랜잭션)
- *    정산서 잠금 → 지급 가능한 상태인지 확인 → 판매자가 제재 상태면 HOLD로 바꾸고 끝(지급 안 함) → 정산서 합계 = 후보 합계 확인
+ *    정산서 잠금 → 지급 가능한 상태인지 확인 → 판매자가 제재 상태면 HOLD로 바꾸고 끝(지급 안 함)
+ *    → 원장 재대조 불일치가 남은 판매자면 HOLD로 바꾸고 끝(지급 안 함) → 정산서 합계 = 후보 합계 확인
  *    → SettlementPaymentPort.transfer(홀딩 차감·판매자/관리자 지갑 입금·원장 기록, 같은 트랜잭션에 참여)
  *    → 정산서 PAID → 처리 이력(성공)
  *
@@ -111,7 +113,7 @@ public class SettlementPayoutUseCase {
      * 관리자 수동 재처리
      * MANUAL_REQUIRED만 가능(404·409는 지급 전에 바로 거절)
      * 성공하면 PAID, 실패하면 MANUAL_REQUIRED로 두고 실패 사유를 갱신
-     * 판매자가 제재 상태면 지급하지 않고 HOLD로 바꾼 결과(status HOLD, holdReason)를 그대로 돌려준다
+     * 판매자가 제재 상태이거나 원장 불일치가 남았으면 지급하지 않고 HOLD로 바꾼 결과(status HOLD, holdReason)를 그대로 돌려준다
      */
     public SettlementPayoutResult retryManually(Long settlementId, String adminReason) {
         Settlement settlement = settlementSupport.getSettlement(settlementId);
@@ -119,7 +121,7 @@ public class SettlementPayoutUseCase {
             throw new DomainException(SettlementErrorCode.SETTLEMENT_STATE_INVALID);
         }
         SettlementPayoutResult result = payout(settlementId, SettlementTrigger.ADMIN, null, adminReason);
-        // 건너뛴 결과 중 HOLD는 지급 직전 제재 확인으로 보류된 것이라 이미 커밋됐다. 409 대신 바뀐 상태를 알려 준다
+        // 건너뛴 결과 중 HOLD는 지급 직전 확인(제재·원장 불일치)으로 보류된 것이라 이미 커밋됐다. 409 대신 바뀐 상태를 알려 준다
         if (!result.processed() && result.status() != SettlementStatus.HOLD) {
             throw new DomainException(SettlementErrorCode.SETTLEMENT_STATE_INVALID);
         }
@@ -148,6 +150,18 @@ public class SettlementPayoutUseCase {
             settlementProcessHistoryRepository.save(
                     SettlementProcessHistory.held(settlementId, SANCTIONED_HOLD_REASON, trigger, now));
             log.info("판매자 제재 상태라 지급하지 않고 보류 settlementId={} sellerId={} trigger={}",
+                    settlementId, settlement.getSellerId(), trigger);
+            return SettlementPayoutResult.skipped(settlement);
+        }
+
+        // 지급 전 확인: 이 판매자의 지난 지급 원장 재대조 불일치가 풀리지 않았으면 지급하지 않고 보류한다.
+        // 판별 단계(LedgerMismatchRule)는 READY 후보가 있는 판매자만 보므로, 이미 만들어진 정산서(재시도·보류 해제 후 READY 등)는 여기서 막는다.
+        // 불일치가 풀리면 이 사유로 보류된 정산서는 원장 재대조가 자동 해제한다(SettlementLedgerRecheckUseCase)
+        if (settlementSupport.hasUnresolvedLedgerMismatch(settlement.getSellerId())) {
+            settlement.hold(LedgerMismatchRule.REASON);
+            settlementProcessHistoryRepository.save(
+                    SettlementProcessHistory.held(settlementId, LedgerMismatchRule.REASON, trigger, now));
+            log.info("원장 재대조 불일치가 남아 지급하지 않고 보류 settlementId={} sellerId={} trigger={}",
                     settlementId, settlement.getSellerId(), trigger);
             return SettlementPayoutResult.skipped(settlement);
         }

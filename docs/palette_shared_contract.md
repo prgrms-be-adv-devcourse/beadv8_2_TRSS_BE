@@ -15,6 +15,7 @@
 | payment | 지은·시연 | `PaymentApi` | - |
 | settlement | 다은 | `SettlementApi` | - |
 | delivery | 은정 | `DeliveryApi` | `DeliveryShippedEvent`, `DeliveryCompletedEvent` |
+| notification | 시연 | - | - |
 
 ### 이벤트 공통 규격
 
@@ -66,7 +67,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
 | 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
-| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
+| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
 | 배송 시작 | delivery | 물류 담당 송장 등록 → 배송 SHIPPED → `DeliveryShippedEvent` → (Kafka `delivery.events`) 알림이 구매자에게 배송 시작 알림 | 이벤트, 별도 Tx (송장 수정은 이벤트 없음) |
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
 | 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
@@ -720,11 +721,42 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 - market은 groupId `market`으로 받고, `eventType` 헤더로 `DeliveryCompletedEvent`만 걸러 처리한다(`DeliveryShippedEvent`는 payload를 읽지 않고 무시, 처리 기록도 남기지 않음).
 - 알림은 groupId `notification`으로 받고, `eventType` 헤더로 필요한 이벤트만 거른다.
 
-## 8. 구현 주의사항
+## 8. notification
+
+알림은 `notification-service`(포트 8086, DB 스키마 `notification`)입니다. 주문·배송 이벤트를 받아 구매자 알림을 저장하고, 구매자가 알림을 조회·읽음 처리하는 API를 제공합니다. 다른 서비스를 부르지 않고, 이벤트도 발행하지 않습니다(TRSS-179).
+
+### 알림 API (프론트용)
+
+| 요청 | 응답 `data` | 비고 |
+| --- | --- | --- |
+| `GET /api/v1/notifications?cursor=&size=20` | `{ items: [{ id, type, message, orderId, read, createdAt }], nextCursor, hasNext }` | 최신순. 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. `size`는 1~100 |
+| `GET /api/v1/notifications/unread-count` | 안 읽은 알림 개수(숫자) | 헤더 종 아이콘 뱃지용. 실시간 전달(SSE) 전까지 프론트가 주기적으로 부른다 |
+| `PATCH /api/v1/notifications/{notificationId}/read` | 없음 | 이미 읽은 알림이면 그대로 성공. 없거나 다른 회원의 알림이면 404 `NOTIFICATION_NOT_FOUND` |
+| `PATCH /api/v1/notifications/read-all` | 없음 | 안 읽은 내 알림을 모두 읽음 처리 |
+
+- 목록은 다른 목록 API의 `PageResponse`(page·totalPages)가 아니라 커서 방식이다. 폴링 중 새 알림이 생겨도 다음 페이지가 밀리지 않게 하기 위해서다.
+- `type`은 `ORDER_PAID`(주문 완료)·`DELIVERY_STARTED`(배송 시작)·`DELIVERY_COMPLETED`(배송 완료)이고, `message`는 알림을 만들 때 완성해 저장한 문구다.
+
+### 받는 이벤트
+
+| 이벤트 | 처리 | 멱등 기준 |
+| --- | --- | --- |
+| `OrderPaidEvent` (주문, `order.events`) | 구매자(`buyerId`)에게 주문 완료 알림 저장 | `processed_event`(eventId, `notification`) |
+| `DeliveryShippedEvent` (배송, `delivery.events`) | 구매자에게 배송 시작 알림 저장. 문구에 `carrierName`·`trackingNumber`를 넣음 | 위와 같음 |
+| `DeliveryCompletedEvent` (배송, `delivery.events`) | 구매자에게 배송 완료 알림 저장 | 위와 같음 |
+
+- 두 토픽을 같은 groupId `notification`으로 받는다(`NotificationOrderEventListener`, `NotificationDeliveryEventListener`). 같은 토픽의 다른 이벤트(구매 확정·반품 등)는 `eventType` 헤더로 거르고, 헤더가 없는 메시지는 봉투를 읽어 거른다.
+- 알림은 다른 서비스를 다시 부르지 않고 이벤트 값만으로 알림을 만든다. 배송지·연락처는 쓰지 않는다.
+- 배송지가 없는 주문은 `OrderPaidEvent`가 발행되지 않으므로 주문 완료 알림도 없다.
+- 송장 수정은 이벤트가 없어 알림을 다시 보내지 않는다. 바뀐 송장번호는 주문 상세의 배송 정보로 확인한다.
+- 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 알림 저장이 함께 커밋되고, 저장이 실패하면 기록도 롤백되어 다시 처리된다. 1·2·4·8초 간격으로 다시 처리하고(총 5번), 그래도 실패하면 `<토픽>-dlt`로 보낸다.
+- 알림 저장이 실패해도 주문·배송 처리는 되돌리지 않는다(별도 컨슈머, groupId `notification`).
+
+## 9. 구현 주의사항
 
 계약의 모양과는 별개로, 구현할 때 꼭 지켜야 하는 규칙입니다.
 
-### 8.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
+### 9.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
 
 결제와 15분 만료가 동시에 일어나도 둘 중 하나만 반영되게 하려면 주문 행을 먼저 잠가야 합니다.
 
@@ -735,13 +767,13 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 
 주문 행을 먼저 잠그면 만료 스케줄러는 결제가 끝날 때까지 기다립니다. 순서를 거꾸로 하면 지갑은 잠갔는데 주문이 만료되는 경우를 따로 처리해야 합니다.
 
-### 8.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
+### 9.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
 
 - 주문 하나에 여러 상품이 들어 있으므로, 판매 중지 → 결제 대기 주문 취소 → 재고 복원 과정에서 다른 상품 행도 잠급니다.
 - `deductStock`과 `restoreStock`의 잠금 순서가 다르면 동시에 들어온 주문 생성과 데드락이 날 수 있습니다. 두 메서드 모두 상품 ID 오름차순으로 잠급니다.
 - 판매 중지 → 주문 취소 → 재고 복원은 한 트랜잭션 안에서 같은 상품을 다시 수정합니다. 한 트랜잭션 안에서 **벌크 UPDATE 쿼리와 엔티티 수정을 섞지 않습니다**(영속성 컨텍스트 값이 DB와 달라짐).
 
-### 8.3 구매 확정은 배송 완료 뒤에만, 경로 3개 모두 `OrderConfirmedEvent`를 발행한다 (주문)
+### 9.3 구매 확정은 배송 완료 뒤에만, 경로 3개 모두 `OrderConfirmedEvent`를 발행한다 (주문)
 
 구매 확정은 배송 완료 뒤에만 할 수 있습니다(배송지 없는 기존 주문은 결제 기준). 배송지 있는 주문이 배송 완료 전이면 409 `ORDER_NOT_DELIVERED`.
 
@@ -756,13 +788,13 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 - 7일 자동 확정은 벌크 UPDATE를 쓰지 않고, 대상 주문을 조회해 한 건씩 위 메서드로 확정합니다(이벤트·상태 이력 누락 방지).
 - 세 경로의 UseCase 테스트에서 이벤트 발행을 검증합니다.
 
-## 9. 진행 순서
+## 10. 진행 순서
 
 1. 각 담당자가 이 문서에서 자기 컨텍스트 부분을 검토하고, 고칠 점을 PR 코멘트나 팀 채널에 남깁니다.
 2. 확정되면 `shared/<ctx>/dto·event·out`에 코드로 옮기고, 자기 컨텍스트에 `<Ctx>ApiAdapter` 임시 구현을 함께 올립니다.
 3. 다섯 명의 계약 PR을 한 번에 `develop`에 머지한 뒤 각자 구현을 시작합니다.
 
-## 10. 정할 것
+## 11. 정할 것
 
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
