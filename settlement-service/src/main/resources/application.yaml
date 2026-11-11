@@ -86,6 +86,8 @@ custom:
     retryIntervalMinutes: 10   # 재시도 간격(분), 운영 120, 테스트 10
     batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
     retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+    maxSearchMonths: 12        # 정산서 목록 기간 조회·엑셀 다운로드에서 한 번에 볼 수 있는 최대 개월 수
+    exportMaxRows: 200000      # 엑셀 다운로드 한 번에 담을 최대 품목 수(넘으면 파일을 만들기 전에 400 SETTLEMENT_EXPORT_TOO_LARGE)
     ledgerRecheck:
       enabled: false           # 원장 재대조(매일 03:35 스케줄러). payment-service 연결 후 true로 켠다(연결 전엔 findTransfer가 예외)
       lookbackDays: 2          # 지급일이 오늘부터 며칠 전까지인 PAID 정산서를 다시 읽을지(2 = T+1, 늦은 시각 지급 포함)
