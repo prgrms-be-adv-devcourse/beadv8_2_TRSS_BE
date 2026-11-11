@@ -11,6 +11,8 @@ import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.in.dto.ProductCreateRequest;
 import com.backend.boundedContext.product.in.dto.ProductCreateResponse;
+import com.backend.boundedContext.product.in.dto.DiscountCreateResponse;
+import com.backend.boundedContext.product.in.dto.DiscountRequest;
 import com.backend.boundedContext.product.in.dto.OptionCreateResponse;
 import com.backend.boundedContext.product.in.dto.OptionModifyRequest;
 import com.backend.boundedContext.product.in.dto.ProductModifyRequest;
@@ -129,7 +131,8 @@ public class ApiV1SellerProductController {
             summary = "상품 수정",
             description = "보낸 항목만 수정하며 재고는 바꿀 수 없습니다. 판매 중지·삭제된 상품은 수정할 수 없습니다. "
                     + "thumbnail을 보내면 대표 이미지를 교체합니다. detailImageIds를 보내면 그 상세 이미지만 그 순서대로 남기고 "
-                    + "나머지는 지우며(보내지 않으면 그대로), detailImages는 남긴 이미지 뒤에 추가합니다. 상세 이미지는 합쳐서 최대 10개입니다.",
+                    + "나머지는 지우며(보내지 않으면 그대로), detailImages는 남긴 이미지 뒤에 추가합니다. 상세 이미지는 합쳐서 최대 10개입니다. "
+                    + "할인이 진행 중이거나 예약돼 있으면 가격을 바꿀 수 없습니다(409-PRICE_LOCKED_BY_DISCOUNT).",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
                     mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
                     encoding = @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE))))
@@ -204,6 +207,58 @@ public class ApiV1SellerProductController {
                                      @PathVariable Long optionId) {
         productFacade.deleteOption(authMember.memberId(), productId, optionId);
         return RsData.of("200-1", "옵션을 삭제했습니다.");
+    }
+
+    @Operation(
+            summary = "할인 등록",
+            description = "본인 상품에 기간 할인을 겁니다. 할인가로 받고 할인율(소수점 내림)은 계산해서 보여 줍니다. "
+                    + "할인은 상품 가격에만 적용하고 옵션 추가금은 할인한 가격에 그대로 더합니다. "
+                    + "할인가는 정가의 10~99%(할인율 1~90%), 시작 시각은 지금 이후, 끝 시각은 시작 뒤 1년 이내여야 합니다(400). "
+                    + "판매 중지 상품은 409, 다른 할인과 기간이 겹치면 409-DISCOUNT_PERIOD_OVERLAPPED입니다. "
+                    + "할인이 진행 중이거나 예약돼 있으면 상품 가격을 바꿀 수 없습니다.")
+    @PostMapping("/{productId}/discounts")
+    public RsData<DiscountCreateResponse> createDiscount(@AuthenticationPrincipal AuthMember authMember,
+                                                         @PathVariable Long productId,
+                                                         @Valid @RequestBody DiscountRequest request) {
+        Long discountId = productFacade.createDiscount(authMember.memberId(), productId,
+                request.salePrice(), request.startsAt(), request.endsAt());
+        return RsData.of("200-1", "할인을 등록했습니다.", new DiscountCreateResponse(discountId));
+    }
+
+    @Operation(
+            summary = "할인 수정",
+            description = "시작 전인 할인의 할인가와 기간을 바꿉니다(세 값 모두 보냄). 규칙은 등록과 같습니다. "
+                    + "이미 시작했거나 끝난 할인은 409-DISCOUNT_NOT_SCHEDULED입니다.")
+    @PatchMapping("/{productId}/discounts/{discountId}")
+    public RsData<Void> modifyDiscount(@AuthenticationPrincipal AuthMember authMember,
+                                       @PathVariable Long productId,
+                                       @PathVariable Long discountId,
+                                       @Valid @RequestBody DiscountRequest request) {
+        productFacade.modifyDiscount(authMember.memberId(), productId, discountId,
+                request.salePrice(), request.startsAt(), request.endsAt());
+        return RsData.of("200-1", "할인을 수정했습니다.");
+    }
+
+    @Operation(
+            summary = "할인 삭제",
+            description = "시작 전인 할인을 지웁니다. 진행 중인 할인은 종료를 쓰고, 이미 시작했거나 끝난 할인은 409-DISCOUNT_NOT_SCHEDULED입니다.")
+    @DeleteMapping("/{productId}/discounts/{discountId}")
+    public RsData<Void> deleteDiscount(@AuthenticationPrincipal AuthMember authMember,
+                                       @PathVariable Long productId,
+                                       @PathVariable Long discountId) {
+        productFacade.deleteDiscount(authMember.memberId(), productId, discountId);
+        return RsData.of("200-1", "할인을 삭제했습니다.");
+    }
+
+    @Operation(
+            summary = "할인 종료",
+            description = "진행 중인 할인을 지금 끝냅니다(이후 정가로 판매). 진행 중이 아닌 할인은 409-DISCOUNT_NOT_ACTIVE입니다.")
+    @PostMapping("/{productId}/discounts/{discountId}/end")
+    public RsData<Void> endDiscount(@AuthenticationPrincipal AuthMember authMember,
+                                    @PathVariable Long productId,
+                                    @PathVariable Long discountId) {
+        productFacade.endDiscount(authMember.memberId(), productId, discountId);
+        return RsData.of("200-1", "할인을 종료했습니다.");
     }
 
     @Operation(
