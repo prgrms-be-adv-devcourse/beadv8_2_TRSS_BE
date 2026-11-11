@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @SpringBootTest
 @Transactional
@@ -55,6 +56,17 @@ class NotificationGetNotificationsUseCaseTest {
         assertThat(result.items()).isEmpty();
         assertThat(result.hasNext()).isFalse();
         assertThat(result.nextCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("알림 목록: 배송 시작 알림만 택배사·송장번호가 내려가고 나머지는 null")
+    void getNotifications_trackingFields() {
+        save(Notification.orderPaid(MEMBER_ID, 10L));
+        save(Notification.deliveryStarted(MEMBER_ID, 10L, "CJ대한통운", "123456789012"));
+
+        List<NotificationDto> items = notificationFacade.getNotifications(MEMBER_ID, null, 20).items();
+        assertThat(items).extracting(NotificationDto::carrierName, NotificationDto::trackingNumber)
+                .containsExactly(tuple("CJ대한통운", "123456789012"), tuple(null, null));
     }
 
     @Test

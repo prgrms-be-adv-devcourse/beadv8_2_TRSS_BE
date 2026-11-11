@@ -28,6 +28,8 @@ class NotificationRepositoryTest {
         assertThat(found.getOrderId()).isEqualTo(10L);
         assertThat(found.getType()).isEqualTo(NotificationType.DELIVERY_STARTED);
         assertThat(found.getMessage()).isEqualTo("상품이 발송되었습니다. (CJ대한통운 123456789012)");
+        assertThat(found.getCarrierName()).isEqualTo("CJ대한통운");
+        assertThat(found.getTrackingNumber()).isEqualTo("123456789012");
         assertThat(found.getReadAt()).isNull();
         assertThat(found.getCreatedAt()).isNotNull();
     }

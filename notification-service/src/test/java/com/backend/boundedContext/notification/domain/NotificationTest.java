@@ -20,16 +20,20 @@ class NotificationTest {
         assertThat(n.getOrderId()).isEqualTo(10L);
         assertThat(n.getType()).isEqualTo(NotificationType.ORDER_PAID);
         assertThat(n.getMessage()).isEqualTo("주문이 완료되어 스토어에서 상품 준비 중입니다.");
+        assertThat(n.getCarrierName()).isNull();
+        assertThat(n.getTrackingNumber()).isNull();
         assertThat(n.isRead()).isFalse();
     }
 
     @Test
-    @DisplayName("배송 시작 알림: 문구에 택배사·송장번호가 들어감")
+    @DisplayName("배송 시작 알림: 택배사·송장번호가 문구에 들어가고 따로도 저장됨")
     void deliveryStarted() {
         Notification n = Notification.deliveryStarted(1L, 10L, "CJ대한통운", "123456789012");
 
         assertThat(n.getType()).isEqualTo(NotificationType.DELIVERY_STARTED);
         assertThat(n.getMessage()).isEqualTo("상품이 발송되었습니다. (CJ대한통운 123456789012)");
+        assertThat(n.getCarrierName()).isEqualTo("CJ대한통운");
+        assertThat(n.getTrackingNumber()).isEqualTo("123456789012");
     }
 
     @Test
@@ -39,6 +43,8 @@ class NotificationTest {
 
         assertThat(n.getType()).isEqualTo(NotificationType.DELIVERY_COMPLETED);
         assertThat(n.getMessage()).isEqualTo("상품이 배송 완료되었습니다.");
+        assertThat(n.getCarrierName()).isNull();
+        assertThat(n.getTrackingNumber()).isNull();
     }
 
     @Test

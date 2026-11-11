@@ -31,8 +31,7 @@ class NotificationCreateUseCaseTest {
     void createOrderPaid() {
         notificationFacade.createOrderPaid(MEMBER_ID, ORDER_ID);
 
-        List<Notification> saved = notificationRepository.findAll();
-        assertThat(saved).singleElement().satisfies(notification -> {
+        assertThat(saved()).singleElement().satisfies(notification -> {
             assertThat(notification.getMemberId()).isEqualTo(MEMBER_ID);
             assertThat(notification.getOrderId()).isEqualTo(ORDER_ID);
             assertThat(notification.getType()).isEqualTo(NotificationType.ORDER_PAID);
@@ -42,13 +41,15 @@ class NotificationCreateUseCaseTest {
     }
 
     @Test
-    @DisplayName("배송 시작 알림: 문구에 택배사·송장번호가 들어감")
+    @DisplayName("배송 시작 알림: 택배사·송장번호가 문구에 들어가고 따로도 저장됨")
     void createDeliveryStarted() {
         notificationFacade.createDeliveryStarted(MEMBER_ID, ORDER_ID, "CJ대한통운", "123456789012");
 
-        assertThat(notificationRepository.findAll()).singleElement().satisfies(notification -> {
+        assertThat(saved()).singleElement().satisfies(notification -> {
             assertThat(notification.getType()).isEqualTo(NotificationType.DELIVERY_STARTED);
             assertThat(notification.getMessage()).isEqualTo("상품이 발송되었습니다. (CJ대한통운 123456789012)");
+            assertThat(notification.getCarrierName()).isEqualTo("CJ대한통운");
+            assertThat(notification.getTrackingNumber()).isEqualTo("123456789012");
         });
     }
 
@@ -57,9 +58,16 @@ class NotificationCreateUseCaseTest {
     void createDeliveryCompleted() {
         notificationFacade.createDeliveryCompleted(MEMBER_ID, ORDER_ID);
 
-        assertThat(notificationRepository.findAll()).singleElement().satisfies(notification -> {
+        assertThat(saved()).singleElement().satisfies(notification -> {
             assertThat(notification.getMemberId()).isEqualTo(MEMBER_ID);
             assertThat(notification.getType()).isEqualTo(NotificationType.DELIVERY_COMPLETED);
         });
+    }
+
+    // 로컬 DB에 다른 알림이 있어도 이 테스트 회원의 알림만 봄
+    private List<Notification> saved() {
+        return notificationRepository.findAll().stream()
+                .filter(notification -> notification.getMemberId() == MEMBER_ID)
+                .toList();
     }
 }

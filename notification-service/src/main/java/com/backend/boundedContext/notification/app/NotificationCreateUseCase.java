@@ -17,7 +17,7 @@ public class NotificationCreateUseCase {
         notificationRepository.save(Notification.orderPaid(memberId, orderId));
     }
 
-    // 배송 시작(송장 등록) 알림. 택배사 표시 이름·송장번호를 문구에 넣음
+    // 배송 시작(송장 등록) 알림. 택배사 표시 이름·송장번호를 문구에 넣고 따로도 저장함
     public void createDeliveryStarted(Long memberId, Long orderId, String carrierName, String trackingNumber) {
         notificationRepository.save(Notification.deliveryStarted(memberId, orderId, carrierName, trackingNumber));
     }
