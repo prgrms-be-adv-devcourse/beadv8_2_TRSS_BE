@@ -72,8 +72,8 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
 | 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
 | 주문 취소·15분 만료 | order | `ProductApi.lockProductsForOrderChange(productIds)` → 주문 잠금·상태 다시 확인 → 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
-| 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
-| 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) (미구현) | 이벤트 |
+| 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` → (커밋 뒤 Kafka `order.events`) | 동기, 같은 Tx + 이벤트 (재고 복원과 outbox 저장이 승인과 같은 트랜잭션) |
+| 반품 환불 | payment | `OrderReturnedEvent` 수신(Kafka `order.events`) → 홀딩 → 구매자 지갑(REFUND), 플랫폼 지갑 → 구매자 지갑(배송비, SHIPPING_FEE_REFUND), 홀딩 → 플랫폼 지갑(장바구니 쿠폰 지원금, COUPON_SUBSIDY_CANCEL) → 결제 REFUNDED, 홀딩 RELEASED (결제 담당 구현 예정, 지금은 받는 코드 없음) | 이벤트, 별도 Tx |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시, 배송지 있는 주문은 배송 완료 뒤) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
@@ -514,7 +514,12 @@ public record OrderPaidEvent(Long orderId, String orderNumber, Long buyerId, Loc
 public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime confirmedAt,
                                   ConfirmType confirmType, List<ConfirmedOrderItemDto> items) implements DomainEvent { }
 
-/** 반품 승인. 결제 컨텍스트가 홀딩 금액을 구매자 지갑으로 환불한다. aggregate: ORDER / orderId */
+/**
+ * 반품 승인. 관리자 승인 트랜잭션에서 재고 복원과 함께 발행한다. aggregate: ORDER / orderId → Kafka order.events
+ * 결제 컨텍스트가 받아 홀딩 금액과 배송비를 구매자 지갑으로 환불하고, 장바구니 쿠폰 지원금을 플랫폼 지갑으로 회수한다(결제 담당 구현 예정).
+ * refundAmount = 주문의 pay_amount(배송비 포함 결제 금액 전액, 쿠폰 할인분은 돌려주지 않음).
+ *   결제는 금액 내역(배송비·지원금)을 자기 결제 건에 저장된 값으로 나누고, refundAmount는 대조용으로만 쓴다.
+ */
 public record OrderReturnedEvent(Long orderId, Long buyerId, long refundAmount, LocalDateTime returnedAt) implements DomainEvent { }
 ```
 
@@ -644,8 +649,10 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderReturnedEvent` (미구현) | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
+| `OrderReturnedEvent` (결제 담당 구현 예정, 지금은 받는 코드 없음) | Kafka `order.events`. 환불(REQUESTED → COMPLETED), 원장 REFUND(홀딩 → 구매자) + SHIPPING_FEE_REFUND(배송비 > 0, 플랫폼 → 구매자) + COUPON_SUBSIDY_CANCEL(지원금 > 0, 홀딩 → 플랫폼), 홀딩 RELEASED, 결제 REFUNDED. 금액 내역은 결제 건에 저장된 값을 쓰고 `refundAmount`는 대조용(어긋나면 환불을 FAILED로 두고 재시도하지 않음, 사람이 확인). 처리 실패는 FAILED로 남기고 스케줄러가 재시도 | `processed_event`(eventId, `payment`)로 재전달을 거르고, `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건)와 원장 `idempotency_key` 유니크로 한 번 더 막음 |
 | `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (Kafka `member.events`, `@KafkaListener` groupId `payment`, 가입과 별도 트랜잭션) | `processed_event`(eventId, `payment`)로 재전달을 거르고, 지갑이 이미 있으면 무시(`wallet.member_id` 유니크) |
+
+- `OrderReturnedEvent` 배포 조건: `order.events`는 보관 기간을 따로 정하지 않아 브로커 기본값(7일)이 지나면 메시지가 지워진다. 반품 승인(market)이 먼저 배포되면 **7일 안에 payment 구독을 배포**하거나, 그 전까지 반품 승인을 열지 않는다. 그렇지 않으면 그 사이 반품 환불이 오류 없이 빠진다. payment 컨슈머는 `auto-offset-reset: earliest`라 배포 전에 쌓인 이벤트는 처음 구독할 때 받는다
 
 - 시스템 오류는 결과가 아니라 HTTP 5xx·응답 없음으로 옵니다. 주문 쪽은 결과 불명으로 보고 주문을 PAYING으로 둔 뒤, 재확인 스케줄러가 같은 키로 `pay`를 다시 불러 PAID·PAYMENT_FAILED로 정리합니다(9.1).
 
@@ -698,6 +705,7 @@ public interface SettlementApi {
 | `SellerSanctionedEvent` | `holdSeller(sellerId, reason)`와 같은 처리, 처리 이력 trigger `EVENT` | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다. `order.events`의 `OrderPaidEvent`도 `eventType` 헤더로 거른다(정산 코드 변경 없음).
+- `order.events`에 실리는 `OrderReturnedEvent`도 `eventType` 헤더로 거르고, 헤더가 없으면 봉투를 읽어 거른다(정산 코드 변경 없음). 반품된 주문은 구매 확정되지 않아 정산 후보가 생기지 않는다.
 - `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(`SettlementSellerEventListener`). 같은 토픽의 다른 판매자 이벤트(철회 요청·철회 거절)는 정산이 할 일이 없어 무시한다. 회원은 `holdSeller`를 부르지 않는다(TRSS-161).
 - 이벤트가 오기 전에 지급이 도는 틈은 지급 직전 확인으로 막는다. 정산서를 지급하기 직전에 판매자 상태가 `SANCTIONED`이면 지급하지 않고 HOLD로 바꾼다(처리 이력 trigger는 지급을 시작한 경로). 제재 뒤에 새로 만들어지는 정산서는 월 정산 집계가 판매자 상태를 보고 처음부터 HOLD로 만든다.
 - 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
@@ -756,6 +764,7 @@ public record DeliveryDto(Long deliveryId, DeliveryStatus status, String carrier
 | `OrderPaidEvent` | 주문당 배송 1건(READY)과 주문 항목별 배송 항목 생성 | `processed_event`(eventId, `delivery`)로 재전달을 거르고, `delivery.order_id` 유니크로 한 번 더 막음 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `delivery`)로 받는다. 같은 토픽의 다른 주문 이벤트(`OrderConfirmedEvent` 등)는 `eventType` 헤더로 거른다.
+- `OrderReturnedEvent`도 `eventType` 헤더로 거르고, 헤더가 없으면 봉투를 읽어 거른다(배송 코드 변경 없음).
 - 배송지·연락처는 로그에 남기지 않는다(`deliveryId`, `orderId`, `eventId`만).
 
 ### 발행하는 이벤트
