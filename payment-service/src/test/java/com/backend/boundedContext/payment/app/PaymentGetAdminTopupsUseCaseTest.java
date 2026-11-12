@@ -22,6 +22,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.backend.boundedContext.payment.app.dto.AdminTopupDto;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.PaymentMemberPort;
@@ -47,8 +48,8 @@ class PaymentGetAdminTopupsUseCaseTest {
     @SuppressWarnings("unchecked")
     void getTopups() {
         given(searchResolver.resolve("buyer@palette.test", FROM, TO)).willReturn(AdminTopupSearch.ofMember(3L, FROM, TO));
-        Topup first = Topup.create(3L, Wallet.create(3L), 20_000);
-        Topup second = Topup.create(3L, Wallet.create(3L), 10_000);
+        Topup first = Topup.create(3L, Wallet.create(3L), 20_000, PgProvider.TOSS);
+        Topup second = Topup.create(3L, Wallet.create(3L), 10_000, PgProvider.TOSS);
         given(topupRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .willAnswer(invocation -> new PageImpl<>(List.of(first, second), invocation.getArgument(1), 2));
         given(memberPort.getMembers(List.of(3L))).willReturn(List.of(

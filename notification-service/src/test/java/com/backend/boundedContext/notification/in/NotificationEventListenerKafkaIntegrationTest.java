@@ -88,6 +88,23 @@ class NotificationEventListenerKafkaIntegrationTest {
     }
 
     @Test
+    @DisplayName("결제 완료 뒤 배송 시작 이벤트를 받으면 배송 알림에도 같은 상품명·개수가 저장됨")
+    void delivery_reusesOrderPaidProduct() {
+        UUID paid = send("order.events", paidEvent());
+        // 토픽이 달라 순서가 보장되지 않으므로 결제 완료가 처리된 뒤 배송 시작을 보냄
+        await().atMost(WAIT).until(() -> processed(paid));
+
+        UUID shipped = send("delivery.events", new DeliveryShippedEvent(DELIVERY_ID, orderId, buyerId, "CJ대한통운", "123456789012",
+                LocalDateTime.of(2026, 11, 2, 10, 0)));
+
+        await().atMost(WAIT).until(() -> processed(shipped));
+        assertThat(jdbcTemplate.queryForList(
+                "select type || '|' || product_name || '|' || item_count from notification where member_id = ? order by id",
+                String.class, buyerId))
+                .containsExactly("ORDER_PAID|립스틱|1", "DELIVERY_STARTED|립스틱|1");
+    }
+
+    @Test
     @DisplayName("같은 eventId가 두 번 오면 알림을 한 번만 저장함")
     void duplicateMessage_savedOnce() {
         EventEnvelope<DomainEvent> envelope = EventEnvelope.wrap(paidEvent());

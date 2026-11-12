@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.PaymentPolicy;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
@@ -55,6 +56,7 @@ class PaymentPrepareTopupUseCaseTest {
         assertThat(saved.getValue().getWallet()).isSameAs(wallet);
         assertThat(saved.getValue().getAmount()).isEqualTo(20_000);
         assertThat(saved.getValue().getStatus()).isEqualTo(TopupStatus.READY);
+        assertThat(saved.getValue().getPgProvider()).isEqualTo(PgProvider.TOSS);
         assertThat(result.orderId()).isEqualTo(saved.getValue().getTossOrderId()).startsWith("TOPUP-");
         assertThat(result.amount()).isEqualTo(20_000);
     }

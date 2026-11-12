@@ -242,7 +242,8 @@ public interface ProductApi {
 
     /**
      * 주문 생성 시 재고 차감(ORDER_DEDUCT). 주문 항목을 저장해 orderItemId가 생긴 뒤 같은 트랜잭션에서 호출한다.
-     * 상품(읽기 잠금) → 옵션(쓰기 잠금) 순서로, 각각 ID 오름차순으로 잠근다.
+     * 상품(읽기 잠금) → 옵션 재고(쓰기 잠금) 순서로, 각각 ID 오름차순으로 잠근다. 옵션 행은 잠그지 않는다
+     * (재고는 option_stock에 따로 있어서, 판매자의 옵션 추가금 수정과 서로 기다리지 않는다).
      * 실패: 409 PRODUCT_NOT_ON_SALE(판매 불가), 400 OUT_OF_STOCK(재고 부족), 404 PRODUCT_NOT_FOUND (하나라도 실패하면 전체 롤백)
      * 재고만 바꾸고 상품 상태는 바꾸지 않는다(품절은 재고로 계산).
      * 이미 차감한 주문 항목으로 다시 호출하면 아무것도 하지 않고 정상 종료한다.
@@ -290,7 +291,9 @@ package com.backend.shared.product.dto;
  * 옵션 하나의 현재 정보. saleable = 상품 ON_SALE + 옵션 삭제 안 됨 + 카테고리 사용 중 (재고와는 무관).
  * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 따로 판단한다.
  * unsaleableReason은 saleable이면 null, 여러 개에 해당하면 enum 선언 순서가 우선순위다.
- * optionName은 옵션이 하나뿐인 상품이면 "기본". thumbnailUrl은 대표 이미지가 없으면 null.
+ * optionName은 옵션 값을 " / "로 이은 표시 이름(예: "흰색 / M", 최대 48자)이고, 옵션이 없는 상품이면 "기본".
+ * price는 옵션 하나의 단가 = 상품 가격 + 옵션 추가금이다. 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)도 이 값이다.
+ * thumbnailUrl은 대표 이미지가 없으면 null.
  */
 public record OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
                                 long price, int stock, boolean saleable,
@@ -305,8 +308,13 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 ```
 
 - 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
-- 잠금 순서는 항상 **상품 → 주문(→ 옵션)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
+- 잠금 순서는 항상 **상품 → 주문(→ 옵션 재고)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
 - 구현 상태: 모든 메서드가 `ProductApiAdapter`에 구현되어 있습니다.
+- 옵션(TRSS-200): 상품은 옵션 이름을 최대 3개(예: 색상·사이즈) 갖고, 옵션 하나는 값의 조합 한 줄(SKU)이다. 옵션이 없는 상품은 값 없는 옵션 1개다.
+  옵션 값은 하나에 14자까지라, 표시 이름이 주문·리뷰의 `option_name`(varchar(50))에 그대로 들어간다.
+- 판매자가 옵션을 지우면 그 옵션은 `saleable = false`(`OPTION_DELETED`)가 된다. `cancelPendingOrders`는 상품 단위라 옵션 삭제로는 부르지 않는다.
+  그 옵션이 담긴 결제 대기 주문은 결제 때 `getOptions`로 판매 가능 여부를 다시 보므로 결제되지 않고(409 PRODUCT_NOT_ON_SALE),
+  구매자 취소나 결제 만료로 취소될 때 재고가 복원된다(ORDER_RESTORE는 삭제된 옵션도 재고를 늘린다).
 
 ### 받는 이벤트
 
@@ -436,6 +444,7 @@ public interface CouponApi {
 }
 ```
 
+- 상품 금액은 옵션 단가(상품 가격 + 옵션 추가금) x 수량이다. 상품 쿠폰도 추가금을 포함한 이 금액에 할인을 적용한다.
 - 주문 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. 결제 요청(PayCommand.amount)은 이 결제 금액(payAmount)이다.
   배송비는 배송비 작업에서 상품 쿠폰 할인 후 금액을 기준으로 더한다(장바구니 쿠폰 기준 금액은 배송비 제외라 바뀌지 않는다).
 - 장바구니 쿠폰 할인은 플랫폼 부담이다. 주문의 장바구니 쿠폰 할인액을 PayCommand.couponSubsidyAmount로 보내고, 결제가 플랫폼 지갑에서 홀딩으로 채운다.
@@ -753,20 +762,23 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 
 | 요청 | 응답 `data` | 비고 |
 | --- | --- | --- |
-| `GET /api/v1/notifications?cursor=&size=20` | `{ items: [{ id, type, message, orderId, read, createdAt }], nextCursor, hasNext }` | 최신순. 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. `size`는 1~100 |
-| `GET /api/v1/notifications/unread-count` | 안 읽은 알림 개수(숫자) | 헤더 종 아이콘 뱃지용. 실시간 전달(SSE) 전까지 프론트가 주기적으로 부른다 |
+| `GET /api/v1/notifications?type=&cursor=&size=20` | `{ items: [{ id, type, message, orderId, productName, itemCount, carrierName, trackingNumber, read, createdAt }], nextCursor, hasNext }` | 최근 30일 알림을 최신순으로. `type`을 넘기면 그 유형만(없으면 전체). 다음 페이지는 같은 `type`에 `nextCursor`를 `cursor`로 넘긴다. `size`는 1~100. 없는 `type`이면 400 `INVALID_REQUEST` |
+| `GET /api/v1/notifications/unread-count` | 안 읽은 알림 개수(숫자) | 헤더 종 아이콘 뱃지용. 최근 30일 알림 중 유형과 관계없이 센다. 실시간 전달(SSE) 전까지 프론트가 주기적으로 부른다 |
 | `PATCH /api/v1/notifications/{notificationId}/read` | 없음 | 이미 읽은 알림이면 그대로 성공. 없거나 다른 회원의 알림이면 404 `NOTIFICATION_NOT_FOUND` |
 | `PATCH /api/v1/notifications/read-all` | 없음 | 안 읽은 내 알림을 모두 읽음 처리 |
 
 - 목록은 다른 목록 API의 `PageResponse`(page·totalPages)가 아니라 커서 방식이다. 폴링 중 새 알림이 생겨도 다음 페이지가 밀리지 않게 하기 위해서다.
 - `type`은 `ORDER_PAID`(주문 완료)·`DELIVERY_STARTED`(배송 시작)·`DELIVERY_COMPLETED`(배송 완료)이고, `message`는 알림을 만들 때 완성해 저장한 문구다.
+- `productName`은 대표 상품명(주문의 첫 상품), `itemCount`는 주문 항목(상품 줄) 수다(수량 합계가 아님). 화면에서 "라이트 윈드브레이커 외 2개"처럼 쓴다. 주문 완료 알림에 저장하고, 배송 알림은 같은 주문의 주문 완료 알림 값을 그대로 쓴다. 주문 완료 알림이 없거나 이 필드가 생기기 전 알림이면 null이다.
+- `carrierName`(택배사 표시 이름)·`trackingNumber`(송장번호)는 배송 시작 알림에만 있고 그 외는 null이다. `message`에도 같은 값이 들어 있지만, 화면은 문구를 잘라 쓰지 말고 이 필드를 쓴다.
+- 최근 30일(`custom.notification.visibleDays`) 안에 생긴 알림만 목록·안 읽은 개수에 나온다. 오래된 알림은 지우지 않고 조회에서만 뺀다. 읽음 처리 API는 기간과 관계없이 동작한다.
 
 ### 받는 이벤트
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderPaidEvent` (주문, `order.events`) | 구매자(`buyerId`)에게 주문 완료 알림 저장 | `processed_event`(eventId, `notification`) |
-| `DeliveryShippedEvent` (배송, `delivery.events`) | 구매자에게 배송 시작 알림 저장. 문구에 `carrierName`·`trackingNumber`를 넣음 | 위와 같음 |
+| `OrderPaidEvent` (주문, `order.events`) | 구매자(`buyerId`)에게 주문 완료 알림 저장. `items`의 첫 상품명과 항목 수를 함께 저장 | `processed_event`(eventId, `notification`) |
+| `DeliveryShippedEvent` (배송, `delivery.events`) | 구매자에게 배송 시작 알림 저장. `carrierName`·`trackingNumber`를 문구에 넣고 따로도 저장 | 위와 같음 |
 | `DeliveryCompletedEvent` (배송, `delivery.events`) | 구매자에게 배송 완료 알림 저장 | 위와 같음 |
 
 - 두 토픽을 같은 groupId `notification`으로 받는다(`NotificationOrderEventListener`, `NotificationDeliveryEventListener`). 같은 토픽의 다른 이벤트(구매 확정·반품 등)는 `eventType` 헤더로 거르고, 헤더가 없는 메시지는 봉투를 읽어 거른다.

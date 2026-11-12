@@ -3,6 +3,7 @@ package com.backend.boundedContext.notification.in;
 import com.backend.boundedContext.notification.app.NotificationFacade;
 import com.backend.boundedContext.notification.app.dto.NotificationListDto;
 import com.backend.boundedContext.notification.domain.NotificationErrorCode;
+import com.backend.boundedContext.notification.domain.NotificationType;
 import com.backend.global.exception.DomainException;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
@@ -48,7 +49,7 @@ class ApiV1NotificationControllerTest {
     @Test
     @DisplayName("알림 목록: 로그인 회원 기준으로 조회하고, size 기본값은 20")
     void getNotifications_defaults() throws Exception {
-        given(notificationFacade.getNotifications(3L, null, 20))
+        given(notificationFacade.getNotifications(3L, null, null, 20))
                 .willReturn(new NotificationListDto(List.of(), null, false));
 
         mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(3L)))
@@ -56,20 +57,43 @@ class ApiV1NotificationControllerTest {
                 .andExpect(jsonPath("$.resultCode").value("200-1"))
                 .andExpect(jsonPath("$.data.hasNext").value(false));
 
-        verify(notificationFacade).getNotifications(3L, null, 20);
+        verify(notificationFacade).getNotifications(3L, null, null, 20);
     }
 
     @Test
     @DisplayName("알림 목록: cursor·size를 그대로 넘김")
     void getNotifications_cursor() throws Exception {
-        given(notificationFacade.getNotifications(3L, 50L, 10))
+        given(notificationFacade.getNotifications(3L, null, 50L, 10))
                 .willReturn(new NotificationListDto(List.of(), null, false));
 
         mockMvc.perform(get("/api/v1/notifications").param("cursor", "50").param("size", "10")
                         .header("Authorization", bearer(3L)))
                 .andExpect(status().isOk());
 
-        verify(notificationFacade).getNotifications(3L, 50L, 10);
+        verify(notificationFacade).getNotifications(3L, null, 50L, 10);
+    }
+
+    @Test
+    @DisplayName("알림 목록: type을 넘기면 그 유형으로 조회함")
+    void getNotifications_type() throws Exception {
+        given(notificationFacade.getNotifications(3L, NotificationType.DELIVERY_STARTED, null, 20))
+                .willReturn(new NotificationListDto(List.of(), null, false));
+
+        mockMvc.perform(get("/api/v1/notifications").param("type", "DELIVERY_STARTED")
+                        .header("Authorization", bearer(3L)))
+                .andExpect(status().isOk());
+
+        verify(notificationFacade).getNotifications(3L, NotificationType.DELIVERY_STARTED, null, 20);
+    }
+
+    @Test
+    @DisplayName("알림 목록: 없는 type이면 400 INVALID_REQUEST")
+    void getNotifications_unknownType() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications").param("type", "REFUNDED").header("Authorization", bearer(3L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-INVALID_REQUEST"));
+
+        verify(notificationFacade, never()).getNotifications(any(), any(), any(), anyInt());
     }
 
     @Test
@@ -79,7 +103,7 @@ class ApiV1NotificationControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
 
-        verify(notificationFacade, never()).getNotifications(any(), any(), anyInt());
+        verify(notificationFacade, never()).getNotifications(any(), any(), any(), anyInt());
     }
 
     @Test

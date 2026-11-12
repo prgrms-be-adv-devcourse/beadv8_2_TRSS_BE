@@ -1,5 +1,6 @@
 package com.backend.boundedContext.settlement.app;
 
+import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
 import com.backend.boundedContext.settlement.in.dto.SellerSettlementResponse;
 import com.backend.global.page.PageResponse;
@@ -7,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,16 +22,19 @@ import java.util.Optional;
 public class SettlementGetSellerSettlementsUseCase {
 
     private final SettlementSupport settlementSupport;
+    private final SettlementPolicy settlementPolicy;
 
-    public PageResponse<SellerSettlementResponse> getSellerSettlements(Long memberId, String month,
-                                                                       SettlementSellerStatus status,
+    /** month 또는 기간(from~to, 최대 maxSearchMonths개월) 중 하나로 거른다. 둘 다 없으면 전체 */
+    public PageResponse<SellerSettlementResponse> getSellerSettlements(Long memberId, String month, YearMonth from,
+                                                                       YearMonth to, SettlementSellerStatus status,
                                                                        Pageable pageable) {
+        settlementPolicy.validateMonthFilter(month, from, to);
         Optional<Long> sellerId = settlementSupport.findSellerId(memberId);
         if (sellerId.isEmpty()) {
             // 판매자 신청 기록이 없으면 정산서도 없다(SELLER 권한은 승인된 판매자에게만 생기므로 실제로는 거의 없음)
             return new PageResponse<>(List.of(), pageable.getPageNumber(), pageable.getPageSize(), 0L, 0);
         }
-        return PageResponse.from(settlementSupport.findSellerSettlements(sellerId.get(), month,
+        return PageResponse.from(settlementSupport.findSellerSettlements(sellerId.get(), month, from, to,
                         status == null ? null : status.getStatuses(), pageable),
                 SellerSettlementResponse::from);
     }

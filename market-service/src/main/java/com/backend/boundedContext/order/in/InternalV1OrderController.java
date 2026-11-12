@@ -11,15 +11,16 @@ import com.backend.global.rsData.RsData;
 import com.backend.shared.order.dto.OrderSummaryDto;
 import com.backend.shared.order.out.OrderApi;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
 /**
  * 다른 서비스가 호출하는 주문 내부 API. 규칙은 {@link OrderApi}를 따른다.
+ * 서비스끼리만 부르는 API라 Swagger에서 숨긴다.
  * TODO 서비스 간 인증 방식이 정해지면 보안 설정 추가
  */
-@Tag(name = "주문 내부 API", description = "서비스 간 호출 전용")
+@Hidden
 @RestController
 @RequestMapping("/internal/v1/orders")
 @RequiredArgsConstructor

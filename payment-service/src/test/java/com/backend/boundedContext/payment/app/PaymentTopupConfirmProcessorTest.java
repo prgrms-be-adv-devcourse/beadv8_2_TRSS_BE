@@ -9,8 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
@@ -27,7 +26,9 @@ import com.backend.boundedContext.payment.domain.WalletTransactionType;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
-import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
+import com.backend.boundedContext.payment.out.pg.PgPaymentMethod;
+import com.backend.boundedContext.payment.out.pg.PgPaymentResult;
+import com.backend.boundedContext.payment.out.pg.PgPaymentStatus;
 import com.backend.global.exception.DomainException;
 
 class PaymentTopupConfirmProcessorTest {
@@ -35,7 +36,7 @@ class PaymentTopupConfirmProcessorTest {
     private static final Long MEMBER_ID = 3L;
 
     private static final Long TOPUP_ID = 7L;
-    private static final OffsetDateTime APPROVED_AT = OffsetDateTime.of(2026, 10, 13, 10, 0, 0, 0, ZoneOffset.ofHours(9));
+    private static final LocalDateTime APPROVED_AT = LocalDateTime.of(2026, 10, 13, 10, 0);
 
     private final TopupRepository topupRepository = mock(TopupRepository.class);
     private final WalletRepository walletRepository = mock(WalletRepository.class);
@@ -51,6 +52,7 @@ class PaymentTopupConfirmProcessorTest {
         TopupConfirmStartResult result = processor.start(MEMBER_ID, topup.getTossOrderId(), "pk_1", 20_000);
 
         assertThat(result.isStarted()).isTrue();
+        assertThat(result.pgProvider()).isEqualTo(PgProvider.TOSS);
         assertThat(topup.getStatus()).isEqualTo(TopupStatus.PROCESSING);
         assertThat(topup.getPaymentKey()).isEqualTo("pk_1");
     }
@@ -122,7 +124,7 @@ class PaymentTopupConfirmProcessorTest {
         wallet.deposit(5_000);
         Topup topup = processingTopup(wallet, 20_000);
 
-        TopupConfirmDto result = processor.complete(TOPUP_ID, tossDone(topup, 20_000, "카드"));
+        TopupConfirmDto result = processor.complete(TOPUP_ID, approved(topup, 20_000, PgPaymentMethod.CARD));
 
         ArgumentCaptor<WalletTransaction> saved = ArgumentCaptor.forClass(WalletTransaction.class);
         verify(walletTransactionRepository).save(saved.capture());
@@ -139,12 +141,12 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     @Test
-    @DisplayName("승인 반영: 허용하지 않은 결제 수단(가상계좌 등)이어도 승인된 금액이므로 반영한다")
+    @DisplayName("승인 반영: 허용하지 않은 결제 수단(카드·간편결제 외)이어도 승인된 금액이므로 반영한다")
     void complete_notAllowedMethod() {
         Wallet wallet = Wallet.create(MEMBER_ID);
         Topup topup = processingTopup(wallet, 10_000);
 
-        processor.complete(TOPUP_ID, tossDone(topup, 10_000, "가상계좌"));
+        processor.complete(TOPUP_ID, approved(topup, 10_000, PgPaymentMethod.OTHER));
 
         assertThat(topup.getStatus()).isEqualTo(TopupStatus.DONE);
         assertThat(wallet.getBalance()).isEqualTo(10_000);
@@ -158,7 +160,7 @@ class PaymentTopupConfirmProcessorTest {
         Topup topup = processingTopup(wallet, 20_000);
         topup.approve(LocalDateTime.of(2026, 10, 13, 10, 0));
 
-        TopupConfirmDto result = processor.complete(TOPUP_ID, tossDone(topup, 20_000, "카드"));
+        TopupConfirmDto result = processor.complete(TOPUP_ID, approved(topup, 20_000, PgPaymentMethod.CARD));
 
         verify(walletTransactionRepository, never()).save(any());
         assertThat(wallet.getBalance()).isEqualTo(20_000);
@@ -167,10 +169,10 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     @Test
-    @DisplayName("승인 반영: 토스 결제가 DONE이 아니면 반영할 수 없다")
-    void complete_tossNotDone() {
+    @DisplayName("승인 반영: PG 결제가 승인(APPROVED)이 아니면 반영할 수 없다")
+    void complete_notApproved() {
         Topup topup = processingTopup(Wallet.create(MEMBER_ID), 20_000);
-        TossPaymentResponse aborted = new TossPaymentResponse("pk_1", topup.getTossOrderId(), "ABORTED", 20_000, "카드", null);
+        PgPaymentResult aborted = new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.NOT_APPROVED, "ABORTED", 20_000, PgPaymentMethod.CARD, null);
 
         assertThatThrownBy(() -> processor.complete(TOPUP_ID, aborted))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -202,7 +204,7 @@ class PaymentTopupConfirmProcessorTest {
 
     // 승인 반영 대상: ID가 있는 PROCESSING 충전 건과 그 지갑을 잠금 조회로 돌려줌
     private Topup processingTopup(Wallet wallet, long amount) {
-        Topup topup = Topup.create(MEMBER_ID, wallet, amount);
+        Topup topup = Topup.create(MEMBER_ID, wallet, amount, PgProvider.TOSS);
         ReflectionTestUtils.setField(topup, "id", TOPUP_ID);
         topup.markProcessing("pk_1");
         given(topupRepository.findByIdForUpdate(TOPUP_ID)).willReturn(Optional.of(topup));
@@ -210,13 +212,13 @@ class PaymentTopupConfirmProcessorTest {
         return topup;
     }
 
-    private TossPaymentResponse tossDone(Topup topup, long amount, String method) {
-        return new TossPaymentResponse("pk_1", topup.getTossOrderId(), "DONE", amount, method, APPROVED_AT);
+    private PgPaymentResult approved(Topup topup, long amount, PgPaymentMethod method) {
+        return new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.APPROVED, "DONE", amount, method, APPROVED_AT);
     }
 
     // 잠금 조회로 돌려줄 READY 충전 건
     private Topup readyTopup(long amount) {
-        Topup topup = Topup.create(MEMBER_ID, Wallet.create(MEMBER_ID), amount);
+        Topup topup = Topup.create(MEMBER_ID, Wallet.create(MEMBER_ID), amount, PgProvider.TOSS);
         given(topupRepository.findByTossOrderIdAndMemberIdForUpdate(topup.getTossOrderId(), MEMBER_ID))
                 .willReturn(Optional.of(topup));
         return topup;

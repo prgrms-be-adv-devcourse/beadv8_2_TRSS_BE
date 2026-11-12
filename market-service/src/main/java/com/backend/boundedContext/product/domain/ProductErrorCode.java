@@ -28,6 +28,13 @@ public enum ProductErrorCode implements ErrorCode {
     DETAIL_IMAGE_LIMIT_EXCEEDED(400, "상세 이미지는 최대 10개까지 올릴 수 있습니다."),
     DETAIL_IMAGE_NOT_FOUND(400, "이 상품의 상세 이미지가 아닙니다."),
 
+    // 옵션
+    OPTION_NAME_INVALID(400, "옵션 이름은 최대 3개, 각각 1~20자이며 서로 달라야 합니다."),
+    OPTION_VALUE_INVALID(400, "옵션 값은 옵션 이름마다 하나씩, 각각 1~14자여야 합니다."),
+    OPTION_DUPLICATED(409, "같은 조합의 옵션이 이미 있습니다."),
+    OPTION_LIMIT_EXCEEDED(400, "옵션 조합은 최대 100개까지 만들 수 있습니다."),
+    LAST_OPTION_NOT_DELETABLE(409, "마지막 남은 옵션은 삭제할 수 없습니다."),
+
     // 판매 중지 요청
     STOP_REQUEST_PENDING(409, "심사 중인 판매 중지 요청이 이미 있습니다."),
     STOP_REQUEST_NOT_PENDING(409, "심사 중인 요청만 처리할 수 있습니다."),

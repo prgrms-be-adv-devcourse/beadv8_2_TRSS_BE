@@ -40,6 +40,7 @@ public class ProductGetProductDetailUseCase {
                 product.getSellerId(), businessName, thumbnailUrl(productId),
                 productImageSupport.getDetailImages(productId).stream().map(ProductImageDto::url).toList(),
                 ProductSupport.isSoldOut(optionStocks),
+                product.getOptionNames(),
                 optionStocks.stream().map(ProductOptionDto::from).toList(),
                 memberId != null && wishlistRepository.existsByMemberIdAndProductId(memberId, productId));
     }

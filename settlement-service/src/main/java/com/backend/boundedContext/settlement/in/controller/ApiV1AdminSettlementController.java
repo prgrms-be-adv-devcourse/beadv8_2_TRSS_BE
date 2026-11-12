@@ -3,6 +3,7 @@ package com.backend.boundedContext.settlement.in.controller;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.app.SettlementFacade;
 import com.backend.boundedContext.settlement.domain.SettlementPolicy;
+import com.backend.boundedContext.settlement.domain.SettlementAdminStatusGroup;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.in.dto.SettlementLedgerMismatchConfirmRequest;
 import com.backend.boundedContext.settlement.in.dto.SettlementLedgerMismatchConfirmResponse;
@@ -15,9 +16,13 @@ import com.backend.boundedContext.settlement.in.dto.SettlementResponse;
 import com.backend.boundedContext.settlement.in.dto.SettlementRetryRequest;
 import com.backend.boundedContext.settlement.in.dto.SettlementRunRequest;
 import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementRunnableMonthResponse;
+import com.backend.boundedContext.settlement.in.dto.SettlementSummaryResponse;
 import com.backend.global.page.PageResponse;
 import com.backend.global.rsData.RsData;
+import com.backend.global.security.AuthMember;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,6 +32,9 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -75,11 +83,65 @@ public class ApiV1AdminSettlementController {
     @GetMapping
     public RsData<PageResponse<SettlementResponse>> getSettlements(
             @RequestParam(required = false) @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String month,
+            @Parameter(description = "기간 조회 시작 정산월 yyyy-MM (to와 함께, month와 같이 쓸 수 없음)")
+            @RequestParam(required = false) @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String from,
+            @Parameter(description = "기간 조회 끝 정산월 yyyy-MM (포함, 최대 maxSearchMonths개월)")
+            @RequestParam(required = false) @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String to,
+            @Parameter(description = "정산서 상태 1개 (group보다 우선)")
             @RequestParam(required = false) SettlementStatus status,
+            @Parameter(description = "화면 상태 탭: ACTION_REQUIRED(처리 필요 = FAILED·MANUAL_REQUIRED) · SCHEDULED · PAID · ON_HOLD")
+            @RequestParam(required = false) SettlementAdminStatusGroup group,
             @RequestParam(required = false) @Positive Long sellerId,
             Pageable pageable) {
-        return RsData.of("200-1", "정산서 목록을 조회했습니다.",
-                settlementFacade.getSettlements(month, status, sellerId, pageable));
+        return RsData.of("200-1", "정산서 목록을 조회했습니다.", settlementFacade.getSettlements(month, monthOf(from),
+                monthOf(to), status, group, sellerId, pageable));
+    }
+
+    @Operation(summary = "정산 요약 카드",
+            description = "정산월 또는 기간(from~to)·판매자 기준 상태별 건수와 지급 완료 금액. 상태 탭과 관계없이 모든 상태를 센다")
+    @ApiResponse(responseCode = "200", description = "200-1 조회 성공")
+    @ApiResponse(responseCode = "400", description = "400-SETTLEMENT_MONTH_RANGE_INVALID 기간 오류 / 400-VALIDATION_FAILED 형식 오류")
+    @GetMapping("/summary")
+    public RsData<SettlementSummaryResponse> getSummary(
+            @Parameter(description = "정산월 yyyy-MM")
+            @RequestParam(required = false) @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String month,
+            @Parameter(description = "기간 조회 시작 정산월 yyyy-MM (to와 함께, month와 같이 쓸 수 없음)")
+            @RequestParam(required = false) @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String from,
+            @Parameter(description = "기간 조회 끝 정산월 yyyy-MM (포함, 최대 maxSearchMonths개월)")
+            @RequestParam(required = false) @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String to,
+            @RequestParam(required = false) @Positive Long sellerId) {
+        return RsData.of("200-1", "정산 요약을 조회했습니다.",
+                settlementFacade.getSummary(month, monthOf(from), monthOf(to), sellerId));
+    }
+
+    @Operation(summary = "수동 실행할 수 있는 달",
+            description = "자동 실행이 실패·중단된 달(최근 maxSearchMonths개월)과, 실행 시각이 지났는데 실행되지 않은 지난달. 최근 달부터")
+    @ApiResponse(responseCode = "200", description = "200-1 조회 성공")
+    @GetMapping("/runs/runnable")
+    public RsData<List<SettlementRunnableMonthResponse>> getRunnableMonths() {
+        return RsData.of("200-1", "수동 실행할 수 있는 달을 조회했습니다.", settlementFacade.getRunnableMonths());
+    }
+
+    @Operation(summary = "지급 완료 정산서 엑셀 다운로드",
+            description = "정산월 기간(from~to, 최대 maxSearchMonths개월)의 지급 완료(PAID) 정산서를 .xlsx로 내려준다. "
+                    + "한 달만 받으려면 from과 to를 같은 달로. 시트 ① 정산서 ② 품목 내역, 각 시트 맨 아래 합계. "
+                    + "누가·언제·어떤 조건으로 받았는지 로그로 남긴다")
+    @ApiResponse(responseCode = "200", description = "엑셀 파일(application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)")
+    @ApiResponse(responseCode = "400", description = "400-SETTLEMENT_MONTH_RANGE_INVALID 기간 오류 / 400-SETTLEMENT_EXPORT_TOO_LARGE 행이 너무 많음 / 400-VALIDATION_FAILED 형식 오류")
+    @GetMapping("/export")
+    public ResponseEntity<Resource> exportSettlements(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Parameter(description = "시작 정산월 yyyy-MM")
+            @RequestParam @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String from,
+            @Parameter(description = "끝 정산월 yyyy-MM (포함)")
+            @RequestParam @Pattern(regexp = SettlementPolicy.MONTH_PATTERN) String to,
+            @RequestParam(required = false) @Positive Long sellerId) {
+        return SettlementExportResponses.of(settlementFacade.exportSettlements(authMember.memberId(),
+                YearMonth.parse(from), YearMonth.parse(to), sellerId));
+    }
+
+    private static YearMonth monthOf(String value) {
+        return value == null ? null : YearMonth.parse(value);
     }
 
     @Operation(summary = "정산서 상세", description = "금액, 묶인 후보, 최근 실패 사유, 시도 횟수, 다음 재시도 일시, 보류 사유")
