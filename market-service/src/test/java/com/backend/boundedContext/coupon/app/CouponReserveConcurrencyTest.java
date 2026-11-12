@@ -188,8 +188,8 @@ class CouponReserveConcurrencyTest {
     }
 
     @Test
-    @DisplayName("한 주문의 장바구니 쿠폰과 상품 쿠폰 중 상품 쿠폰이 중지되면 결제 때 409-COUPON_NOT_ACTIVE이고, 먼저 사용 처리한 장바구니 쿠폰도 함께 롤백돼 둘 다 RESERVED로 남는다")
-    void useRollsBackWhenOneCouponStopped() {
+    @DisplayName("한 주문의 장바구니 쿠폰과 상품 쿠폰 중 상품 쿠폰이 중지되면 결제 시작 확인이 409-COUPON_NOT_ACTIVE이고, 둘 다 RESERVED로 남는다")
+    void validateFailsWhenOneCouponStopped() {
         Long activeCouponId = saveCoupon(10);
         LocalDateTime now = LocalDateTime.now();
         long orderId = ORDER_ID_BASE + 700;
@@ -203,7 +203,7 @@ class CouponReserveConcurrencyTest {
         couponIds.add(stoppedCouponId);
         couponFacade.stopCouponByAdmin(stoppedCouponId, "부정 사용");
 
-        assertThatThrownBy(() -> couponFacade.useReservedCoupons(orderId, LocalDateTime.now()))
+        assertThatThrownBy(() -> couponFacade.validateReservedCouponsUsable(orderId, LocalDateTime.now()))
                 .extracting("resultCode").isEqualTo("409-COUPON_NOT_ACTIVE");
 
         assertThat(usageCount(activeCouponId, CouponUsageStatus.RESERVED)).isEqualTo(1);

@@ -104,6 +104,21 @@ class OrderGetOrderDetailUseCaseTest {
     }
 
     @Test
+    @DisplayName("결제 내역 조회가 실패하면(payment 장애) 결제 내역 없이 paymentUnavailable = true로 응답한다")
+    void payments_unavailable() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
+                .willReturn(Optional.of(order(500L)));
+        given(paymentApi.getPaymentAttempts(500L))
+                .willThrow(new DomainException(com.backend.global.exception.GlobalErrorCode.EXTERNAL_SERVICE_ERROR));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.payments()).isEmpty();
+        assertThat(response.paymentUnavailable()).isTrue();
+        assertThat(response.orderId()).isEqualTo(500L);
+    }
+
+    @Test
     @DisplayName("없는 주문이나 다른 회원의 주문이면 ORDER_NOT_FOUND")
     void notFound() {
         given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))

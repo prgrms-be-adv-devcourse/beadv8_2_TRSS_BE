@@ -26,17 +26,23 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "market_order",
-        indexes = @Index(name = "idx_market_order_buyer", columnList = "buyer_id, created_at"))
+        indexes = {
+                @Index(name = "idx_market_order_buyer", columnList = "buyer_id, created_at"),
+                @Index(name = "idx_market_order_status_paying", columnList = "status, paying_started_at")
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order extends BaseIdAndTime {
     // 주문번호
     private static final String ORDER_NUMBER_PREFIX = "ORD-";
-    // 결제 대기 상태
+    // 결제 대기 상태: 결제·취소·만료·판매 중지 취소 대상. 결제 중(PAYING)은 결과를 기다리므로 넣지 않는다
     public static final List<OrderStatus> PAYMENT_PENDING_STATUSES = List.of(OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED);
-    // 진행 중 주문 상태
+    // 결제가 끝나지 않은 상태 (결제 대기 + 결제 중): 장바구니 "결제 대기 주문의 옵션"과 주문 생성 중복 검사
+    public static final List<OrderStatus> PAYMENT_UNFINISHED_STATUSES = List.of(
+            OrderStatus.CREATED, OrderStatus.PAYING, OrderStatus.PAYMENT_FAILED);
+    // 진행 중 주문 상태 (회원 탈퇴 검사, 판매자 진행 중 판매)
     public static final List<OrderStatus> ACTIVE_STATUSES = List.of(
-            OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED, OrderStatus.PAID, OrderStatus.RETURN_REQUESTED);
+            OrderStatus.CREATED, OrderStatus.PAYING, OrderStatus.PAYMENT_FAILED, OrderStatus.PAID, OrderStatus.RETURN_REQUESTED);
 
     @Column(nullable = false, unique = true, length = 40)
     private String orderNumber;
@@ -74,6 +80,13 @@ public class Order extends BaseIdAndTime {
 
     @Column(nullable = false)
     private LocalDateTime expiresAt;
+
+    // 마지막 결제 시도의 멱등키. 결과는 PAYING이고 이 키가 같을 때만 반영한다 (재확인 스케줄러가 같은 키로 결제를 다시 부름)
+    @Column(length = 64)
+    private String paymentIdempotencyKey;
+
+    // PAYING이 된 시각 (재확인 스케줄러 대상 기준)
+    private LocalDateTime payingStartedAt;
 
     private LocalDateTime paidAt;
 
@@ -248,8 +261,14 @@ public class Order extends BaseIdAndTime {
         return Duration.between(now, expiresAt).getSeconds();
     }
 
-    // 결제 완료 처리
-    public void pay(LocalDateTime now) {
+    /**
+     * 결제 시작: 결제 대기(CREATED·PAYMENT_FAILED)이고 만료 전인 주문을 PAYING으로 바꾸고 이번 시도의 멱등키·시작 시각을 기록한다.
+     * 결제 중이면 409-PAYMENT_IN_PROGRESS, 다른 상태면 409-ORDER_STATE_INVALID, 만료됐으면 409-ORDER_EXPIRED
+     */
+    public void startPaying(String paymentIdempotencyKey, LocalDateTime now) {
+        if (status == OrderStatus.PAYING) {
+            throw new DomainException(OrderErrorCode.PAYMENT_IN_PROGRESS);
+        }
         if (!isPaymentPending()) {
             throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
         }
@@ -257,12 +276,54 @@ public class Order extends BaseIdAndTime {
             throw new DomainException(OrderErrorCode.ORDER_EXPIRED);
         }
 
+        this.paymentIdempotencyKey = paymentIdempotencyKey;
+        this.payingStartedAt = now;
+        changeStatus(OrderStatus.PAYING, null);
+    }
+
+    // 이 멱등키로 결제 중인지 (결과 반영 조건). 결제 요청 결과와 재확인 스케줄러가 겹쳐도 한 번만 반영한다
+    public boolean isPayingWith(String paymentIdempotencyKey) {
+        return status == OrderStatus.PAYING && Objects.equals(this.paymentIdempotencyKey, paymentIdempotencyKey);
+    }
+
+    // 이 멱등키의 결제로 PAID가 됐는지 (결과가 이미 반영됨)
+    public boolean isPaidWith(String paymentIdempotencyKey) {
+        return status == OrderStatus.PAID && Objects.equals(this.paymentIdempotencyKey, paymentIdempotencyKey);
+    }
+
+    /**
+     * 결제 성공 반영: PAYING → PAID.
+     * 만료 시각은 보지 않는다. 결제 서비스가 PAID로 응답했으면 만료 전 결제로 판단한 것이므로, 반영이 만료 시각 뒤여도 PAID로 둔다
+     */
+    public void completePayment(LocalDateTime now) {
+        requirePaying();
         this.paidAt = now;
         changeStatus(OrderStatus.PAID, null);   // 주문이력도 함께 쌓임
     }
 
+    // 결제 실패 반영 (잔액 부족·주문 만료): PAYING → PAYMENT_FAILED. 다시 결제하거나, 만료되면 만료 스케줄러가 취소한다
+    public void failPayment(String reason) {
+        requirePaying();
+        changeStatus(OrderStatus.PAYMENT_FAILED, reason);
+    }
+
+    private void requirePaying() {
+        if (status != OrderStatus.PAYING) {
+            throw new IllegalStateException("결제 중인 주문만 결제 결과를 반영할 수 있습니다. orderId=" + getId() + ", status=" + status);
+        }
+    }
+
+    // 결제 시작과 성공 반영을 한 번에 (테스트 준비용: 결제 완료 주문 만들기)
+    public void pay(LocalDateTime now) {
+        startPaying("ORDER-" + getId() + "-PAY-" + UUID.randomUUID(), now);
+        completePayment(now);
+    }
+
     // 주문 취소
     public void cancel(OrderCancelType cancelType, String reason, LocalDateTime now) {
+        if (status == OrderStatus.PAYING) {
+            throw new DomainException(OrderErrorCode.PAYMENT_IN_PROGRESS);
+        }
         if (!isPaymentPending()) {
             throw new DomainException(OrderErrorCode.ORDER_NOT_CANCELABLE);
         }

@@ -103,7 +103,13 @@ public class CouponFacade {
         return couponReserveCartCouponUseCase.reserve(memberId, couponId, orderId, orderAmount, now);
     }
 
-    // 주문의 예약 쿠폰 사용 처리 (결제 성공). 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE로 결제와 함께 롤백
+    // 주문의 예약 쿠폰을 지금 쓸 수 있는지 확인 (결제 시작). 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE
+    @Transactional(readOnly = true)
+    public void validateReservedCouponsUsable(Long orderId, LocalDateTime now) {
+        couponUseReservedCouponsUseCase.validateUsable(orderId, now);
+    }
+
+    // 주문의 예약 쿠폰 사용 처리 (결제 성공 반영). 쿠폰이 그사이 중지됐어도 사용 처리한다
     @Transactional
     public int useReservedCoupons(Long orderId, LocalDateTime now) {
         return couponUseReservedCouponsUseCase.use(orderId, now);

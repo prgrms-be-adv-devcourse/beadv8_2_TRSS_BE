@@ -45,7 +45,8 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_COUPON_NOT_AVAILABLE(409, "아직 주문에 쿠폰을 사용할 수 없습니다."),
 
     // 결제
-    INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다.");
+    INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다."),
+    PAYMENT_IN_PROGRESS(409, "결제를 확인하고 있습니다. 잠시 후 주문 상태를 다시 확인해 주세요.");
 
     private final int status;
     private final String msg;

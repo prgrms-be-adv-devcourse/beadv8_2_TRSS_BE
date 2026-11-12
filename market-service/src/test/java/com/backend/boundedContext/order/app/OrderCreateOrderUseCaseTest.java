@@ -169,11 +169,11 @@ class OrderCreateOrderUseCaseTest {
     }
 
     @Test
-    @DisplayName("결제 대기 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER, 응답에 그 주문 ID를 담는다")
+    @DisplayName("결제 대기·결제 중 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER, 응답에 그 주문 ID를 담는다")
     void inPendingOrder() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
         givenOptions(onSale(100L, 15000));
-        given(orderRepository.findOrderIdsContainingOptions(BUYER_ID, List.of(100L), Order.PAYMENT_PENDING_STATUSES))
+        given(orderRepository.findOrderIdsContainingOptions(BUYER_ID, List.of(100L), Order.PAYMENT_UNFINISHED_STATUSES))
                 .willReturn(List.of(ORDER_ID));
 
         assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 15000, null))

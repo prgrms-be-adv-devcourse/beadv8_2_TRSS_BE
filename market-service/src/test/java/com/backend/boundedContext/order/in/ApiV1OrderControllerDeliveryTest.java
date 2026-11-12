@@ -140,7 +140,7 @@ class ApiV1OrderControllerDeliveryTest {
                 9L, "20261108-0001", OrderStatus.PAID, 10_000, LocalDateTime.now(), LocalDateTime.now(), 0,
                 LocalDateTime.now(), null, null, List.of(), List.of(),
                 new ShippingAddressResponse("홍길동", "01012345678", "06236", "서울", null, null),
-                null, null, true, 0, 0, 12_500, 2_500));
+                null, null, true, 0, 0, 12_500, 2_500, false));
 
         mockMvc.perform(get("/api/v1/orders/9").header("Authorization", bearer()))
                 .andExpect(status().isOk())

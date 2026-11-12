@@ -42,8 +42,14 @@ public interface CouponApi {
     long reserveCartCoupon(Long memberId, Long couponId, Long orderId, long orderAmount, LocalDateTime now);
 
     /**
-     * 결제 성공: 주문에 예약된 쿠폰을 모두 사용 처리한다 (결제 트랜잭션 안에서, 결제 요청 전).
-     * 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE로 결제 전체를 롤백시킨다. 예약이 없으면 0.
+     * 결제 시작 전 확인: 주문에 예약된 쿠폰을 지금 쓸 수 있는지 본다 (결제 시작 트랜잭션 안에서, 주문을 PAYING으로 바꾸기 전).
+     * 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE. 예약이 없으면 아무것도 하지 않는다.
+     */
+    void validateReservedCouponsUsable(Long orderId, LocalDateTime now);
+
+    /**
+     * 결제 성공 반영: 주문에 예약된 쿠폰을 모두 사용 처리한다 (결제 결과 반영 트랜잭션 안에서, 주문 PAID와 함께).
+     * 쿠폰 상태·기간은 보지 않는다. 결제 시작 때 확인했고 예약이 할인을 보장하므로, 그사이 중지돼도 실패하지 않는다. 예약이 없으면 0.
      */
     int useReservedCoupons(Long orderId, LocalDateTime now);
 
