@@ -93,6 +93,8 @@ public class OrderGetCartUseCase {
                 option == null ? null : option.optionName(),
                 option == null ? null : option.thumbnailUrl(),
                 price,
+                option == null ? 0 : option.listPrice(),
+                option == null ? null : option.discountRate(),
                 item.getQuantity(),
                 price * item.getQuantity(),
                 item.isSelected(),

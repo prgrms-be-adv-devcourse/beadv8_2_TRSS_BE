@@ -142,7 +142,9 @@ public class OrderGetOrderDetailUseCase {
                 item.getUnitPrice(),
                 item.getQuantity(),
                 item.getLineAmount(),
-                item.getDiscountAmount()
+                item.getDiscountAmount(),
+                item.getListUnitPrice(),
+                item.getDiscountRate()
         );
     }
 }

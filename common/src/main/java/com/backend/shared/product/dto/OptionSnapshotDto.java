@@ -36,14 +36,4 @@ public record OptionSnapshotDto(
         ProductUnsaleableReason unsaleableReason,
         String thumbnailUrl
 ) {
-    /**
-     * listPrice·discountRate 없이 만드는 생성자 (listPrice = price, discountRate = null).
-     * 주문 모듈의 기존 코드·테스트가 깨지지 않게 둔다. 주문 모듈이 두 값을 쓰게 되면 지운다.
-     */
-    public OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
-                             long price, int stock, boolean saleable, ProductUnsaleableReason unsaleableReason,
-                             String thumbnailUrl) {
-        this(optionId, productId, sellerId, productName, optionName, price, price, null, stock, saleable,
-                unsaleableReason, thumbnailUrl);
-    }
 }

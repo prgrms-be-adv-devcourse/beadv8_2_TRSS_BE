@@ -244,7 +244,9 @@ public class OrderCreateOrderUseCase {
                 option.optionName(),
                 sellerNames.get(option.sellerId()),
                 option.price(),
-                item.getQuantity()
+                item.getQuantity(),
+                option.listPrice(),      // 표시용 정가·할인율은 스냅샷 값 그대로 (다시 계산하지 않는다)
+                option.discountRate()
         );
     }
 }
