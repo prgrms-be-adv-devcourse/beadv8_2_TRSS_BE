@@ -68,7 +68,7 @@ public class PaymentFacade {
         return paymentGetWalletUseCase.getWallet(memberId);
     }
 
-    // 결과가 정해지지 않은 충전 건(READY·PROCESSING)이 있는지
+    // 결과가 정해지지 않은 충전 건(READY·PROCESSING·CANCELING)이 있는지
     @Transactional(readOnly = true)
     public boolean hasPendingTopups(Long memberId) {
         return paymentCheckPendingTopupsUseCase.hasPendingTopups(memberId);
