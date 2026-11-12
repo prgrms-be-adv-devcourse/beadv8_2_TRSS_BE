@@ -174,6 +174,41 @@ public class Topup extends BaseIdAndTime {
         this.status = TopupStatus.DONE;
     }
 
+    /**
+     * 허용하지 않은 결제 수단으로 승인됨: PROCESSING → METHOD_CANCELING, 취소 회차 +1
+     * 예치금에 반영하지 않으므로 지갑·원장은 건드리지 않고, PG 전액 취소 결과를 기다림
+     */
+    public void startMethodCancel() {
+        if (status != TopupStatus.PROCESSING) throw new DomainException(PaymentErrorCode.TOPUP_ALREADY_PROCESSED);
+        this.cancelAttempts++;
+        this.status = TopupStatus.METHOD_CANCELING;
+    }
+
+    // 허용하지 않은 결제 수단 취소를 다시 요청: 취소 회차만 늘려 새 멱등 키로 요청하게 함
+    public void retryMethodCancel() {
+        if (status != TopupStatus.METHOD_CANCELING) throw new DomainException(PaymentErrorCode.TOPUP_ALREADY_PROCESSED);
+        this.cancelAttempts++;
+    }
+
+    // 허용하지 않은 결제 수단 전액 취소 확정: METHOD_CANCELING → FAILED_METHOD_NOT_ALLOWED
+    public void completeMethodCancel(String reason, LocalDateTime canceledAt) {
+        if (status != TopupStatus.METHOD_CANCELING) throw new DomainException(PaymentErrorCode.TOPUP_ALREADY_PROCESSED);
+        this.canceledAmount = amount;
+        this.canceledAt = canceledAt;
+        this.failReason = reason;
+        this.status = TopupStatus.FAILED_METHOD_NOT_ALLOWED;
+    }
+
+    // 이 회차의 허용하지 않은 결제 수단 취소가 아직 진행 중인지 결과를 반영하기 전에 확인해, 이미 확정됐거나 재시도로 회차가 바뀐 뒤 늦게 온 결과는 반영하지 않게 함
+    public boolean isMethodCancelingAttempt(int attempt) {
+        return status == TopupStatus.METHOD_CANCELING && cancelAttempts == attempt;
+    }
+
+    // 허용하지 않은 결제 수단 전액 취소의 PG 멱등 키. 충전 취소 키와 겹치지 않게 구분하고, 재시도마다 회차를 넣음
+    public String methodCancelIdempotencyKey() {
+        return TOSS_ORDER_ID_PREFIX + getId() + "-METHOD-CANCEL-" + cancelAttempts;
+    }
+
     // 충전 반영 원장(CHARGE)의 멱등 키. 같은 충전 건은 한 번만 예치금에 반영
     public String chargeIdempotencyKey() {
         return TOSS_ORDER_ID_PREFIX + getId() + "-CHARGE";

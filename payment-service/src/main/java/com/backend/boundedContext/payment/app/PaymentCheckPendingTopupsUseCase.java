@@ -16,7 +16,8 @@ public class PaymentCheckPendingTopupsUseCase {
 
     // 결과가 아직 정해지지 않은 상태. READY는 결제창 진행 중, PROCESSING은 승인 중이거나 대사 스케줄러가 결과를 확인할 건
     // CANCELING은 충전 취소 중이거나 결과를 확인할 건 (취소가 거절되면 잔액이 다시 들어옴)
-    private static final Set<TopupStatus> PENDING_STATUSES = EnumSet.of(TopupStatus.READY, TopupStatus.PROCESSING, TopupStatus.CANCELING);
+    // METHOD_CANCELING은 허용하지 않은 결제 수단이라 PG 전액 취소 중인 건 (돈이 아직 결제 수단으로 돌아가지 않음)
+    private static final Set<TopupStatus> PENDING_STATUSES = EnumSet.of(TopupStatus.READY, TopupStatus.PROCESSING, TopupStatus.CANCELING, TopupStatus.METHOD_CANCELING);
 
     private final TopupRepository topupRepository;
 
