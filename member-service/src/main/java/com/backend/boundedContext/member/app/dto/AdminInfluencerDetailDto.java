@@ -20,7 +20,7 @@ public record AdminInfluencerDetailDto(
         String introduction,
         LocalDateTime appliedAt,
         LocalDateTime decidedAt,
-        String reason,                  // 가장 최근 이력의 사유 (반려·해제)
+        String reason,                  // 가장 최근 이력의 사유 (반려)
         List<History> histories         // 오래된 순
 ) {
     public record History(

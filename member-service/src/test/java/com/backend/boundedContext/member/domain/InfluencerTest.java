@@ -61,19 +61,6 @@ class InfluencerTest {
     }
 
     @Test
-    @DisplayName("승인된 인플루언서만 자격 해제할 수 있고, 해제하면 REVOKED")
-    void revoke() {
-        Influencer influencer = approved();
-
-        InfluencerStatusHistory history = influencer.revoke("쿠폰 무단 배포");
-
-        assertThat(influencer.getStatus()).isEqualTo(InfluencerStatus.REVOKED);
-        assertThat(history.getFromStatus()).isEqualTo(InfluencerStatus.APPROVED);
-        assertThat(history.getReason()).isEqualTo("쿠폰 무단 배포");
-        assertStateInvalid(() -> pending().revoke("사유"));
-    }
-
-    @Test
     @DisplayName("심사 중일 때만 승인·반려할 수 있다")
     void decideOnlyPending() {
         assertStateInvalid(() -> approved().approve());
@@ -104,15 +91,6 @@ class InfluencerTest {
     void reapplyWhileOpen() {
         assertErrorCode(() -> pending().applyAgain("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
         assertErrorCode(() -> approved().applyAgain("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
-    }
-
-    @Test
-    @DisplayName("자격 해제된 회원은 다시 신청할 수 없다")
-    void reapplyAfterRevoke() {
-        Influencer influencer = approved();
-        influencer.revoke("쿠폰 무단 배포");
-
-        assertErrorCode(() -> influencer.applyAgain("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_REAPPLY_NOT_ALLOWED);
     }
 
     private static Influencer pending() {

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "관리자 인플루언서", description = "인플루언서 신청 목록·상세, 승인·반려·자격 해제")
+@Tag(name = "관리자 인플루언서", description = "인플루언서 신청 목록·상세, 승인·반려")
 @RestController
 @RequestMapping("/api/v1/admin/influencers")
 @RequiredArgsConstructor
@@ -55,14 +55,5 @@ public class ApiV1AdminInfluencerController {
             @Valid @RequestBody InfluencerReasonRequest request
     ) {
         return RsData.of("200-1", "인플루언서 신청을 반려했습니다.", memberInfluencerFacade.rejectInfluencer(influencerId, request.reason()));
-    }
-
-    @Operation(summary = "인플루언서 자격 해제", description = "승인된(APPROVED) 인플루언서만 해제할 수 있고, 사유는 필수입니다. 다시 신청할 수 없고, 협약은 자동으로 종료됩니다.")
-    @PostMapping("/{influencerId}/revoke")
-    public RsData<AdminInfluencerDetailDto> revoke(
-            @PathVariable Long influencerId,
-            @Valid @RequestBody InfluencerReasonRequest request
-    ) {
-        return RsData.of("200-1", "인플루언서 자격을 해제했습니다.", memberInfluencerFacade.revokeInfluencer(influencerId, request.reason()));
     }
 }

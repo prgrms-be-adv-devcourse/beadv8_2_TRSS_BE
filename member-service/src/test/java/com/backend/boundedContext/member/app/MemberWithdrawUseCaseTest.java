@@ -25,24 +25,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.app.dto.WithdrawalNotAllowedResponse;
-import com.backend.boundedContext.member.domain.Influencer;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
-import com.backend.boundedContext.member.domain.InfluencerStatusHistory;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.MemberPolicy;
 import com.backend.boundedContext.member.domain.Seller;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
 import com.backend.boundedContext.member.domain.WithdrawalBlockReason;
-import com.backend.boundedContext.member.out.InfluencerRepository;
-import com.backend.boundedContext.member.out.InfluencerStatusHistoryRepository;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
-import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
-import com.backend.shared.member.event.InfluencerRevokedEvent;
 import com.backend.shared.member.dto.MemberStatus;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,15 +68,6 @@ class MemberWithdrawUseCaseTest {
 
     @Mock
     private MemberSocialAccountRepository memberSocialAccountRepository;
-
-    @Mock
-    private InfluencerRepository influencerRepository;
-
-    @Mock
-    private InfluencerStatusHistoryRepository influencerStatusHistoryRepository;
-
-    @Mock
-    private EventPublisher eventPublisher;
 
     @InjectMocks
     private MemberWithdrawUseCase memberWithdrawUseCase;
@@ -130,54 +114,6 @@ class MemberWithdrawUseCaseTest {
         assertThat(seller.getAccountNumber()).isEqualTo("0");
         assertThat(rejected.getRepresentativeName()).isNull();
         assertThat(rejected.getAccountLast4()).isNull();
-    }
-
-    @Test
-    @DisplayName("승인된 인플루언서가 탈퇴하면 자격이 해제(REVOKED)되고 협약 종료 이벤트를 보낸다")
-    void withdraw_approvedInfluencerRevoked() {
-        Influencer influencer = Influencer.apply(member, "민지", "https://instagram.com/a", "소개");
-        ReflectionTestUtils.setField(influencer, "id", 20L);
-        influencer.approve();
-        givenWithdrawable();
-        given(influencerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(influencer));
-
-        memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!");
-
-        assertThat(influencer.getStatus()).isEqualTo(InfluencerStatus.REVOKED);
-        verify(influencerStatusHistoryRepository).save(any(InfluencerStatusHistory.class));
-        verify(eventPublisher).publish(new InfluencerRevokedEvent(20L, MEMBER_ID, Influencer.WITHDRAWAL_REASON));
-    }
-
-    @Test
-    @DisplayName("심사 중인 인플루언서가 탈퇴하면 자격이 해제되지만, 협약이 없으니 이벤트는 보내지 않는다")
-    void withdraw_pendingInfluencerRevoked() {
-        Influencer influencer = Influencer.apply(member, "민지", "https://instagram.com/a", "소개");
-        givenWithdrawable();
-        given(influencerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(influencer));
-
-        memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!");
-
-        assertThat(influencer.getStatus()).isEqualTo(InfluencerStatus.REVOKED);
-        verify(eventPublisher, never()).publish(any());
-    }
-
-    @Test
-    @DisplayName("반려된 인플루언서는 탈퇴해도 상태를 바꾸지 않는다")
-    void withdraw_rejectedInfluencerUntouched() {
-        Influencer influencer = Influencer.apply(member, "민지", "https://instagram.com/a", "소개");
-        influencer.reject("본인 확인 불가");
-        givenWithdrawable();
-        given(influencerRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of(influencer));
-
-        memberWithdrawUseCase.withdraw(MEMBER_ID, "palette123!");
-
-        assertThat(influencer.getStatus()).isEqualTo(InfluencerStatus.REJECTED);
-        verify(influencerStatusHistoryRepository, never()).save(any());
-    }
-
-    private void givenWithdrawable() {
-        given(passwordEncoder.matches("palette123!", "encoded")).willReturn(true);
-        given(memberWithdrawalSupport.check(MEMBER_ID)).willReturn(WithdrawalCheckDto.of(false, false, 0, 0, false, false));
     }
 
     @Test

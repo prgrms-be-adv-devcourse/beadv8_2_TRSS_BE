@@ -29,7 +29,7 @@ public class ApiV1InfluencerController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "인플루언서 신청", description = "반려된 뒤에는 같은 인플루언서로 다시 신청한다. 자격이 해제됐으면 다시 신청할 수 없다")
+    @Operation(summary = "인플루언서 신청", description = "반려된 뒤에는 같은 인플루언서로 다시 신청한다")
     public RsData<MyInfluencerResponse> apply(
             @AuthenticationPrincipal AuthMember authMember,
             @Valid @RequestBody InfluencerApplyRequest request
@@ -39,7 +39,7 @@ public class ApiV1InfluencerController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "내 인플루언서 신청 정보", description = "반려·해제됐으면 그 사유와 날짜도 보여 준다. 신청한 적이 없으면 404")
+    @Operation(summary = "내 인플루언서 신청 정보", description = "반려됐으면 그 사유와 날짜도 보여 준다. 신청한 적이 없으면 404")
     public RsData<MyInfluencerResponse> getMyInfluencer(@AuthenticationPrincipal AuthMember authMember) {
         return RsData.of("200-1", "내 인플루언서 정보를 조회했습니다.", memberInfluencerFacade.getMyInfluencer(authMember.memberId()));
     }

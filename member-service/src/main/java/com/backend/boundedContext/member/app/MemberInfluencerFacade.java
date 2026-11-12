@@ -25,7 +25,6 @@ public class MemberInfluencerFacade {
     private final MemberGetInfluencerDetailUseCase memberGetInfluencerDetailUseCase;
     private final MemberApproveInfluencerUseCase memberApproveInfluencerUseCase;
     private final MemberRejectInfluencerUseCase memberRejectInfluencerUseCase;
-    private final MemberRevokeInfluencerUseCase memberRevokeInfluencerUseCase;
 
     @Transactional
     public MyInfluencerResponse applyInfluencer(Long memberId, InfluencerApplyRequest request) {
@@ -65,10 +64,5 @@ public class MemberInfluencerFacade {
     @Transactional
     public AdminInfluencerDetailDto rejectInfluencer(Long influencerId, String reason) {
         return memberRejectInfluencerUseCase.reject(influencerId, reason);
-    }
-
-    @Transactional
-    public AdminInfluencerDetailDto revokeInfluencer(Long influencerId, String reason) {
-        return memberRevokeInfluencerUseCase.revoke(influencerId, reason);
     }
 }

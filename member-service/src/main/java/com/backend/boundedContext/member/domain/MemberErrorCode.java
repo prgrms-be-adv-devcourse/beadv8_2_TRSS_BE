@@ -38,7 +38,6 @@ public enum MemberErrorCode implements ErrorCode {
     // 인플루언서
     INFLUENCER_NOT_FOUND(404, "인플루언서 신청 내역이 없습니다."),
     INFLUENCER_ALREADY_APPLIED(409, "이미 진행 중인 인플루언서 신청이 있습니다."),
-    INFLUENCER_REAPPLY_NOT_ALLOWED(409, "자격이 해제된 인플루언서는 다시 신청할 수 없습니다."),
     INFLUENCER_STATE_INVALID(409, "현재 인플루언서 상태에서는 처리할 수 없습니다."),
     INFLUENCER_NOT_APPROVED(403, "승인된 인플루언서만 이용할 수 있습니다."),               // market의 인플루언서 기능(협약 수락 등) 권한 확인
 

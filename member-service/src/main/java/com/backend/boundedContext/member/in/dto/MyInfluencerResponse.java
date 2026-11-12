@@ -13,8 +13,8 @@ public record MyInfluencerResponse(
         String snsUrl,
         String introduction,
         LocalDateTime appliedAt,
-        LocalDateTime decidedAt,    // 승인일·반려일·해제일. 심사 중이면 null
-        String reason               // 반려·해제 사유. 그 밖의 상태면 null
+        LocalDateTime decidedAt,    // 승인일·반려일. 심사 중이면 null
+        String reason               // 반려 사유. 그 밖의 상태면 null
 ) {
     public static MyInfluencerResponse from(Influencer influencer, InfluencerStatusHistory latest) {
         return new MyInfluencerResponse(

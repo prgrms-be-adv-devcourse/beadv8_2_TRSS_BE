@@ -114,18 +114,6 @@ class InfluencerApplyIntegrationTest {
     }
 
     @Test
-    @DisplayName("자격이 해제된 회원은 다시 신청할 수 없다")
-    void reapplyAfterRevoke() {
-        Long memberId = createMember();
-        memberInfluencerFacade.applyInfluencer(memberId, request("데일리 뷰티 민지"));
-        change(memberId, Influencer::approve);
-        change(memberId, influencer -> influencer.revoke("쿠폰 무단 배포"));
-
-        assertErrorCode(() -> memberInfluencerFacade.applyInfluencer(memberId, request("다시")),
-                MemberErrorCode.INFLUENCER_REAPPLY_NOT_ALLOWED);
-    }
-
-    @Test
     @DisplayName("신청한 적이 없으면 내 정보는 404, /users/me의 인플루언서 상태는 null")
     void notApplied() {
         Long memberId = createMember();

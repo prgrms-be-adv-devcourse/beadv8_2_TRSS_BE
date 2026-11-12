@@ -42,17 +42,15 @@ class ApiV1AdminInfluencerControllerTest {
     }
 
     @Test
-    @DisplayName("반려·해제 사유가 비면 400")
+    @DisplayName("반려 사유가 비면 400")
     void blankReason() throws Exception {
-        for (String action : new String[]{"reject", "revoke"}) {
-            mockMvc.perform(post("/api/v1/admin/influencers/7/" + action)
-                            .header("Authorization", "Bearer " + token(MemberRole.ADMIN))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"reason": " "}
-                                    """))
-                    .andExpect(status().isBadRequest());
-        }
+        mockMvc.perform(post("/api/v1/admin/influencers/7/reject")
+                        .header("Authorization", "Bearer " + token(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": " "}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     private String token(MemberRole role) {
