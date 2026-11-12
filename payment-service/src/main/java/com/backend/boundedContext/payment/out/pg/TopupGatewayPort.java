@@ -19,8 +19,8 @@ public interface TopupGatewayPort {
     // 결제 승인. 결제창 인증을 마친 결제를 최종 승인하며, 성공하면 실제로 돈이 빠져나감
     PgPaymentResult confirm(String paymentKey, String orderId, long amount);
 
-    // 주문번호로 결제 조회 (결과를 모르는 PROCESSING·CANCELING 충전 건의 최종 결과 확인용)
-    PgPaymentResult getPaymentByOrderId(String orderId);
+    // 결제키로 결제 조회 (결과를 모르는 PROCESSING·CANCELING 충전 건의 최종 결과 확인용)
+    PgPaymentResult getPayment(String paymentKey);
 
     // 결제 취소. cancelAmount만큼 부분 취소하며, 같은 idempotencyKey로 다시 요청하면 PG가 한 번만 취소함
     PgPaymentResult cancel(String paymentKey, long cancelAmount, String reason, String idempotencyKey);

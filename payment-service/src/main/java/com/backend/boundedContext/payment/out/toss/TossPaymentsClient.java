@@ -76,11 +76,12 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 주문번호로 결제 조회 (응답 시간 초과로 PROCESSING에 남은 충전 건의 최종 결과 확인용)
+     * 결제키로 결제 조회 (결과를 모르는 PROCESSING·CANCELING 충전 건의 최종 결과 확인용)
+     * 주문번호 조회(/v1/payments/orders/{orderId})는 결제위젯 시크릿 키(test_gsk·live_gsk)로 호출할 수 없어 결제키로 조회함
      */
-    public TossPaymentResponse getPaymentByOrderId(String orderId) {
+    public TossPaymentResponse getPayment(String paymentKey) {
         return call(() -> restClient.get()
-                .uri("/v1/payments/orders/{orderId}", orderId)       // {orderId} 자리에 주문번호가 들어감
+                .uri("/v1/payments/{paymentKey}", paymentKey)        // {paymentKey} 자리에 결제키가 들어감
                 .retrieve()
                 .body(TossPaymentResponse.class));
     }
@@ -100,7 +101,7 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 요청 실행과 예외 변환을 한곳에서 처리 (confirm·getPaymentByOrderId·cancel이 같은 try-catch를 반복하지 않게 함)
+     * 요청 실행과 예외 변환을 한곳에서 처리 (confirm·getPayment·cancel이 같은 try-catch를 반복하지 않게 함)
      * request는 아직 실행되지 않은 요청 코드이고, request.get()을 부를 때 실제로 실행됨
      * Spring HTTP 예외를 우리 예외로 바꿔, app 계층이 HTTP 라이브러리를 몰라도 되게 함
      */

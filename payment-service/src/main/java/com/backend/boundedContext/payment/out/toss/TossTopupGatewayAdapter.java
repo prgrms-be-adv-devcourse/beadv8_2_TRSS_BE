@@ -48,7 +48,7 @@ public class TossTopupGatewayAdapter implements TopupGatewayPort {
     // INVALID_API_KEY: 잘못된 시크릿키 연동 정보(키 세트 불일치 등), UNAUTHORIZED_KEY: 인증되지 않은 키
     private static final Set<String> API_KEY_ERROR_CODES = Set.of("INVALID_API_KEY", "UNAUTHORIZED_KEY");
 
-    // 주문번호로 조회했는데 토스에 결제가 없을 때 주는 코드. 승인 요청이 토스에 닿지 않았거나 승인되지 않아 돈이 빠지지 않음
+    // 조회했는데 토스에 결제가 없을 때 주는 코드. 결제가 승인되지 않아 돈이 빠지지 않음
     private static final String NOT_FOUND_PAYMENT = "NOT_FOUND_PAYMENT";
 
     // 취소가 4xx로 실패해도 취소됐을 수 있는 코드
@@ -100,9 +100,9 @@ public class TossTopupGatewayAdapter implements TopupGatewayPort {
     }
 
     @Override
-    public PgPaymentResult getPaymentByOrderId(String orderId) {
+    public PgPaymentResult getPayment(String paymentKey) {
         try {
-            return toResult(tossPaymentsClient.getPaymentByOrderId(orderId));
+            return toResult(tossPaymentsClient.getPayment(paymentKey));
         } catch (TossTimeoutException e) {
             throw new PgResultUnknownException(e);
         } catch (TossPaymentException e) {

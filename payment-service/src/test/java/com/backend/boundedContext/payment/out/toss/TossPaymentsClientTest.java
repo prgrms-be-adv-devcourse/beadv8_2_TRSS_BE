@@ -192,27 +192,28 @@ class TossPaymentsClientTest {
     }
 
     @Test
-    @DisplayName("주문번호 조회: 주문번호로 결제 결과를 받는다")
-    void getPaymentByOrderId_success() {
-        server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_ID))
+    @DisplayName("결제 조회: 결제키 경로로 결제 결과를 받는다 (주문번호 조회는 결제위젯 시크릿 키로 호출할 수 없음)")
+    void getPayment_success() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/pk_1"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(PAYMENT_JSON, MediaType.APPLICATION_JSON));
 
-        TossPaymentResponse response = client.getPaymentByOrderId(ORDER_ID);
+        TossPaymentResponse response = client.getPayment("pk_1");
 
         server.verify();
+        assertThat(response.paymentKey()).isEqualTo("pk_1");
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
         assertThat(response.status()).isEqualTo("DONE");
     }
 
     @Test
-    @DisplayName("주문번호 조회: 결제가 없으면 TossPaymentException (404)")
-    void getPaymentByOrderId_notFound() {
-        server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_ID))
+    @DisplayName("결제 조회: 결제가 없으면 TossPaymentException (404)")
+    void getPayment_notFound() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/pk_1"))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"code\":\"NOT_FOUND_PAYMENT\",\"message\":\"존재하지 않는 결제 정보 입니다.\"}"));
 
-        assertThatThrownBy(() -> client.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> client.getPayment("pk_1"))
                 .isInstanceOfSatisfying(TossPaymentException.class, e -> {
                     assertThat(e.getHttpStatus()).isEqualTo(404);
                     assertThat(e.getCode()).isEqualTo("NOT_FOUND_PAYMENT");

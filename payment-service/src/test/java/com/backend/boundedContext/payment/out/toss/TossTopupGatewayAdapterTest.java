@@ -77,9 +77,9 @@ class TossTopupGatewayAdapterTest {
     })
     @DisplayName("토스 결제 status를 PG 결제 상태로 바꾸고, 원래 값도 담는다")
     void status(String tossStatus, PgPaymentStatus expected) {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss(tossStatus, "카드", null));
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY)).willReturn(toss(tossStatus, "카드", null));
 
-        PgPaymentResult result = adapter.getPaymentByOrderId(ORDER_ID);
+        PgPaymentResult result = adapter.getPayment(PAYMENT_KEY);
 
         assertThat(result.status()).isEqualTo(expected);
         assertThat(result.pgStatus()).isEqualTo(tossStatus);   // 원래 값은 기록용으로 그대로 담음
@@ -96,17 +96,17 @@ class TossTopupGatewayAdapterTest {
     })
     @DisplayName("토스 결제 method(한글 값)를 결제 수단으로 바꾼다 (결제창에 없는 수단은 OTHER)")
     void method(String tossMethod, PgPaymentMethod expected) {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss("DONE", tossMethod, null));
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY)).willReturn(toss("DONE", tossMethod, null));
 
-        assertThat(adapter.getPaymentByOrderId(ORDER_ID).method()).isEqualTo(expected);
+        assertThat(adapter.getPayment(PAYMENT_KEY).method()).isEqualTo(expected);
     }
 
     @Test
     @DisplayName("method가 없으면 OTHER, 승인 시각이 없으면 null")
     void method_null() {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss("IN_PROGRESS", null, null));
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY)).willReturn(toss("IN_PROGRESS", null, null));
 
-        PgPaymentResult result = adapter.getPaymentByOrderId(ORDER_ID);
+        PgPaymentResult result = adapter.getPayment(PAYMENT_KEY);
 
         assertThat(result.method()).isEqualTo(PgPaymentMethod.OTHER);
         assertThat(result.approvedAt()).isNull();
@@ -168,10 +168,10 @@ class TossTopupGatewayAdapterTest {
     @Test
     @DisplayName("조회: 404 NOT_FOUND_PAYMENT면 결제 없음")
     void getPayment_notFound() {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID))
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY))
                 .willThrow(new TossPaymentException(404, "NOT_FOUND_PAYMENT", "존재하지 않는 결제 정보 입니다.", null));
 
-        assertThatThrownBy(() -> adapter.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> adapter.getPayment(PAYMENT_KEY))
                 .isInstanceOf(PgPaymentNotFoundException.class);
     }
 
@@ -183,20 +183,20 @@ class TossTopupGatewayAdapterTest {
     })
     @DisplayName("조회: 결제 없음 외의 오류는 결과 모름 (다음에 다시 확인)")
     void getPayment_unknown(int httpStatus, String code) {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID))
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY))
                 .willThrow(new TossPaymentException(httpStatus, code, "메시지", null));
 
-        assertThatThrownBy(() -> adapter.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> adapter.getPayment(PAYMENT_KEY))
                 .isInstanceOf(PgResultUnknownException.class);
     }
 
     @Test
     @DisplayName("조회: 응답을 받지 못하면 결과 모름")
     void getPayment_timeout() {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID))
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY))
                 .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
 
-        assertThatThrownBy(() -> adapter.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> adapter.getPayment(PAYMENT_KEY))
                 .isInstanceOf(PgResultUnknownException.class);
     }
 

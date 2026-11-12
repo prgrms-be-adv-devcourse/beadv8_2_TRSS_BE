@@ -97,7 +97,7 @@ class TopupReconcileIntegrationTest {
     void reconcile_approved() {
         Processing topup = processing();
         moveUpdatedAtMinutesAgo(topup.topupId(), 6);
-        given(tossPaymentsClient.getPaymentByOrderId(topup.orderId())).willReturn(tossDone(topup));
+        given(tossPaymentsClient.getPayment(topup.paymentKey())).willReturn(tossDone(topup));
 
         TopupReconcileResult result = paymentFacade.reconcileProcessingTopups();
 
@@ -113,7 +113,7 @@ class TopupReconcileIntegrationTest {
         Processing topup = processing();
         moveUpdatedAtMinutesAgo(topup.topupId(), 6);
         TossPaymentResponse toss = tossDone(topup);
-        given(tossPaymentsClient.getPaymentByOrderId(topup.orderId())).willReturn(toss);
+        given(tossPaymentsClient.getPayment(topup.paymentKey())).willReturn(toss);
         PgPaymentResult approved = new PgPaymentResult(toss.paymentKey(), toss.orderId(), PgPaymentStatus.APPROVED, toss.status(),
                 toss.totalAmount(), 0, PgPaymentMethod.CARD, toss.approvedAtKst());
 
@@ -144,17 +144,17 @@ class TopupReconcileIntegrationTest {
 
         paymentFacade.reconcileProcessingTopups();
 
-        verify(tossPaymentsClient, never()).getPaymentByOrderId(topup.orderId());
+        verify(tossPaymentsClient, never()).getPayment(topup.paymentKey());
         assertThat(topupRepository.findById(topup.topupId()).orElseThrow().getStatus()).isEqualTo(TopupStatus.PROCESSING);
     }
 
-    private record Processing(Long topupId, String orderId) {}
+    private record Processing(Long topupId, String orderId, String paymentKey) {}
 
     // 충전 준비 후 승인 시작(Tx1)까지 진행해 PROCESSING 건을 만든다
     private Processing processing() {
         TopupPrepareDto prepared = paymentFacade.prepareTopup(memberId, AMOUNT);
         paymentTopupConfirmProcessor.start(memberId, prepared.orderId(), "pk_reconcile_" + prepared.topupId(), AMOUNT);
-        return new Processing(prepared.topupId(), prepared.orderId());
+        return new Processing(prepared.topupId(), prepared.orderId(), "pk_reconcile_" + prepared.topupId());
     }
 
     // updated_at은 앱(KST) 기준 LocalDateTime으로 저장되므로 앱 시각으로 과거 시각을 넣음
@@ -163,7 +163,7 @@ class TopupReconcileIntegrationTest {
     }
 
     private TossPaymentResponse tossDone(Processing topup) {
-        return new TossPaymentResponse("pk_reconcile_" + topup.topupId(), topup.orderId(), "DONE", AMOUNT, "카드", null, null);
+        return new TossPaymentResponse(topup.paymentKey(), topup.orderId(), "DONE", AMOUNT, "카드", null, null);
     }
 
     private List<WalletTransaction> transactionsOfWallet() {
