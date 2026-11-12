@@ -1,6 +1,9 @@
 package com.backend.boundedContext.payment.app;
 
 import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.data.domain.PageRequest;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.backend.boundedContext.payment.app.dto.TopupCancelDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.domain.WalletTransactionType;
@@ -85,6 +89,17 @@ public class PaymentTopupCancelProcessor {
         // failCancel()이 취소 중 금액을 0으로 만들기 전에 되돌릴 금액·키를 읽음
         walletTransactionRepository.save(WalletTransaction.record(locked.wallet(), WalletTransactionType.CHARGE_CANCEL_RESTORE, topup.getCancelingAmount(), topup.getId(), topup.cancelRestoreIdempotencyKey()));
         topup.failCancel();
+    }
+
+    /**
+     * 취소 결과 확인 대상: 기준 시각 이전부터 CANCELING으로 남은 충전 건 (오래된 순, 최대 limit건)
+     * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 판단에 필요한 값만 넘김
+     */
+    @Transactional(readOnly = true)
+    public List<TopupCancelReconcileTarget> findReconcileTargets(LocalDateTime cutoff, int limit) {
+        return topupRepository.findStale(TopupStatus.CANCELING, cutoff, PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupCancelReconcileTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getCancelAttempts(), topup.getCanceledAmount(), topup.getCancelingAmount()))
+                .toList();
     }
 
     // 지갑 → 충전 건 순서로 잠금. 지갑을 찾으려면 회원 ID가 필요해하므로, 충전 건은 잠그지 않고 회원 ID만 먼저 읽음

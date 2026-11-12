@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -27,9 +28,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.backend.boundedContext.payment.app.dto.TopupCancelDto;
+import com.backend.boundedContext.payment.app.dto.TopupReconcileResult;
 import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
@@ -85,6 +88,9 @@ class TopupCancelIntegrationTest {
 
     @Autowired
     private PaymentTopupCancelProcessor paymentTopupCancelProcessor;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockitoBean
     private TossPaymentsClient tossPaymentsClient;
@@ -324,21 +330,75 @@ class TopupCancelIntegrationTest {
     }
 
     @Test
-    @DisplayName("취소 중에 결제가 취소되고 PG가 취소를 거절하면, 되살아난 금액과 취소하려던 금액이 모두 남은 금액으로 돌아온다")
-    void paymentCancelDuringCanceling_thenDeclined() {
+    @DisplayName("취소 중에 결제가 취소되고 대사가 취소 미반영을 확인하면, 되살아난 금액과 취소하려던 금액이 모두 남은 금액으로 돌아온다")
+    void paymentCancelDuringCanceling_thenNotCanceled() {
         String payKey = newKey();
         pay(10_000, payKey);
         given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
                 .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
         paymentFacade.cancelTopup(memberId, topup.getId());   // CANCELING, 취소 중 20,000
         paymentFacade.cancelPayment(payKey);                  // 남은 금액 +10,000, 잔액 +10,000
+        given(tossPaymentsClient.getPayment(topup.getPaymentKey())).willReturn(tossPayment("DONE", null));
+        moveUpdatedAtMinutesAgo(6);
 
-        paymentTopupCancelProcessor.fail(topup.getId(), 1);     // 대사가 PG 조회로 취소 미반영을 확인한 것처럼 확정 실패 반영
+        paymentFacade.reconcileCancelingTopups();
 
         Topup restored = savedTopup();
         assertThat(restored.getStatus()).isEqualTo(TopupStatus.DONE);
         assertThat(restored.getRemainingAmount()).isEqualTo(AMOUNT);
         assertThat(balance()).isEqualTo(AMOUNT);
+    }
+
+    @Test
+    @DisplayName("대사: PG 응답을 못 받아 CANCELING인 건을 PG 조회로 취소 확정한다 (잔액은 Tx1에서 이미 뺐으므로 그대로)")
+    void reconcile_completesCanceling() {
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+        paymentFacade.cancelTopup(memberId, topup.getId());
+        given(tossPaymentsClient.getPayment(topup.getPaymentKey()))
+                .willReturn(tossPayment("PARTIAL_CANCELED", List.of(new TossPaymentResponse.Cancel(AMOUNT, "DONE"))));
+        moveUpdatedAtMinutesAgo(6);
+
+        TopupReconcileResult result = paymentFacade.reconcileCancelingTopups();
+
+        assertThat(result.completed()).isGreaterThanOrEqualTo(1);
+        Topup canceled = savedTopup();
+        assertThat(canceled.getStatus()).isEqualTo(TopupStatus.CANCELED);
+        assertThat(canceled.getCanceledAmount()).isEqualTo(AMOUNT);
+        assertThat(balance()).isZero();
+        assertThat(transactionsOfWallet()).extracting(WalletTransaction::getType).containsExactly(WalletTransactionType.CHARGE_CANCEL);
+    }
+
+    @Test
+    @DisplayName("대사: PG에 이번 취소가 반영되지 않았으면 잔액·남은 금액을 되돌리고 원장 CHARGE_CANCEL_RESTORE를 남긴다")
+    void reconcile_restoresCanceling() {
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+        paymentFacade.cancelTopup(memberId, topup.getId());
+        given(tossPaymentsClient.getPayment(topup.getPaymentKey())).willReturn(tossPayment("DONE", null));
+        moveUpdatedAtMinutesAgo(6);
+
+        paymentFacade.reconcileCancelingTopups();
+
+        Topup restored = savedTopup();
+        assertThat(restored.getStatus()).isEqualTo(TopupStatus.DONE);
+        assertThat(restored.getRemainingAmount()).isEqualTo(AMOUNT);
+        assertThat(balance()).isEqualTo(AMOUNT);
+        assertThat(transactionsOfWallet()).extracting(WalletTransaction::getIdempotencyKey).containsExactlyInAnyOrder(
+                "TOPUP-" + topup.getId() + "-CANCEL-1", "TOPUP-" + topup.getId() + "-CANCEL-1-RESTORE");
+    }
+
+    @Test
+    @DisplayName("대사: 확인 대기 시간(5분)이 지나지 않은 CANCELING 건은 조회하지 않는다")
+    void reconcile_skipsRecentCanceling() {
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+        paymentFacade.cancelTopup(memberId, topup.getId());
+
+        paymentFacade.reconcileCancelingTopups();
+
+        verify(tossPaymentsClient, never()).getPayment(topup.getPaymentKey());
+        assertThat(savedTopup().getStatus()).isEqualTo(TopupStatus.CANCELING);
     }
 
     private PayResultDto pay(long amount) {
@@ -356,6 +416,14 @@ class TopupCancelIntegrationTest {
     private TossPaymentResponse tossCanceled(long cancelAmount) {
         return new TossPaymentResponse(topup.getPaymentKey(), topup.getTossOrderId(), "PARTIAL_CANCELED", AMOUNT, "카드", null,
                 List.of(new TossPaymentResponse.Cancel(cancelAmount, "DONE")));
+    }
+
+    private TossPaymentResponse tossPayment(String status, List<TossPaymentResponse.Cancel> cancels) {
+        return new TossPaymentResponse(topup.getPaymentKey(), topup.getTossOrderId(), status, AMOUNT, "카드", null, cancels);
+    }
+
+    private void moveUpdatedAtMinutesAgo(int minutes) {
+        jdbcTemplate.update("update topup set updated_at = ? where id = ?", LocalDateTime.now().minusMinutes(minutes), topup.getId());
     }
 
     private Topup savedTopup() {
