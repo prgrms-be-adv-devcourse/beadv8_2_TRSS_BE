@@ -10,7 +10,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -67,7 +66,7 @@ class OrderReturnTest {
         Order order = Order.create(1L, List.of(spec()), NOW, 15);
         order.pay(PAID_AT);
 
-        order.requestReturn(ReturnReasonCode.WRONG_ITEM, null, PAID_AT.plusDays(1));
+        order.requestReturn(ReturnReasonCode.CHANGE_OF_MIND, null, PAID_AT.plusDays(1));
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURN_REQUESTED);
     }
@@ -90,7 +89,7 @@ class OrderReturnTest {
     void request_nonOther_blankReason(String reason) {
         Order order = deliveredOrder();
 
-        order.requestReturn(ReturnReasonCode.NOT_AS_DESCRIBED, reason, DELIVERED_AT.plusDays(1));
+        order.requestReturn(ReturnReasonCode.CHANGE_OF_MIND, reason, DELIVERED_AT.plusDays(1));
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.RETURN_REQUESTED);
         assertThat(order.getReturnReason()).isNull();
@@ -113,9 +112,7 @@ class OrderReturnTest {
     void request_afterRejected() {
         Order order = deliveredOrder();
         order.requestReturn(ReturnReasonCode.DEFECTIVE, null, DELIVERED_AT.plusDays(1));
-        // 거절(rejectReturn)은 #333 범위라 거절 후 상태만 만든다: PAID + returnRejectedAt, returnRequestedAt은 그대로
-        ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
-        ReflectionTestUtils.setField(order, "returnRejectedAt", DELIVERED_AT.plusDays(2));
+        order.rejectReturn("사용 흔적이 있어 반품할 수 없습니다", DELIVERED_AT.plusDays(2));   // PAID로 돌아옴, returnRequestedAt은 그대로
 
         assertFails(() -> order.requestReturn(ReturnReasonCode.CHANGE_OF_MIND, null, DELIVERED_AT.plusDays(3)),
                 "409-RETURN_ALREADY_REQUESTED");

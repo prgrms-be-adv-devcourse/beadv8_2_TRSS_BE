@@ -2,7 +2,9 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
+import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
+import com.backend.boundedContext.order.domain.ReturnItemDecision;
 import com.backend.boundedContext.order.domain.ReturnReasonCode;
 import com.backend.boundedContext.order.domain.ShippingAddress;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
@@ -30,6 +32,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -252,11 +255,16 @@ class OrderGetOrderDetailUseCaseTest {
         return order;
     }
 
-    /** 반품 승인된 주문 (승인은 #333 범위라 상태·승인 시각만 만든다) */
+    /** 반품 승인된 주문 (항목 id는 저장 전이라 직접 붙인다) */
     private Order returnedOrder(Long orderId) {
         Order order = returnRequestedOrder(orderId);
-        ReflectionTestUtils.setField(order, "status", OrderStatus.RETURNED);
-        ReflectionTestUtils.setField(order, "returnedAt", RETURN_REQUESTED_AT.plusDays(1));
+        long itemId = orderId * 10;
+        List<ReturnItemDecision> decisions = new ArrayList<>();
+        for (OrderItem item : order.getItems()) {
+            ReflectionTestUtils.setField(item, "id", ++itemId);
+            decisions.add(new ReturnItemDecision(itemId, false));
+        }
+        order.approveReturn(decisions, RETURN_REQUESTED_AT.plusDays(1));
         return order;
     }
 
@@ -285,9 +293,7 @@ class OrderGetOrderDetailUseCaseTest {
     @DisplayName("거절돼 PAID로 돌아온 주문은 거절 시각·거절 사유를 담고, 환불 상태는 NONE")
     void return_rejected() {
         Order order = returnRequestedOrder(500L);
-        ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);   // 거절은 #333 범위라 결과 상태만 만든다
-        ReflectionTestUtils.setField(order, "returnRejectedAt", RETURN_REQUESTED_AT.plusDays(1));
-        ReflectionTestUtils.setField(order, "returnRejectReason", "사용 흔적이 있어 반품할 수 없습니다");
+        order.rejectReturn("사용 흔적이 있어 반품할 수 없습니다", RETURN_REQUESTED_AT.plusDays(1));
         given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
         given(paymentApi.getPaymentAttempts(500L)).willReturn(List.of(attempt(1L, PaymentAttemptStatus.PAID)));
 

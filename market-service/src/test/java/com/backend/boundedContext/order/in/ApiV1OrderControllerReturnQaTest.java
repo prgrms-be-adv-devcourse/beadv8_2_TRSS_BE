@@ -95,12 +95,12 @@ class ApiV1OrderControllerReturnQaTest {
     @Test
     @DisplayName("토큰의 회원 id로 요청한다(본문에 다른 값이 와도 무시), 공백뿐인 상세 사유도 그대로 Facade에 넘긴다")
     void request_usesTokenMember() throws Exception {
-        given(orderFacade.requestReturn(eq(MEMBER_ID), eq(9L), eq(ReturnReasonCode.WRONG_ITEM), eq("   ")))
+        given(orderFacade.requestReturn(eq(MEMBER_ID), eq(9L), eq(ReturnReasonCode.CHANGE_OF_MIND), eq("   ")))
                 .willReturn(new ReturnRequestResponse(9L, OrderStatus.RETURN_REQUESTED, LocalDateTime.of(2026, 11, 12, 10, 0)));
 
         mockMvc.perform(post("/api/v1/orders/9/returns").header("Authorization", bearer(MemberRole.USER))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reasonCode\":\"WRONG_ITEM\",\"reason\":\"   \",\"buyerId\":999}"))
+                        .content("{\"reasonCode\":\"CHANGE_OF_MIND\",\"reason\":\"   \",\"buyerId\":999}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("RETURN_REQUESTED"));
         verify(orderFacade, never()).requestReturn(eq(999L), anyLong(), any(), isNull());
