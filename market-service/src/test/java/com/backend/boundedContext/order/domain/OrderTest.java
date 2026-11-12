@@ -161,7 +161,7 @@ class OrderTest {
     void confirm_returnRequested_fail() {
         Order order = createOrder();
         order.pay(NOW.plusMinutes(1));
-        ReflectionTestUtils.setField(order, "status", OrderStatus.RETURN_REQUESTED);   // 반품 요청 기능 추가 전이라 상태만 바꿈
+        order.requestReturn(ReturnReasonCode.CHANGE_OF_MIND, null, NOW.plusDays(1));   // 배송지 없는 주문은 PAID면 요청 가능
 
         assertThatThrownBy(() -> order.confirm(ConfirmType.MANUAL, NOW.plusDays(1)))
                 .isInstanceOf(DomainException.class)
@@ -200,7 +200,7 @@ class OrderTest {
 
         Order returnRequested = createOrder();
         returnRequested.pay(NOW.plusMinutes(1));
-        ReflectionTestUtils.setField(returnRequested, "status", OrderStatus.RETURN_REQUESTED);
+        returnRequested.requestReturn(ReturnReasonCode.DEFECTIVE, null, NOW.plusDays(1));
         assertThat(returnRequested.isAutoConfirmable(NOW.plusDays(30), 7)).isFalse();
     }
 
