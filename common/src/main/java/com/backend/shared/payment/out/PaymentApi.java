@@ -20,7 +20,7 @@ public interface PaymentApi {
     // 잔액과 홀딩 중 금액 조회
     WalletSummaryDto getWallet(Long memberId);
 
-    // 결과가 아직 정해지지 않은 충전 건(READY·PROCESSING·CANCELING)이 있는지. 회원 탈퇴 검사용 (반영 전이거나 취소가 거절되면 잔액이 다시 들어올 수 있음)
+    // 결과가 아직 정해지지 않은 충전 건(READY·PROCESSING·CANCELING·METHOD_CANCELING)이 있는지. 회원 탈퇴 검사용 (반영 전이거나 취소가 거절되면 잔액이 다시 들어올 수 있음)
     boolean hasPendingTopups(Long memberId);
 
     /**
