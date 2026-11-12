@@ -66,8 +66,8 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 장바구니 조회 | order | `ProductApi.getOptions(optionIds)` → 현재 가격·판매 가능 여부·대표 이미지로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
-| 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)`: 배송비는 구매자 지갑 → 플랫폼 지갑(SHIPPING_FEE), 나머지는 홀딩(PAYMENT), 장바구니 쿠폰 지원금은 플랫폼 지갑 → 홀딩(COUPON_SUBSIDY) → 실패면 함께 롤백 | 동기, 같은 Tx |
-| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
+| 결제 | order | 판매 가능·만료·예약 쿠폰 확인 → 주문 PAYING(멱등키·시작 시각) 커밋 → `PaymentApi.pay(command)`(HTTP): 배송비는 구매자 지갑 → 플랫폼 지갑(SHIPPING_FEE), 나머지는 홀딩(PAYMENT), 장바구니 쿠폰 지원금은 플랫폼 지갑 → 홀딩(COUPON_SUBSIDY) → 주문을 다시 잠가 아직 PAYING이고 같은 키일 때만 결과 반영(PAID: 쿠폰 사용 처리·장바구니 삭제·`OrderPaidEvent` / FAILED_*: PAYMENT_FAILED). 결과를 모르면 PAYING으로 두고 재확인 스케줄러가 같은 키로 `pay`를 다시 불러 정리 (9.1) | 동기 HTTP, Tx 2개 |
+| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (주문 PAID 반영과 같은 트랜잭션에서 outbox에 저장) |
 | 배송 시작 | delivery | 물류 담당 송장 등록 → 배송 SHIPPED → `DeliveryShippedEvent` → (Kafka `delivery.events`) 알림이 구매자에게 배송 시작 알림 | 이벤트, 별도 Tx (송장 수정은 이벤트 없음) |
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
 | 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
@@ -374,16 +374,17 @@ public interface OrderApi {
 
     /**
      * 상품이 들어 있는 결제 대기(CREATED·PAYMENT_FAILED) 주문을 모두 취소하고 재고를 복원한다.
+     * 결제 중(PAYING) 주문은 취소하지 않는다: 결제 시작 때 판매 가능을 확인했으므로 결제되면 PAID로 둔다.
      * 상품 삭제·판매 중지(관리자 즉시 중지·중지 요청 승인)·판매자 철회·제재 때 상품 컨텍스트가 상품을 잠근 뒤 호출한다. 호출한 쪽 트랜잭션에 참여한다.
      * 취소한 주문 수를 반환한다.
      */
     int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType);
 
-    /** 구매자로서 진행 중인 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지. 회원 탈퇴 검사용 */
+    /** 구매자로서 진행 중인 주문(CREATED·PAYING·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지. 회원 탈퇴 검사용 */
     boolean hasActiveOrders(Long buyerId);
 
     /**
-     * 판매자 상품이 들어간 진행 중인 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지.
+     * 판매자 상품이 들어간 진행 중인 주문(CREATED·PAYING·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지.
      * 판매자 철회 승인·회원 탈퇴 검사용. 있으면 회원 컨텍스트가 409로 승인·탈퇴를 거절한다.
      */
     boolean hasActiveSales(Long sellerId);
@@ -424,7 +425,10 @@ public interface CouponApi {
     /** 주문 생성(상품 쿠폰 다음): 장바구니 쿠폰을 예약하고 할인액을 돌려준다. orderAmount는 상품 쿠폰 할인 후 상품 금액 합계(배송비 제외) */
     long reserveCartCoupon(Long memberId, Long couponId, Long orderId, long orderAmount, LocalDateTime now);
 
-    /** 결제(결제 요청 전): 예약 쿠폰 사용 처리. 예약 뒤 중지, 기간 종료면 409-COUPON_NOT_ACTIVE로 결제 전체 롤백 */
+    /** 결제 시작(결제 요청 전): 예약 쿠폰을 지금 쓸 수 있는지 확인. 예약 뒤 중지, 기간 종료면 409-COUPON_NOT_ACTIVE (돈이 움직이기 전) */
+    void validateReservedCouponsUsable(Long orderId, LocalDateTime now);
+
+    /** 결제 성공 반영(주문 PAID와 같은 Tx): 예약 쿠폰 사용 처리. 쿠폰 상태·기간은 보지 않는다(그사이 중지돼도 예약이 할인을 보장) */
     int useReservedCoupons(Long orderId, LocalDateTime now);
 
     /** 결제 전 취소, 만료(OrderCancelSupport): 예약 쿠폰 해제와 수량 복원. 다시 불러도 결과가 같다 */
@@ -501,16 +505,26 @@ public interface PaymentApi {
     boolean hasPendingTopups(Long memberId);
 
     /**
-     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.
+     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. HTTP(POST /internal/v1/payments/pay)라 호출한 쪽 트랜잭션에 참여하지 않는다.
+     * 주문 쪽은 주문을 PAYING으로 커밋한 뒤 부르고, 결과를 받은 뒤 별도 트랜잭션으로 반영한다(9.1).
      * command.amount는 배송비를 포함한 결제 금액이다. 배송비(command.shippingFee)는 구매자 지갑 → 플랫폼 지갑(원장 SHIPPING_FEE)으로 옮기고,
      * 나머지(amount − shippingFee)는 홀딩에 넣는다. 장바구니 쿠폰 지원금(command.couponSubsidyAmount)은 플랫폼 지갑 → 홀딩(원장 COUPON_SUBSIDY).
      * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount.
      * (배송비·지원금 처리는 결제 담당 구현 예정. 그 전까지는 amount 전체가 홀딩에 들어가고 두 필드는 쓰이지 않는다)
      * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.
-     * 주문 쪽은 결과가 PAID가 아니면 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
-     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다.
+     * 주문 쪽은 결과가 PAID가 아니면 주문을 PAYMENT_FAILED로 커밋한 뒤 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
+     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다. 아직 처리하지 않은 키면 그때 처리한다(키 UNIQUE·지갑 잠금으로 직렬화).
+     * 주문 쪽 재확인 스케줄러가 결과를 모르는 결제를 같은 키·같은 내용으로 다시 부르므로 이 동작에 기댄다.
+     * 오류: 4xx RsData는 주문 쪽이 "결제 없음"으로 보고 PAYMENT_FAILED로 반영한다(단 409 LOCK_CONFLICT·CONCURRENT_UPDATE·DATA_CONFLICT, 429는 결과 불명).
+     *      접속 실패·응답 시간 초과·5xx는 결과 불명으로 보고 주문을 PAYING으로 둔다.
      */
     PayResultDto pay(PayCommand command);
+
+    /**
+     * 결제 취소(보상): 결제는 됐는데 주문에 반영할 수 없을 때 결제를 되돌린다. 멱등.
+     * HTTP POST /internal/v1/payments/{idempotencyKey}/cancel
+     */
+    void cancelPayment(String idempotencyKey);
 
     /**
      * 주문의 결제 시도 목록 (주문 상세의 결제 내역). 오래된 순, 실패 시도 포함.
@@ -584,7 +598,7 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 | `OrderReturnedEvent` (미구현) | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
 | `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (Kafka `member.events`, `@KafkaListener` groupId `payment`, 가입과 별도 트랜잭션) | `processed_event`(eventId, `payment`)로 재전달을 거르고, 지갑이 이미 있으면 무시(`wallet.member_id` 유니크) |
 
-- 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다. (미구현: 지금은 예외가 그대로 올라가 전체가 롤백되고, FAILED_SYSTEM_ERROR·PAYMENT_FAILED는 기록되지 않는다)
+- 시스템 오류는 결과가 아니라 HTTP 5xx·응답 없음으로 옵니다. 주문 쪽은 결과 불명으로 보고 주문을 PAYING으로 둔 뒤, 재확인 스케줄러가 같은 키로 `pay`를 다시 불러 PAID·PAYMENT_FAILED로 정리합니다(9.1).
 
 ## 6. settlement
 
@@ -766,16 +780,25 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 
 계약의 모양과는 별개로, 구현할 때 꼭 지켜야 하는 규칙입니다.
 
-### 9.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
+### 9.1 결제는 주문을 PAYING으로 커밋한 뒤 호출하고, 같은 키일 때만 결과를 반영한다 (주문·결제)
 
-결제와 15분 만료가 동시에 일어나도 둘 중 하나만 반영되게 하려면 주문 행을 먼저 잠가야 합니다.
+결제는 HTTP라 주문 트랜잭션에 참여하지 못합니다. 그래서 "결제 요청 → 결과 반영"을 트랜잭션 두 개로 나누고, 결과를 모르면 바로 취소하지 않고 결제 중(`PAYING`)으로 남깁니다.
 
-1. 주문을 PAID로 조건부 UPDATE: `where id = ? and status in ('CREATED','PAYMENT_FAILED') and expires_at > now()`
-2. 바뀐 행이 0건이면 409 `ORDER_EXPIRED`(또는 상태 오류)를 던진다
-3. `PaymentApi.pay()`를 호출한다. 결과가 PAID가 아니면 402 `INSUFFICIENT_BALANCE` 등을 던져서 1번까지 함께 롤백한다
-4. 결제 실패 기록(`FAILED_*`)은 결제 컨텍스트가 별도 트랜잭션(REQUIRES_NEW)으로 남기므로 롤백되지 않는다
+1. 상품 판매 가능 여부, 주문 만료 시각, 예약 쿠폰을 지금 쓸 수 있는지 확인한다 (`409-PRODUCT_NOT_ON_SALE`, `409-ORDER_EXPIRED`, `409-COUPON_NOT_ACTIVE`)
+2. 주문을 잠그고 `PAYING`으로 바꾼 뒤, 이번 시도의 멱등키(`payment_idempotency_key`)와 시작 시각(`paying_started_at`)을 저장하고 커밋한다. 이미 `PAYING`이면 `409-PAYMENT_IN_PROGRESS`
+3. `PaymentApi.pay(command)`를 트랜잭션 밖에서 부른다
+4. 주문을 다시 잠그고, **아직 `PAYING`이고 같은 키일 때만** 결과를 반영한다
+   - PAID: 예약 쿠폰 사용 처리, 주문 `PAID`, 장바구니 항목 삭제, `OrderPaidEvent`(outbox)를 한 트랜잭션으로. 만료 시각이 지났어도 PAID (payment가 만료 전 결제로 판단)
+   - `FAILED_*`: `PAYMENT_FAILED` (다시 결제하거나, 만료되면 만료 스케줄러가 취소·재고 복구). 결제 취소는 부르지 않는다
+   - payment가 요청을 거절(4xx): 결제가 없으므로 `PAYMENT_FAILED`
+   - 응답 시간 초과·응답 없음·5xx·반영 트랜잭션 실패: `PAYING`으로 두고 `200-2`(결제 확인 중)로 응답
+5. 재확인 스케줄러: `PAYING`이 된 지 30초(`custom.order.payingRecheckSeconds`)가 지난 주문에 **같은 키·같은 내용으로 `pay`를 다시 불러** 4번과 같이 반영한다
+   - 읽기 전용 조회는 쓰지 않는다. "결제 없음"은 확정이 아니다(원래 요청이 늦게 도착할 수 있음)
+   - 결과가 PAID인데 주문이 이 키로 결제 중도 결제 완료도 아니면(예외 상태) `cancelPayment(키)`로 보상하고 ERROR 로그(주문 ID·키만)
+   - 계속 응답이 없으면 `PAYING` 유지, 10분(`payingAlertMinutes`)이 넘으면 ERROR 로그
 
-주문 행을 먼저 잠그면 만료 스케줄러는 결제가 끝날 때까지 기다립니다. 순서를 거꾸로 하면 지갑은 잠갔는데 주문이 만료되는 경우를 따로 처리해야 합니다.
+`PAYING` 주문은 재결제·취소·만료 처리·판매 중지 취소 대상이 아닙니다. 회원 탈퇴·판매자 진행 중 판매 검사와 장바구니·주문 생성 중복 검사에는 들어갑니다.
+결제 쪽은 `pay`의 키 UNIQUE와 지갑 잠금으로 같은 키의 요청을 직렬화하고, 실패 기록(`FAILED_*`)은 별도 트랜잭션(REQUIRES_NEW)으로 남깁니다.
 
 ### 9.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
 
