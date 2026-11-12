@@ -1,7 +1,6 @@
 package com.backend.boundedContext.member.app;
 
 import com.backend.boundedContext.member.domain.Influencer;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.in.dto.InfluencerProfileResponse;
 import com.backend.boundedContext.member.in.dto.MyInfluencerResponse;
@@ -10,6 +9,7 @@ import com.backend.boundedContext.member.out.InfluencerStatusHistoryRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.member.dto.InfluencerStatus;
 import com.backend.shared.member.dto.SellerStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;

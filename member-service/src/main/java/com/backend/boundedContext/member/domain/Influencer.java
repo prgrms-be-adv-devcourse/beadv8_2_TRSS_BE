@@ -2,6 +2,8 @@ package com.backend.boundedContext.member.domain;
 
 import com.backend.global.exception.DomainException;
 import com.backend.global.jpa.entity.BaseIdAndTime;
+import com.backend.shared.member.dto.InfluencerDto;
+import com.backend.shared.member.dto.InfluencerStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -80,6 +82,11 @@ public class Influencer extends BaseIdAndTime {
     public boolean isApproved() {
         return status == InfluencerStatus.APPROVED;
     }
+
+    public InfluencerDto toDto() {
+        return new InfluencerDto(getId(), member.getId(), activityName, status);
+    }
+
     private void submit(String activityName, String snsUrl, String introduction) {
         this.activityName = activityName.strip();
         this.snsUrl = snsUrl.strip();

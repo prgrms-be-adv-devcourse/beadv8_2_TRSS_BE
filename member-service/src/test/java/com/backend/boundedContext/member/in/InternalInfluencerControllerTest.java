@@ -1,10 +1,10 @@
 package com.backend.boundedContext.member.in;
 
 import com.backend.boundedContext.member.app.MemberInfluencerFacade;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
-import com.backend.boundedContext.member.in.dto.InternalInfluencerResponse;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.InfluencerDto;
+import com.backend.shared.member.dto.InfluencerStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +37,7 @@ class InternalInfluencerControllerTest {
     @Test
     @DisplayName("단건 조회: 승인 전이어도 상태와 함께 돌려준다")
     void getInfluencer() throws Exception {
-        given(memberInfluencerFacade.getInternalInfluencer(7L)).willReturn(new InternalInfluencerResponse(7L, 3L, "민지", InfluencerStatus.PENDING));
+        given(memberInfluencerFacade.getInternalInfluencer(7L)).willReturn(new InfluencerDto(7L, 3L, "민지", InfluencerStatus.PENDING));
 
         mockMvc.perform(get("/internal/v1/influencers/7"))
                 .andExpect(status().isOk())
@@ -59,7 +59,7 @@ class InternalInfluencerControllerTest {
     @DisplayName("여러 명 조회: ids로 받은 인플루언서 목록")
     void getInfluencers() throws Exception {
         given(memberInfluencerFacade.getInternalInfluencers(List.of(7L, 8L))).willReturn(List.of(
-                new InternalInfluencerResponse(7L, 3L, "민지", InfluencerStatus.APPROVED)));
+                new InfluencerDto(7L, 3L, "민지", InfluencerStatus.APPROVED)));
 
         mockMvc.perform(get("/internal/v1/influencers").param("ids", "7,8"))
                 .andExpect(status().isOk())

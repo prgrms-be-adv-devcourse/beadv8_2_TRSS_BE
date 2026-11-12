@@ -2,9 +2,9 @@ package com.backend.boundedContext.member.app;
 
 import com.backend.boundedContext.member.domain.Influencer;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
-import com.backend.boundedContext.member.in.dto.InternalInfluencerResponse;
 import com.backend.boundedContext.member.out.InfluencerRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.InfluencerDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -17,24 +17,24 @@ import java.util.List;
 public class MemberGetInternalInfluencerUseCase {
     private final InfluencerRepository influencerRepository;
 
-    public InternalInfluencerResponse getInfluencer(Long influencerId) {
+    public InfluencerDto getInfluencer(Long influencerId) {
         return influencerRepository.findById(influencerId)
-                .map(InternalInfluencerResponse::from)
+                .map(Influencer::toDto)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.INFLUENCER_NOT_FOUND));
     }
 
     // 없는 ID는 결과에서 빠진다
-    public List<InternalInfluencerResponse> getInfluencers(Collection<Long> influencerIds) {
+    public List<InfluencerDto> getInfluencers(Collection<Long> influencerIds) {
         return influencerRepository.findAllById(influencerIds).stream()
-                .map(InternalInfluencerResponse::from)
+                .map(Influencer::toDto)
                 .toList();
     }
 
     // 인플루언서 기능(협약 수락 등) 권한 확인. 신청한 적이 없거나 승인 상태가 아니면 403
-    public InternalInfluencerResponse getApprovedInfluencerByMemberId(Long memberId) {
+    public InfluencerDto getApprovedInfluencerByMemberId(Long memberId) {
         return influencerRepository.findByMemberId(memberId)
                 .filter(Influencer::isApproved)
-                .map(InternalInfluencerResponse::from)
+                .map(Influencer::toDto)
                 .orElseThrow(() -> new DomainException(MemberErrorCode.INFLUENCER_NOT_APPROVED));
     }
 }

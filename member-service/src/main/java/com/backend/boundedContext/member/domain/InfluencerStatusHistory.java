@@ -1,6 +1,7 @@
 package com.backend.boundedContext.member.domain;
 
 import com.backend.global.jpa.entity.BaseIdAndTime;
+import com.backend.shared.member.dto.InfluencerStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

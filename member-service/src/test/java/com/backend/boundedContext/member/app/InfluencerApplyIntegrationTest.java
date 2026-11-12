@@ -1,7 +1,6 @@
 package com.backend.boundedContext.member.app;
 
 import com.backend.boundedContext.member.domain.Influencer;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.domain.InfluencerStatusHistory;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
@@ -14,6 +13,7 @@ import com.backend.boundedContext.member.out.InfluencerStatusHistoryRepository;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.InfluencerStatus;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;

@@ -1,7 +1,7 @@
 package com.backend.boundedContext.member.app.dto;
 
-import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.domain.Member;
+import com.backend.shared.member.dto.InfluencerStatus;
 import com.backend.shared.member.dto.MemberRole;
 
 import java.time.LocalDateTime;

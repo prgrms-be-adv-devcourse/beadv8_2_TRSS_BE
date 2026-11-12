@@ -1,7 +1,7 @@
 package com.backend.boundedContext.member.out;
 
 import com.backend.boundedContext.member.domain.Influencer;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
+import com.backend.shared.member.dto.InfluencerStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,7 +27,7 @@ public interface InfluencerRepository extends JpaRepository<Influencer, Long> {
             from Influencer i
             join fetch i.member
             where (:status is null or i.status = :status)
-            order by case when i.status = com.backend.boundedContext.member.domain.InfluencerStatus.PENDING then 0 else 1 end,
+            order by case when i.status = com.backend.shared.member.dto.InfluencerStatus.PENDING then 0 else 1 end,
                      i.appliedAt desc,
                      i.id desc
             """,

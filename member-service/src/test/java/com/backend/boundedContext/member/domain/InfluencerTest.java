@@ -1,6 +1,7 @@
 package com.backend.boundedContext.member.domain;
 
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.InfluencerStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

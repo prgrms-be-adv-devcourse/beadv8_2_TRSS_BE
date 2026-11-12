@@ -1,4 +1,4 @@
-package com.backend.boundedContext.member.domain;
+package com.backend.shared.member.dto;
 
 public enum InfluencerStatus {
     PENDING,

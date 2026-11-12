@@ -1,7 +1,6 @@
 package com.backend.boundedContext.member.in;
 
 import com.backend.boundedContext.member.app.MemberInfluencerFacade;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.in.dto.InfluencerApplyRequest;
 import com.backend.boundedContext.member.in.dto.InfluencerProfileResponse;
 import com.backend.boundedContext.member.in.dto.MyInfluencerResponse;
@@ -10,6 +9,7 @@ import com.backend.global.security.JwtAuthenticationEntryPoint;
 import com.backend.global.security.JwtTokenProvider;
 import com.backend.global.security.SecurityConfig;
 import com.backend.global.security.SecurityErrorResponseWriter;
+import com.backend.shared.member.dto.InfluencerStatus;
 import com.backend.shared.member.dto.MemberRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -1,8 +1,8 @@
 package com.backend.boundedContext.member.in;
 
 import com.backend.boundedContext.member.app.MemberInfluencerFacade;
-import com.backend.boundedContext.member.in.dto.InternalInfluencerResponse;
 import com.backend.global.rsData.RsData;
+import com.backend.shared.member.dto.InfluencerDto;
 import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,19 +27,19 @@ public class InternalInfluencerController {
 
     // 상태와 상관없이 조회. 없으면 404
     @GetMapping("/{influencerId}")
-    public RsData<InternalInfluencerResponse> getInfluencer(@PathVariable Long influencerId) {
+    public RsData<InfluencerDto> getInfluencer(@PathVariable Long influencerId) {
         return RsData.of("200-1", "인플루언서를 조회했습니다.", memberInfluencerFacade.getInternalInfluencer(influencerId));
     }
 
     // 상태와 상관없이 여러 명 조회. 없는 ID는 결과에서 빠진다
     @GetMapping
-    public RsData<List<InternalInfluencerResponse>> getInfluencers(@RequestParam(defaultValue = "") List<Long> ids) {
+    public RsData<List<InfluencerDto>> getInfluencers(@RequestParam(defaultValue = "") List<Long> ids) {
         return RsData.of("200-1", "인플루언서 목록을 조회했습니다.", memberInfluencerFacade.getInternalInfluencers(ids));
     }
 
     // 승인된 인플루언서만. 아니면 403 INFLUENCER_NOT_APPROVED
     @GetMapping("/by-member/{memberId}/approved")
-    public RsData<InternalInfluencerResponse> getApprovedInfluencerByMemberId(@PathVariable Long memberId) {
+    public RsData<InfluencerDto> getApprovedInfluencerByMemberId(@PathVariable Long memberId) {
         return RsData.of("200-1", "승인된 인플루언서를 조회했습니다.", memberInfluencerFacade.getApprovedInfluencerByMemberId(memberId));
     }
 }

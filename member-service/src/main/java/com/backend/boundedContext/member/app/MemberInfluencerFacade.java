@@ -2,12 +2,12 @@ package com.backend.boundedContext.member.app;
 
 import com.backend.boundedContext.member.app.dto.AdminInfluencerDetailDto;
 import com.backend.boundedContext.member.app.dto.AdminInfluencerListDto;
-import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.in.dto.InfluencerApplyRequest;
 import com.backend.boundedContext.member.in.dto.InfluencerProfileResponse;
-import com.backend.boundedContext.member.in.dto.InternalInfluencerResponse;
 import com.backend.boundedContext.member.in.dto.MyInfluencerResponse;
 import com.backend.global.page.PageResponse;
+import com.backend.shared.member.dto.InfluencerDto;
+import com.backend.shared.member.dto.InfluencerStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -72,17 +72,17 @@ public class MemberInfluencerFacade {
     }
 
     @Transactional(readOnly = true)
-    public InternalInfluencerResponse getInternalInfluencer(Long influencerId) {
+    public InfluencerDto getInternalInfluencer(Long influencerId) {
         return memberGetInternalInfluencerUseCase.getInfluencer(influencerId);
     }
 
     @Transactional(readOnly = true)
-    public List<InternalInfluencerResponse> getInternalInfluencers(Collection<Long> influencerIds) {
+    public List<InfluencerDto> getInternalInfluencers(Collection<Long> influencerIds) {
         return memberGetInternalInfluencerUseCase.getInfluencers(influencerIds);
     }
 
     @Transactional(readOnly = true)
-    public InternalInfluencerResponse getApprovedInfluencerByMemberId(Long memberId) {
+    public InfluencerDto getApprovedInfluencerByMemberId(Long memberId) {
         return memberGetInternalInfluencerUseCase.getApprovedInfluencerByMemberId(memberId);
     }
 }
