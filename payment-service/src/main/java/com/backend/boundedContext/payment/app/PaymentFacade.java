@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.backend.boundedContext.payment.app.dto.AdminPaymentDto;
 import com.backend.boundedContext.payment.app.dto.AdminTopupDto;
+import com.backend.boundedContext.payment.app.dto.TopupCancelDto;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
@@ -41,6 +42,7 @@ public class PaymentFacade {
     private final PaymentGetAdminTopupsUseCase paymentGetAdminTopupsUseCase;
     private final PaymentPrepareTopupUseCase paymentPrepareTopupUseCase;
     private final PaymentConfirmTopupUseCase paymentConfirmTopupUseCase;
+    private final PaymentCancelTopupUseCase paymentCancelTopupUseCase;
     private final PaymentPayUseCase paymentPayUseCase;
     private final PaymentCancelPaymentUseCase paymentCancelPaymentUseCase;
     private final PaymentGetPaymentAttemptsUseCase paymentGetPaymentAttemptsUseCase;
@@ -98,6 +100,11 @@ public class PaymentFacade {
     // 충전 승인. PG 호출을 DB 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음 (트랜잭션은 PaymentTopupConfirmProcessor의 Tx1·Tx2에서 각각 실행)
     public TopupConfirmDto confirmTopup(Long memberId, String paymentKey, String orderId, long amount) {
         return paymentConfirmTopupUseCase.confirmTopup(memberId, paymentKey, orderId, amount);
+    }
+
+    // 충전 취소. PG 호출을 DB 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음 (트랜잭션은 PaymentTopupCancelProcessor의 Tx1·Tx2에서 각각 실행)
+    public TopupCancelDto cancelTopup(Long memberId, Long topupId) {
+        return paymentCancelTopupUseCase.cancelTopup(memberId, topupId);
     }
 
     // 주문 결제 (주문 결제 트랜잭션에 참여, 주문 쪽이 실패하면 함께 롤백)

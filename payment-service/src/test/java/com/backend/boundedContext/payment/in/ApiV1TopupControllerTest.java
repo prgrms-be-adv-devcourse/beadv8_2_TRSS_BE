@@ -28,11 +28,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
+import com.backend.boundedContext.payment.app.TopupCancelStartResult;
+import com.backend.boundedContext.payment.app.dto.TopupCancelDto;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
@@ -203,9 +206,73 @@ class ApiV1TopupControllerTest {
     }
 
     @Test
+    @DisplayName("충전 취소: 토큰의 회원 ID로 취소하고, 일부 취소면 status DONE과 취소 금액·잔액을 돌려준다")
+    void cancelTopup_success() throws Exception {
+        given(paymentFacade.cancelTopup(3L, 5L))
+                .willReturn(new TopupCancelDto(5L, ORDER_ID, TopupStatus.DONE, 15_000, 15_000L, 0L));
+
+        cancel(3L, 5L)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultCode").value("200-1"))
+                .andExpect(jsonPath("$.msg").value("충전이 취소되었습니다."))
+                .andExpect(jsonPath("$.data.status").value("DONE"))
+                .andExpect(jsonPath("$.data.cancelAmount").value(15000))
+                .andExpect(jsonPath("$.data.canceledAmount").value(15000))
+                .andExpect(jsonPath("$.data.balance").value(0));
+    }
+
+    @Test
+    @DisplayName("충전 취소: 결과 확인 중이면 200-1에 status CANCELING, 취소된 금액·잔액은 null")
+    void cancelTopup_canceling() throws Exception {
+        given(paymentFacade.cancelTopup(3L, 5L)).willReturn(TopupCancelDto.canceling(
+                new TopupCancelStartResult(5L, ORDER_ID, PgProvider.TOSS, "pk_1", 20_000, "TOPUP-5-CANCEL-0")));
+
+        cancel(3L, 5L)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.msg").value("충전 취소 결과를 확인하고 있습니다."))
+                .andExpect(jsonPath("$.data.status").value("CANCELING"))
+                .andExpect(jsonPath("$.data.cancelAmount").value(20000))
+                .andExpect(jsonPath("$.data.canceledAmount").doesNotExist())
+                .andExpect(jsonPath("$.data.balance").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("충전 취소: PG가 거절하면 400 TOPUP_CANCEL_DECLINED와 PG 코드·메시지")
+    void cancelTopup_declined() throws Exception {
+        given(paymentFacade.cancelTopup(3L, 5L))
+                .willThrow(new DomainException(PaymentErrorCode.TOPUP_CANCEL_DECLINED,
+                        Map.of("code", "EXCEED_MAX_REFUND_DUE", "message", "환불 가능한 기간이 지났습니다.")));
+
+        cancel(3L, 5L)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-TOPUP_CANCEL_DECLINED"))
+                .andExpect(jsonPath("$.data.code").value("EXCEED_MAX_REFUND_DUE"))
+                .andExpect(jsonPath("$.data.message").value("환불 가능한 기간이 지났습니다."));
+    }
+
+    @Test
+    @DisplayName("충전 취소: 취소할 남은 금액이 없으면 409 TOPUP_NOT_CANCELABLE")
+    void cancelTopup_notCancelable() throws Exception {
+        given(paymentFacade.cancelTopup(3L, 5L)).willThrow(new DomainException(PaymentErrorCode.TOPUP_NOT_CANCELABLE));
+
+        cancel(3L, 5L)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.resultCode").value("409-TOPUP_NOT_CANCELABLE"));
+    }
+
+    @Test
+    @DisplayName("충전 취소: 토큰이 없으면 401 UNAUTHORIZED")
+    void cancelTopup_noToken() throws Exception {
+        mockMvc.perform(post("/api/v1/topups/5/cancel"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+        verify(paymentFacade, never()).cancelTopup(anyLong(), anyLong());
+    }
+
+    @Test
     @DisplayName("충전 목록: 토큰의 회원 ID로 조회하고 페이지 형식으로 돌려준다")
     void getTopups_success() throws Exception {
-        TopupDto item = new TopupDto(5L, ORDER_ID, 20_000, 20_000, TopupStatus.DONE, null,
+        TopupDto item = new TopupDto(5L, ORDER_ID, 20_000, 20_000, 20_000, 0, TopupStatus.DONE, null,
                 LocalDateTime.of(2026, 10, 14, 10, 0), LocalDateTime.of(2026, 10, 14, 9, 59));
         given(paymentFacade.getTopups(eq(3L), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(item), 0, 20, 1, 1));
@@ -217,13 +284,15 @@ class ApiV1TopupControllerTest {
                 .andExpect(jsonPath("$.data.items[0].topupId").value(5))
                 .andExpect(jsonPath("$.data.items[0].status").value("DONE"))
                 .andExpect(jsonPath("$.data.items[0].remainingAmount").value(20000))
+                .andExpect(jsonPath("$.data.items[0].cancelableAmount").value(20000))
+                .andExpect(jsonPath("$.data.items[0].canceledAmount").value(0))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
     @Test
     @DisplayName("충전 상세: 토큰의 회원 ID와 충전 건 ID로 조회해 돌려준다")
     void getTopup_success() throws Exception {
-        given(paymentFacade.getTopup(3L, 5L)).willReturn(new TopupDto(5L, ORDER_ID, 20_000, 0, TopupStatus.FAILED_USER_CANCEL,
+        given(paymentFacade.getTopup(3L, 5L)).willReturn(new TopupDto(5L, ORDER_ID, 20_000, 0, 0, 0, TopupStatus.FAILED_USER_CANCEL,
                 "사용자에 의해 결제가 취소되었습니다.", null, LocalDateTime.of(2026, 10, 14, 9, 59)));
         String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
 
@@ -252,6 +321,12 @@ class ApiV1TopupControllerTest {
         mockMvc.perform(get("/api/v1/topups"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.resultCode").value("401-UNAUTHORIZED"));
+    }
+
+    private ResultActions cancel(Long memberId, Long topupId) throws Exception {
+        String token = jwtTokenProvider.createAccessToken(memberId, MemberRole.USER);
+        return mockMvc.perform(post("/api/v1/topups/" + topupId + "/cancel")
+                .header("Authorization", "Bearer " + token));
     }
 
     private ResultActions fail(Long memberId, Long topupId, String body) throws Exception {

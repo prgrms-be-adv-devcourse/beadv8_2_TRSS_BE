@@ -57,7 +57,7 @@ class ApiV1AdminTopupControllerTest {
     @Test
     @DisplayName("충전 탭: 관리자는 검색어·기간·페이지로 조회한다")
     void getTopups_admin() throws Exception {
-        AdminTopupDto item = new AdminTopupDto(14L, ORDER_ID, 3L, "buyer@palette.test", 20_000, 20_000,
+        AdminTopupDto item = new AdminTopupDto(14L, ORDER_ID, 3L, "buyer@palette.test", 20_000, 20_000, 0,
                 TopupStatus.DONE, null, LocalDateTime.of(2026, 10, 13, 20, 47), LocalDateTime.of(2026, 10, 13, 20, 46));
         given(paymentFacade.getAdminTopups(eq("buyer@palette.test"), eq(LocalDate.of(2026, 10, 1)),
                 eq(LocalDate.of(2026, 10, 17)), any(Pageable.class)))
