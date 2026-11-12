@@ -114,6 +114,20 @@ class InfluencerApplyIntegrationTest {
     }
 
     @Test
+    @DisplayName("내부 조회: 승인 전이어도 상태와 함께 돌려주고, 승인된 인플루언서 조회는 승인 뒤에만 된다")
+    void internalLookup() {
+        Long memberId = createMember();
+        Long influencerId = memberInfluencerFacade.applyInfluencer(memberId, request("데일리 뷰티 민지")).influencerId();
+
+        assertThat(memberInfluencerFacade.getInternalInfluencer(influencerId).status()).isEqualTo(InfluencerStatus.PENDING);
+        assertThat(memberInfluencerFacade.getInternalInfluencers(List.of(influencerId))).hasSize(1);
+        assertErrorCode(() -> memberInfluencerFacade.getApprovedInfluencerByMemberId(memberId), MemberErrorCode.INFLUENCER_NOT_APPROVED);
+
+        change(memberId, Influencer::approve);
+        assertThat(memberInfluencerFacade.getApprovedInfluencerByMemberId(memberId).influencerId()).isEqualTo(influencerId);
+    }
+
+    @Test
     @DisplayName("신청한 적이 없으면 내 정보는 404, /users/me의 인플루언서 상태는 null")
     void notApplied() {
         Long memberId = createMember();

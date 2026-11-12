@@ -5,12 +5,16 @@ import com.backend.boundedContext.member.app.dto.AdminInfluencerListDto;
 import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.in.dto.InfluencerApplyRequest;
 import com.backend.boundedContext.member.in.dto.InfluencerProfileResponse;
+import com.backend.boundedContext.member.in.dto.InternalInfluencerResponse;
 import com.backend.boundedContext.member.in.dto.MyInfluencerResponse;
 import com.backend.global.page.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * 회원 컨텍스트의 인플루언서 기능. 판매자 기능은 {@link MemberSellerFacade}
@@ -25,6 +29,7 @@ public class MemberInfluencerFacade {
     private final MemberGetInfluencerDetailUseCase memberGetInfluencerDetailUseCase;
     private final MemberApproveInfluencerUseCase memberApproveInfluencerUseCase;
     private final MemberRejectInfluencerUseCase memberRejectInfluencerUseCase;
+    private final MemberGetInternalInfluencerUseCase memberGetInternalInfluencerUseCase;
 
     @Transactional
     public MyInfluencerResponse applyInfluencer(Long memberId, InfluencerApplyRequest request) {
@@ -64,5 +69,20 @@ public class MemberInfluencerFacade {
     @Transactional
     public AdminInfluencerDetailDto rejectInfluencer(Long influencerId, String reason) {
         return memberRejectInfluencerUseCase.reject(influencerId, reason);
+    }
+
+    @Transactional(readOnly = true)
+    public InternalInfluencerResponse getInternalInfluencer(Long influencerId) {
+        return memberGetInternalInfluencerUseCase.getInfluencer(influencerId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InternalInfluencerResponse> getInternalInfluencers(Collection<Long> influencerIds) {
+        return memberGetInternalInfluencerUseCase.getInfluencers(influencerIds);
+    }
+
+    @Transactional(readOnly = true)
+    public InternalInfluencerResponse getApprovedInfluencerByMemberId(Long memberId) {
+        return memberGetInternalInfluencerUseCase.getApprovedInfluencerByMemberId(memberId);
     }
 }
