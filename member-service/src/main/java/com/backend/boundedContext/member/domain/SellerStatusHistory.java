@@ -79,7 +79,7 @@ public class SellerStatusHistory extends BaseIdAndTime {
         this.accountLast4 = null;
     }
 
-    static SellerStatusHistory withSnapshot(Seller seller, SellerStatus fromStatus, String reason) {
+    static SellerStatusHistory withSellerInfo(Seller seller, SellerStatus fromStatus, String reason) {
         SellerStatusHistory history = of(seller, fromStatus, reason);
         history.businessName = seller.getBusinessName();
         history.businessNumber = seller.getBusinessNumber();
