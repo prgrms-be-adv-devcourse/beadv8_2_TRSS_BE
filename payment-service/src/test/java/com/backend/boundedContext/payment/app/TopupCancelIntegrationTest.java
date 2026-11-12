@@ -134,7 +134,7 @@ class TopupCancelIntegrationTest {
         assertThat(result.status()).isEqualTo(TopupStatus.CANCELED);
         assertThat(result.cancelAmount()).isEqualTo(AMOUNT);
         assertThat(result.balance()).isZero();
-        verify(tossPaymentsClient).cancel(topup.getPaymentKey(), AMOUNT, "예치금 충전 취소", "TOPUP-" + topup.getId() + "-CANCEL-0");
+        verify(tossPaymentsClient).cancel(topup.getPaymentKey(), AMOUNT, "예치금 충전 취소", "TOPUP-" + topup.getId() + "-CANCEL-1");
         assertThat(savedTopup().getCanceledAmount()).isEqualTo(AMOUNT);
         assertThat(transactionsOfWallet()).extracting(WalletTransaction::getType).containsExactly(WalletTransactionType.CHARGE_CANCEL);
     }
@@ -171,6 +171,41 @@ class TopupCancelIntegrationTest {
         assertThat(balance()).isEqualTo(AMOUNT);
         assertThat(transactionsOfWallet()).extracting(WalletTransaction::getType)
                 .containsExactlyInAnyOrder(WalletTransactionType.CHARGE_CANCEL, WalletTransactionType.CHARGE_CANCEL_RESTORE);
+    }
+
+    @Test
+    @DisplayName("PG가 거절한 뒤 다시 취소하면 새 멱등 키로 PG에 다시 요청하고 취소된다")
+    void cancelAgain_afterDeclined() {
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), eq("TOPUP-" + topup.getId() + "-CANCEL-1")))
+                .willThrow(new TossPaymentException(403, "NOT_AVAILABLE_BANK", "은행 서비스 시간이 아닙니다.", null));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), eq("TOPUP-" + topup.getId() + "-CANCEL-2")))
+                .willReturn(tossCanceled(AMOUNT));
+        assertThatThrownBy(() -> paymentFacade.cancelTopup(memberId, topup.getId()))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_CANCEL_DECLINED");
+
+        TopupCancelDto again = paymentFacade.cancelTopup(memberId, topup.getId());
+
+        assertThat(again.status()).isEqualTo(TopupStatus.CANCELED);
+        assertThat(balance()).isZero();
+        assertThat(transactionsOfWallet()).extracting(WalletTransaction::getIdempotencyKey).containsExactlyInAnyOrder(
+                "TOPUP-" + topup.getId() + "-CANCEL-1", "TOPUP-" + topup.getId() + "-CANCEL-1-RESTORE", "TOPUP-" + topup.getId() + "-CANCEL-2");
+    }
+
+    @Test
+    @DisplayName("끝난 회차의 확정 실패를 늦게 반영해도 그사이 시작된 다음 회차는 되돌리지 않는다")
+    void staleFail_doesNotRestoreNextAttempt() {
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+        paymentFacade.cancelTopup(memberId, topup.getId());     // 1회차 CANCELING
+        paymentTopupCancelProcessor.fail(topup.getId(), 1);     // 1회차 확정 실패 → DONE 복원
+        paymentFacade.cancelTopup(memberId, topup.getId());     // 2회차 CANCELING
+
+        paymentTopupCancelProcessor.fail(topup.getId(), 1);     // 1회차 결과를 한 번 더 반영하려 함
+
+        assertThat(savedTopup().getStatus()).isEqualTo(TopupStatus.CANCELING);
+        assertThat(savedTopup().getCancelAttempts()).isEqualTo(2);
+        assertThat(balance()).isZero();
     }
 
     @Test
@@ -284,8 +319,8 @@ class TopupCancelIntegrationTest {
         assertThat(again.status()).isEqualTo(TopupStatus.CANCELED);
         assertThat(again.canceledAmount()).isEqualTo(AMOUNT);
         assertThat(balance()).isZero();
-        verify(tossPaymentsClient).cancel(topup.getPaymentKey(), 20_000, "예치금 충전 취소", "TOPUP-" + topup.getId() + "-CANCEL-0");
-        verify(tossPaymentsClient).cancel(topup.getPaymentKey(), 10_000, "예치금 충전 취소", "TOPUP-" + topup.getId() + "-CANCEL-20000");
+        verify(tossPaymentsClient).cancel(topup.getPaymentKey(), 20_000, "예치금 충전 취소", "TOPUP-" + topup.getId() + "-CANCEL-1");
+        verify(tossPaymentsClient).cancel(topup.getPaymentKey(), 10_000, "예치금 충전 취소", "TOPUP-" + topup.getId() + "-CANCEL-2");
     }
 
     @Test
@@ -298,7 +333,7 @@ class TopupCancelIntegrationTest {
         paymentFacade.cancelTopup(memberId, topup.getId());   // CANCELING, 취소 중 20,000
         paymentFacade.cancelPayment(payKey);                  // 남은 금액 +10,000, 잔액 +10,000
 
-        paymentTopupCancelProcessor.fail(topup.getId());     // 대사가 PG 조회로 취소 미반영을 확인한 것처럼 확정 실패 반영
+        paymentTopupCancelProcessor.fail(topup.getId(), 1);     // 대사가 PG 조회로 취소 미반영을 확인한 것처럼 확정 실패 반영
 
         Topup restored = savedTopup();
         assertThat(restored.getStatus()).isEqualTo(TopupStatus.DONE);

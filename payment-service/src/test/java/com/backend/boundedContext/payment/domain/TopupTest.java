@@ -300,8 +300,8 @@ class TopupTest {
     }
 
     @Test
-    @DisplayName("취소 멱등 키는 취소 회차마다 다르다 (이번 취소 전의 취소된 금액 포함)")
-    void cancelIdempotencyKey_perRound() {
+    @DisplayName("취소 멱등 키는 취소 회차마다 다르다 (성공한 뒤 다시 취소해도 회차 번호가 늘어남)")
+    void cancelIdempotencyKey_perAttempt() {
         Topup topup = doneTopup(30_000);
         ReflectionTestUtils.setField(topup, "id", 7L);
         topup.use(10_000);
@@ -313,9 +313,41 @@ class TopupTest {
         topup.startCancel();
         String second = topup.cancelIdempotencyKey();
 
-        assertThat(first).isEqualTo("TOPUP-7-CANCEL-0");
-        assertThat(second).isEqualTo("TOPUP-7-CANCEL-20000");
-        assertThat(topup.cancelRestoreIdempotencyKey()).isEqualTo("TOPUP-7-CANCEL-20000-RESTORE");
+        assertThat(first).isEqualTo("TOPUP-7-CANCEL-1");
+        assertThat(second).isEqualTo("TOPUP-7-CANCEL-2");
+        assertThat(topup.cancelRestoreIdempotencyKey()).isEqualTo("TOPUP-7-CANCEL-2-RESTORE");
+    }
+
+    @Test
+    @DisplayName("취소가 거절돼 되돌린 뒤 다시 취소하면 다른 멱등 키를 쓴다 (원장 키·PG 멱등 키가 겹치지 않음)")
+    void cancelIdempotencyKey_afterFail() {
+        Topup topup = doneTopup(30_000);
+        ReflectionTestUtils.setField(topup, "id", 7L);
+
+        topup.startCancel();
+        String first = topup.cancelIdempotencyKey();
+        topup.failCancel();
+        topup.startCancel();
+
+        assertThat(first).isEqualTo("TOPUP-7-CANCEL-1");
+        assertThat(topup.cancelIdempotencyKey()).isEqualTo("TOPUP-7-CANCEL-2");
+        assertThat(topup.getCancelAttempts()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("취소 결과는 지금 CANCELING인 회차에만 반영한다 (끝난 회차의 결과로 다음 회차를 바꾸지 않음)")
+    void isCancelingAttempt() {
+        Topup topup = doneTopup(30_000);
+        topup.startCancel();
+        assertThat(topup.isCancelingAttempt(1)).isTrue();
+
+        topup.failCancel();
+        topup.startCancel();
+
+        assertThat(topup.isCancelingAttempt(1)).isFalse();
+        assertThat(topup.isCancelingAttempt(2)).isTrue();
+        topup.completeCancel(NOW);
+        assertThat(topup.isCancelingAttempt(2)).isFalse();
     }
 
     private Topup doneTopup(long amount) {

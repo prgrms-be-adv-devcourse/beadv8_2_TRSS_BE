@@ -3,5 +3,8 @@
 alter table topup add column canceled_amount bigint not null default 0;
 alter table topup add column canceling_amount bigint not null default 0;
 
+-- 충전 취소 회차. 취소를 시작할 때마다 1씩 늘고, 회차마다 다른 멱등 키를 만들어 거절된 뒤에도 다시 취소할 수 있게 한다
+alter table topup add column cancel_attempts int not null default 0;
+
 -- 원장 유형 CHARGE_CANCEL_RESTORE(21자)가 들어가도록 넓힌다
 alter table wallet_transaction alter column type type varchar(30);

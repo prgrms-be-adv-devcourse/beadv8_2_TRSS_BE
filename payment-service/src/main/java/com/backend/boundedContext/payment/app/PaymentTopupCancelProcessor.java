@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.backend.boundedContext.payment.app.dto.TopupCancelDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.Topup;
-import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.domain.WalletTransactionType;
@@ -52,20 +51,20 @@ public class PaymentTopupCancelProcessor {
         String idempotencyKey = topup.cancelIdempotencyKey();
         walletTransactionRepository.save(WalletTransaction.record(wallet, WalletTransactionType.CHARGE_CANCEL, topup.getCancelingAmount(), topup.getId(), idempotencyKey));
 
-        return new TopupCancelStartResult(topup.getId(), topup.getTossOrderId(), topup.getPgProvider(), topup.getPaymentKey(), topup.getCancelingAmount(), idempotencyKey);
+        return new TopupCancelStartResult(topup.getId(), topup.getTossOrderId(), topup.getPgProvider(), topup.getPaymentKey(), topup.getCancelingAmount(), topup.getCancelAttempts(), idempotencyKey);
     }
 
     /**
      * Tx2 (취소 성공): 취소 중 금액을 취소된 금액으로 확정. 잔액은 Tx1에서 이미 뺐으므로 그대로
-     * CANCELING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환 (취소 응답과 스케줄러가 동시에 반영해도 한 번만 반영됨)
+     * 이 회차가 CANCELING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환 (취소 응답과 스케줄러가 동시에 반영해도 한 번만 반영됨)
      * cancelAmount는 응답에 담을 이번 취소 금액 (이미 반영됐으면 취소 중 금액이 0이라 호출한 쪽에서 받음)
      */
     @Transactional
-    public TopupCancelDto complete(Long topupId, long cancelAmount) {
+    public TopupCancelDto complete(Long topupId, int attempt, long cancelAmount) {
         Locked locked = lock(topupId);
         Topup topup = locked.topup();
 
-        if (topup.getStatus() == TopupStatus.CANCELING) {
+        if (topup.isCancelingAttempt(attempt)) {
             topup.completeCancel(LocalDateTime.now());
         }
         return TopupCancelDto.of(topup, cancelAmount, locked.wallet().getBalance());
@@ -73,14 +72,14 @@ public class PaymentTopupCancelProcessor {
 
     /**
      * Tx2 (취소 확정 실패): 취소 중 금액을 남은 금액으로 되돌리고, Tx1에서 뺀 잔액을 원장 CHARGE_CANCEL_RESTORE로 다시 넣음
-     * CANCELING이 아니면 이미 반영된 것으로 보고 아무것도 하지 않음
+     * 이 회차가 CANCELING이 아니면 이미 반영된 것으로 보고 아무것도 하지 않음 (그사이 시작된 다음 회차를 되돌리지 않게 회차까지 확인)
      */
     @Transactional
-    public void fail(Long topupId) {
+    public void fail(Long topupId, int attempt) {
         Locked locked = lock(topupId);
         Topup topup = locked.topup();
 
-        if (topup.getStatus() != TopupStatus.CANCELING) {
+        if (!topup.isCancelingAttempt(attempt)) {
             return;
         }
         // failCancel()이 취소 중 금액을 0으로 만들기 전에 되돌릴 금액·키를 읽음

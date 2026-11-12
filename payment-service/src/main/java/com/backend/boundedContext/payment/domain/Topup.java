@@ -64,6 +64,10 @@ public class Topup extends BaseIdAndTime {
     @Column(nullable = false)
     private long cancelingAmount;
 
+    // 취소 회차. 취소를 시작할 때마다 1씩 늘어남. 멱등 키를 회차마다 다르게 만들고, 취소 결과를 반영할 때 같은 회차인지 확인하는 데 씀
+    @Column(nullable = false)
+    private int cancelAttempts;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private TopupStatus status;
@@ -149,6 +153,7 @@ public class Topup extends BaseIdAndTime {
         if (cancelableAmount() <= 0) throw new DomainException(PaymentErrorCode.TOPUP_NOT_CANCELABLE);
         this.cancelingAmount = remainingAmount;
         this.remainingAmount = 0;
+        this.cancelAttempts++;
         this.status = TopupStatus.CANCELING;
     }
 
@@ -174,9 +179,14 @@ public class Topup extends BaseIdAndTime {
         return TOSS_ORDER_ID_PREFIX + getId() + "-CHARGE";
     }
 
-    // 취소 원장(CHARGE_CANCEL)과 PG 취소 요청의 멱등 키. 취소 회차마다 달라지도록 이번 취소 전의 취소된 금액을 넣음
+    // 이 회차의 취소 결과를 아직 반영하지 않았는지. 취소 결과 반영(성공·실패)은 이 회차가 CANCELING일 때만 함
+    public boolean isCancelingAttempt(int attempt) {
+        return status == TopupStatus.CANCELING && cancelAttempts == attempt;
+    }
+
+    // 취소 원장(CHARGE_CANCEL)과 PG 취소 요청의 멱등 키. 거절된 뒤 다시 취소해도 겹치지 않게 취소 회차를 넣음
     public String cancelIdempotencyKey() {
-        return TOSS_ORDER_ID_PREFIX + getId() + "-CANCEL-" + canceledAmount;
+        return TOSS_ORDER_ID_PREFIX + getId() + "-CANCEL-" + cancelAttempts;
     }
 
     // 취소 확정 실패 시 되돌림 원장(CHARGE_CANCEL_RESTORE)의 멱등 키

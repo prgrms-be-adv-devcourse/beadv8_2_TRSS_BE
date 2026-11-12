@@ -55,18 +55,18 @@ public class PaymentCancelTopupUseCase {
             return TopupCancelDto.canceling(start);
         } catch (PgConfigurationException e) {
             log.error("PG 연동 설정 오류로 취소하지 못했습니다. topupId={}, code={}", topupId, e.getCode(), e);
-            paymentTopupCancelProcessor.fail(topupId);
+            paymentTopupCancelProcessor.fail(topupId, start.attempt());
             throw e;
         } catch (PgDeclinedException e) {
             // PG 메시지는 사용자에게 보여 줄 수 있는 문구라 응답 data에 그대로 사용
             String message = Objects.requireNonNullElse(e.getPgMessage(), PaymentErrorCode.TOPUP_CANCEL_DECLINED.msg());
-            paymentTopupCancelProcessor.fail(topupId);
+            paymentTopupCancelProcessor.fail(topupId, start.attempt());
             throw new DomainException(PaymentErrorCode.TOPUP_CANCEL_DECLINED, Map.of("code", Objects.requireNonNullElse(e.getCode(), "UNKNOWN"), "message", message));
         }
 
         // Tx2: 취소 확정. PG는 이미 취소했으므로 반영에 실패해도 오류로 끝내지 않고 CANCELING으로 두어 스케줄러가 반영
         try {
-            return paymentTopupCancelProcessor.complete(topupId, start.cancelAmount());
+            return paymentTopupCancelProcessor.complete(topupId, start.attempt(), start.cancelAmount());
         } catch (RuntimeException e) {
             log.error("PG 취소 후 반영에 실패해 결과 확인 대기로 둡니다. topupId={}", topupId, e);
             return TopupCancelDto.canceling(start);
