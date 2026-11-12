@@ -1,0 +1,60 @@
+# 데이터 서버(EC2-B) 전용 구성.
+# 실행(EC2-B, 레포 루트에서): docker compose -f infra/compose.data.yaml up -d --build
+# 값은 EC2-B의 infra/.env에서 읽는다(.env.data.example 참고). .env는 서버에만 두고 커밋하지 않는다.
+# 앱 서버(EC2-A)의 compose.prod.yaml과 프로젝트 이름이 달라서, 앱 배포(deploy.sh)가 이 컨테이너를 건드리지 않는다.
+# 서버 준비(Docker·스왑·vm.max_map_count)는 scripts/setup-data-server.sh로 먼저 한다.
+name: palette-data
+
+# 컨테이너 로그 크기 제한 (compose.prod.yaml과 같은 값)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  elasticsearch:
+    build: ./elasticsearch
+    image: palette-elasticsearch
+    container_name: palette-elasticsearch
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      # 노드가 1대뿐이라 다른 노드를 찾는 과정 없이 혼자 클러스터가 된다
+      discovery.type: single-node
+      # 최소(Xms)와 최대(Xmx)를 같게 둬서, 실행 중에 힙 크기를 늘리고 줄이느라 멈추는 일이 없게 한다
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+      # 기본 관리자 계정(elastic)의 비밀번호. 처음 뜰 때 이 값으로 정해진다
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD가 없습니다}
+      xpack.security.enabled: "true"
+      # 인증(비밀번호)은 켜고 암호화(HTTPS)는 끈다. 트래픽은 같은 VPC 안에서만 오가고 보안 그룹이 EC2-A만 허용한다.
+      # 끈다고 적지 않으면 ES가 처음 뜰 때 인증서를 만들어 9200을 HTTPS로 바꾸고, http:// 주소로는 접속이 안 된다
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      # 힙을 실제 메모리에 고정한다. 힙 일부가 스왑(디스크)으로 밀려나면 검색이 몇 초씩 멈출 수 있다
+      bootstrap.memory_lock: "true"
+    # 위의 메모리 고정을 컨테이너에 허용한다. 이 설정이 없으면 고정에 실패하고 ES가 경고를 남긴다
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    # 힙(768MB) 말고도 ES는 힙 밖에서 메모리를 더 쓴다(네트워크 버퍼, nori 사전 등). 그래서 힙의 2배쯤 둔다
+    mem_limit: 1536m
+    ports:
+      # 서버의 모든 네트워크가 아니라 내부 IP에서만 받는다. 보안 그룹이 바깥을 한 번 더 막는다
+      - "${ES_BIND_IP:?ES_BIND_IP가 없습니다}:9200:9200"
+    volumes:
+      # 색인 데이터. 컨테이너를 지우고 다시 만들어도 남는다
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # 비밀번호를 켰으므로 인증을 넣는다(없으면 401이라 계속 unhealthy). $$는 compose가 아니라 컨테이너 안에서 변수를 풀라는 뜻이다.
+      # 노드가 1대면 복제본을 둘 곳이 없어 green이 될 수 없으므로 yellow를 정상으로 본다
+      test: ["CMD-SHELL", "curl -fs -u elastic:$${ELASTIC_PASSWORD} 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      # ES는 뜨는 데 수십 초가 걸린다. 이 시간 동안의 실패는 unhealthy로 세지 않는다
+      start_period: 60s
+
+volumes:
+  es-data:
