@@ -8,13 +8,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum WalletTransactionType {
 
-    CHARGE(true, WalletTransactionReferenceType.TOPUP),             // 충전 (충전 모듈)
-    CHARGE_CANCEL(false, WalletTransactionReferenceType.TOPUP),     // 미사용 충전 취소 (충전 모듈)
-    PAYMENT(false, WalletTransactionReferenceType.PAYMENT),         // 결제, 지갑 → 홀딩 (결제 모듈)
-    PAYMENT_CANCEL(true, WalletTransactionReferenceType.PAYMENT),   // 결제 취소, 홀딩 → 구매자 지갑 (결제 모듈)
-    REFUND(true, WalletTransactionReferenceType.REFUND),            // 반품 승인 환불, 홀딩 → 구매자 지갑 (결제 모듈)
-    SETTLEMENT(true, WalletTransactionReferenceType.SETTLEMENT),    // 정산 지급, 홀딩 → 판매자 지갑 (정산 모듈)
-    FEE(true, WalletTransactionReferenceType.SETTLEMENT);           // 정산 수수료, 홀딩 → 관리자 지갑 (정산 모듈)
+    CHARGE(true, WalletTransactionReferenceType.TOPUP),                // 충전 (충전 모듈)
+    CHARGE_CANCEL(false, WalletTransactionReferenceType.TOPUP),        // 미사용 충전 취소 (충전 모듈)
+    CHARGE_CANCEL_RESTORE(true, WalletTransactionReferenceType.TOPUP), // 충전 취소가 PG에서 거절돼 되돌림 (충전 모듈)
+    PAYMENT(false, WalletTransactionReferenceType.PAYMENT),            // 결제, 지갑 → 홀딩 (결제 모듈)
+    PAYMENT_CANCEL(true, WalletTransactionReferenceType.PAYMENT),      // 결제 취소, 홀딩 → 구매자 지갑 (결제 모듈)
+    REFUND(true, WalletTransactionReferenceType.REFUND),               // 반품 승인 환불, 홀딩 → 구매자 지갑 (결제 모듈)
+    SETTLEMENT(true, WalletTransactionReferenceType.SETTLEMENT),       // 정산 지급, 홀딩 → 판매자 지갑 (정산 모듈)
+    FEE(true, WalletTransactionReferenceType.SETTLEMENT);              // 정산 수수료, 홀딩 → 관리자 지갑 (정산 모듈)
 
     private final boolean deposit;
     private final WalletTransactionReferenceType referenceType;

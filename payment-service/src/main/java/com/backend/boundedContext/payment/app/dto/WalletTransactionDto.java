@@ -18,6 +18,7 @@ public record WalletTransactionDto(
                 거래 유형
                 - CHARGE: 충전
                 - CHARGE_CANCEL: 미사용 충전 취소
+                - CHARGE_CANCEL_RESTORE: 충전 취소가 PG에서 거절돼 되돌림
                 - PAYMENT: 주문 결제
                 - PAYMENT_CANCEL: 결제 취소 (결제 후 주문 처리 실패)
                 - REFUND: 반품 환불
@@ -33,7 +34,7 @@ public record WalletTransactionDto(
 
         @Schema(description = """
                 referenceId가 가리키는 대상의 종류 (거래 유형에 따라 정해짐)
-                - TOPUP: 충전 건 (CHARGE·CHARGE_CANCEL)
+                - TOPUP: 충전 건 (CHARGE·CHARGE_CANCEL·CHARGE_CANCEL_RESTORE)
                 - PAYMENT: 결제 건 (PAYMENT·PAYMENT_CANCEL)
                 - REFUND: 환불 건 (REFUND)
                 - SETTLEMENT: 정산서 (SETTLEMENT·FEE)""", example = "PAYMENT")

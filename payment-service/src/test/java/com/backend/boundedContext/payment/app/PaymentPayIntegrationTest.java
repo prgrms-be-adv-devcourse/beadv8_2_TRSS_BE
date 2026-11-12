@@ -101,7 +101,7 @@ class PaymentPayIntegrationTest {
     }
 
     @Test
-    @DisplayName("결제 금액만큼 오래된 충전 건부터 차감하고 차감 내역을 남긴다 (차감된 충전 건은 토스 취소 불가)")
+    @DisplayName("결제 금액만큼 오래된 충전 건부터 차감하고 차감 내역을 남긴다 (취소 가능 금액도 남은 금액만큼으로 줄어듦)")
     void pay_usesOldestTopupsFirst() {
         Topup older = doneTopup(10_000, LocalDateTime.now().minusDays(2));
         Topup newer = doneTopup(20_000, LocalDateTime.now().minusDays(1));
@@ -113,8 +113,8 @@ class PaymentPayIntegrationTest {
         Topup newerAfter = topupRepository.findById(newer.getId()).orElseThrow();
         assertThat(olderAfter.getRemainingAmount()).isZero();
         assertThat(newerAfter.getRemainingAmount()).isEqualTo(5_000);
-        assertThat(olderAfter.isCancelable()).isFalse();
-        assertThat(newerAfter.isCancelable()).isFalse();
+        assertThat(olderAfter.cancelableAmount()).isZero();
+        assertThat(newerAfter.cancelableAmount()).isEqualTo(5_000);
 
         assertThat(topupUsageRepository.findAllByPaymentId(result.paymentId()))
                 .extracting(TopupUsage::getAmount)
