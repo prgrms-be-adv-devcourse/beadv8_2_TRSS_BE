@@ -1,5 +1,6 @@
 package com.backend.boundedContext.product.app;
 
+import com.backend.boundedContext.product.app.dto.SellerOptionDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
@@ -151,7 +152,8 @@ class ProductFacadeSellerProductTest {
         SellerProductFormDto form = productFacade.getSellerProductForm(MEMBER_ID, product.getId());
 
         assertThat(form).isEqualTo(new SellerProductFormDto(
-                product.getId(), "수분 크림", 25_000, "설명", skincare.getParent().getId(), skincare.getId(), null, List.of()));
+                product.getId(), "수분 크림", 25_000, "설명", skincare.getParent().getId(), skincare.getId(), null, List.of(),
+                List.of(), List.of(new SellerOptionDto(option(product).getId(), "기본", List.of(), 0, 25_000, 10))));
     }
 
     @Test

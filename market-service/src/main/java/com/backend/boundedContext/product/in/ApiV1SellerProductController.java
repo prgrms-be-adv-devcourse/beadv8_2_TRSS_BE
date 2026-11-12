@@ -11,7 +11,10 @@ import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.in.dto.ProductCreateRequest;
 import com.backend.boundedContext.product.in.dto.ProductCreateResponse;
+import com.backend.boundedContext.product.in.dto.OptionCreateResponse;
+import com.backend.boundedContext.product.in.dto.OptionModifyRequest;
 import com.backend.boundedContext.product.in.dto.ProductModifyRequest;
+import com.backend.boundedContext.product.in.dto.ProductOptionRequest;
 import com.backend.boundedContext.product.in.dto.ProductStopRequestCreateRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustRequest;
 import com.backend.boundedContext.product.in.dto.StockAdjustResponse;
@@ -61,7 +64,11 @@ public class ApiV1SellerProductController {
 
     @Operation(
             summary = "상품 등록",
-            description = "승인된 판매자만 등록할 수 있습니다. 사용 중인 소분류만 고를 수 있고, 초기 재고는 기본 옵션의 재고가 됩니다. "
+            description = "승인된 판매자만 등록할 수 있습니다. 사용 중인 소분류만 고를 수 있습니다. "
+                    + "재고는 옵션 조합마다 받습니다. optionNames(최대 3개, 예: [\"색상\", \"사이즈\"])와 "
+                    + "options(조합마다 values·additionalPrice·stock, 1~100개)를 보냅니다. "
+                    + "values는 optionNames 순서대로 하나씩(각 14자 이하)이고, 단가는 가격 + 추가금입니다. "
+                    + "옵션이 없는 상품은 optionNames를 비우고 options에 values가 빈 조합 1개를 보냅니다. "
                     + "대표 이미지(thumbnail)는 필수, 상세 이미지(detailImages)는 선택(최대 10개)입니다. "
                     + "이미지는 jpg·png·webp, 장당 5MB까지입니다.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
@@ -75,7 +82,8 @@ public class ApiV1SellerProductController {
             @RequestPart(value = "detailImages", required = false) List<MultipartFile> detailImages
     ) {
         Long productId = productFacade.createProduct(authMember.memberId(), request.categoryId(),
-                request.name(), request.description(), request.price(), request.stock(),
+                request.name(), request.description(), request.price(),
+                request.optionNamesOrEmpty(), request.toOptionSpecs(),
                 toImageFile(thumbnail), toImageFiles(detailImages));
         return RsData.of("200-1", "상품을 등록했습니다.", new ProductCreateResponse(productId));
     }
@@ -159,6 +167,43 @@ public class ApiV1SellerProductController {
                                                      @Valid @RequestBody ProductStopRequestCreateRequest request) {
         return RsData.of("200-1", "판매 중지를 요청했습니다.",
                 productFacade.requestStop(authMember.memberId(), productId, request.reason()));
+    }
+
+    @Operation(
+            summary = "옵션 추가",
+            description = "본인 상품에 옵션 조합을 하나 더합니다. values는 상품의 옵션 이름 순서대로 하나씩 보냅니다. "
+                    + "판매 중지 상품은 409, 같은 조합이 있으면 409-OPTION_DUPLICATED, 100개를 넘으면 400-OPTION_LIMIT_EXCEEDED입니다.")
+    @PostMapping("/{productId}/options")
+    public RsData<OptionCreateResponse> addOption(@AuthenticationPrincipal AuthMember authMember,
+                                                  @PathVariable Long productId,
+                                                  @Valid @RequestBody ProductOptionRequest request) {
+        Long optionId = productFacade.addOption(authMember.memberId(), productId, request.toSpec());
+        return RsData.of("200-1", "옵션을 추가했습니다.", new OptionCreateResponse(optionId));
+    }
+
+    @Operation(
+            summary = "옵션 수정",
+            description = "옵션의 추가금을 바꿉니다. 옵션 값은 바꿀 수 없습니다(다른 조합은 삭제 후 추가). "
+                    + "판매 중지·삭제된 상품과 삭제된 옵션은 409입니다.")
+    @PatchMapping("/{productId}/options/{optionId}")
+    public RsData<Void> modifyOption(@AuthenticationPrincipal AuthMember authMember,
+                                     @PathVariable Long productId,
+                                     @PathVariable Long optionId,
+                                     @Valid @RequestBody OptionModifyRequest request) {
+        productFacade.modifyOption(authMember.memberId(), productId, optionId, request.additionalPrice());
+        return RsData.of("200-1", "옵션을 수정했습니다.");
+    }
+
+    @Operation(
+            summary = "옵션 삭제",
+            description = "옵션 조합을 지웁니다(소프트 삭제). 장바구니에 담긴 그 옵션은 판매 불가(OPTION_DELETED)가 됩니다. "
+                    + "판매 중지 상품과 이미 삭제된 옵션은 409, 마지막 남은 옵션은 409-LAST_OPTION_NOT_DELETABLE입니다.")
+    @DeleteMapping("/{productId}/options/{optionId}")
+    public RsData<Void> deleteOption(@AuthenticationPrincipal AuthMember authMember,
+                                     @PathVariable Long productId,
+                                     @PathVariable Long optionId) {
+        productFacade.deleteOption(authMember.memberId(), productId, optionId);
+        return RsData.of("200-1", "옵션을 삭제했습니다.");
     }
 
     @Operation(
