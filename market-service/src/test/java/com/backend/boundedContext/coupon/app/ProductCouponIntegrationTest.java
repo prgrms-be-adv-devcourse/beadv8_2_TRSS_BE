@@ -179,18 +179,19 @@ class ProductCouponIntegrationTest {
         Long partnershipId = activePartnership();
         Long ended = couponFacade.issueProductCoupon(SELLER_MEMBER_ID,
                 command(partnershipId, PRODUCT_ID, now.plusDays(1), now.plusDays(2))).couponId();
-        // 오늘 0시부터 3시간 전까지 운영하고 끝난 쿠폰으로 만든다(발행은 미래 종료만 받으므로 기간을 직접 바꾼다)
+        // 5시간 전부터 3시간 전까지 운영하고 끝난 쿠폰으로 만든다(발행은 미래 종료만 받으므로 기간을 직접 바꾼다)
+        // 날짜 기준(오늘 0시)을 쓰면 새벽 0~3시에 끝이 시작보다 앞서 ck_coupon_period에 걸리므로 모두 지금 기준으로 잡는다
         entityManager.flush();
         entityManager.createNativeQuery("update coupon set valid_from = :from, valid_until = :until where id = :id")
-                .setParameter("from", now.toLocalDate().atStartOfDay())
+                .setParameter("from", now.minusHours(5))
                 .setParameter("until", now.minusHours(3))
                 .setParameter("id", ended)
                 .executeUpdate();
         entityManager.clear();
 
-        // 끝난 쿠폰과 기간이 겹치지만(오늘 0시 시작) 그 쿠폰은 이미 끝났으므로 발행된다
+        // 끝난 쿠폰과 기간이 겹치지만(4시간 전 시작) 그 쿠폰은 이미 끝났으므로 발행된다
         couponFacade.issueProductCoupon(SELLER_MEMBER_ID,
-                command(partnershipId, PRODUCT_ID, now.toLocalDate().atStartOfDay(), now.plusDays(3)));
+                command(partnershipId, PRODUCT_ID, now.minusHours(4), now.plusDays(3)));
     }
 
     @Test
