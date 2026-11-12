@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
-
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -102,7 +101,7 @@ public class PaymentTopupCancelProcessor {
                 .toList();
     }
 
-    // 지갑 → 충전 건 순서로 잠금. 지갑을 찾으려면 회원 ID가 필요해하므로, 충전 건은 잠그지 않고 회원 ID만 먼저 읽음
+    // 지갑 → 충전 건 순서로 잠금. 지갑을 찾으려면 회원 ID가 필요하므로, 충전 건은 잠그지 않고 회원 ID만 먼저 읽음
     private Locked lock(Long topupId) {
         Long memberId = topupRepository.findMemberIdById(topupId)
                 .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
