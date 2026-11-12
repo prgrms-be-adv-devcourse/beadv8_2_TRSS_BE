@@ -248,6 +248,21 @@ class PaymentTopupConfirmProcessorTest {
         assertThat(topup.getCanceledAmount()).isEqualTo(20_000);
     }
 
+    @Test
+    @DisplayName("허용하지 않은 결제 수단 취소 재시도: 같은 회차면 회차를 늘려 새 멱등 키를 돌려주고, 다르면 빈 값")
+    void retryMethodCancel() {
+        Wallet wallet = Wallet.create(MEMBER_ID);
+        Topup topup = processingTopup(wallet, 20_000);
+        topup.startMethodCancel();
+
+        assertThat(processor.retryMethodCancel(TOPUP_ID, 1)).hasValueSatisfying(s -> {
+            assertThat(s.attempt()).isEqualTo(2);
+            assertThat(s.idempotencyKey()).isEqualTo("TOPUP-" + TOPUP_ID + "-METHOD-CANCEL-2");
+        });
+        assertThat(processor.retryMethodCancel(TOPUP_ID, 1)).isEmpty();
+        assertThat(topup.getCancelAttempts()).isEqualTo(2);
+    }
+
     // 승인 반영 대상: ID가 있는 PROCESSING 충전 건과 그 지갑을 잠금 조회로 돌려줌
     private Topup processingTopup(Wallet wallet, long amount) {
         Topup topup = Topup.create(MEMBER_ID, wallet, amount, PgProvider.TOSS);

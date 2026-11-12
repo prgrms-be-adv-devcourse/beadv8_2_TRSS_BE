@@ -76,8 +76,8 @@ public class PaymentTopupConfirmProcessor {
      * 1. 충전 건 행 잠금 조회. PROCESSING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환
      *    (승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하려 해도 한 번만 반영됨)
      * 2. 지갑 잠금 조회 → 원장 CHARGE 기록(잔액 증가) → 충전 건 DONE
-     * 3. 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이면 경고 로그 후 반영은 그대로 진행
-     *    (승인 응답은 이 메서드 전에 걸러 PG 전액 취소함. 대사는 아직 거르지 않아 여기로 옴)
+     * 3. 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이면 경고 로그
+     *    (승인 응답·대사가 이 메서드 전에 걸러 PG 전액 취소하므로 정상이면 오지 않음. 혹시 오면 반영은 그대로 진행)
      * 잠금 순서: 충전 건 → 지갑
      */
     @Transactional
@@ -142,6 +142,32 @@ public class PaymentTopupConfirmProcessor {
         if (topup.isMethodCancelingAttempt(attempt)) {
             topup.completeMethodCancel(reason, LocalDateTime.now());
         }
+    }
+
+    /**
+     * 허용하지 않은 결제 수단 취소 재시도 시작: 이 회차가 아직 진행 중이면 회차를 1 늘려 새 멱등 키를 돌려줌
+     * 그사이 회차가 바뀌었거나 이미 확정됐으면 빈 값 반환 (같은 회차를 두 번 재시도하지 않게)
+     */
+    @Transactional
+    public Optional<TopupMethodCancelStart> retryMethodCancel(Long topupId, int attempt) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (!topup.isMethodCancelingAttempt(attempt)) {
+            return Optional.empty();
+        }
+        topup.retryMethodCancel();
+        return Optional.of(new TopupMethodCancelStart(topup.getId(), topup.getPgProvider(), topup.getPaymentKey(),
+                topup.getAmount(), topup.getCancelAttempts(), topup.methodCancelIdempotencyKey()));
+    }
+
+    /**
+     * 허용하지 않은 결제 수단 취소 결과 확인 대상: 기준 시각 이전부터 METHOD_CANCELING으로 남은 충전 건 (오래된 순, 최대 limit건)
+     */
+    @Transactional(readOnly = true)
+    public List<TopupMethodCancelTarget> findMethodCancelTargets(LocalDateTime cutoff, int limit) {
+        return topupRepository.findStale(TopupStatus.METHOD_CANCELING, cutoff, PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupMethodCancelTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getAmount(), topup.getCancelAttempts()))
+                .toList();
     }
 
     /**
