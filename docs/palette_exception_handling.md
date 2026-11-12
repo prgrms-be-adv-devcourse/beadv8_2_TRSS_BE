@@ -293,8 +293,9 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
 | | 409-PAYMENT_IN_PROGRESS | 결제 확인 중(PAYING)인 주문에 다시 결제·취소 요청. 결제 결과를 서버가 확인하는 중이므로 잠시 뒤 주문 상태를 다시 조회한다 |
-| | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
-| | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정 |
+| | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 (거절된 뒤 다시 요청 포함) |
+| | 400-RETURN_REASON_REQUIRED | 반품 사유 코드가 기타(OTHER)인데 상세 사유가 비어 있음 |
+| | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정·반품 요청 |
 | | 409-ORDER_COUPON_NOT_AVAILABLE | 주문에 쿠폰 반영이 꺼져 있을 때(custom.order.couponEnabled = false) 주문 생성에 쿠폰을 보냄 |
 | payment (지은·시연) | 402-INSUFFICIENT_BALANCE | 잔액 부족. API 응답은 주문 결제가 order의 `OrderErrorCode.INSUFFICIENT_BALANCE`로 던진다(`data.shortage`·`recommendedTopupAmount`·`remainingSeconds`). payment 코드는 `Wallet` 출금 안전장치 |
 | | 400-PAYMENT_PERIOD_INVALID | 조회 시작일 > 종료일 (거래 내역, 관리자 결제·충전 조회) |

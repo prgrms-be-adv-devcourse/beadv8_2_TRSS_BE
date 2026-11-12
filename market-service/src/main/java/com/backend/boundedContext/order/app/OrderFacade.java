@@ -1,6 +1,7 @@
 package com.backend.boundedContext.order.app;
 
 import com.backend.shared.order.dto.CartLineDto;
+import com.backend.boundedContext.order.domain.ReturnReasonCode;
 import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderCancelType;
@@ -37,6 +38,7 @@ public class OrderFacade {
     private final OrderRecheckPayingOrdersUseCase orderRecheckPayingOrdersUseCase;
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
     private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
+    private final OrderRequestReturnUseCase orderRequestReturnUseCase;
     private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
     private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
@@ -112,6 +114,12 @@ public class OrderFacade {
     @Transactional
     public OrderConfirmResponse confirmOrder(Long buyerId, Long orderId) {
         return orderConfirmOrderUseCase.confirm(buyerId, orderId);
+    }
+
+    // 반품 요청 (구매자)
+    @Transactional
+    public ReturnRequestResponse requestReturn(Long buyerId, Long orderId, ReturnReasonCode reasonCode, String reason) {
+        return orderRequestReturnUseCase.request(buyerId, orderId, reasonCode, reason);
     }
 
     // 자동 구매확정 대상 주문 id 조회 (스케줄러)

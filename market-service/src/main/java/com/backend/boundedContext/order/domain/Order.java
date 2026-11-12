@@ -104,9 +104,9 @@ public class Order extends BaseIdAndTime {
 
     private LocalDateTime returnRequestedAt;
 
-    // TODO 반품 구현 시 사유 코드 enum으로 교체
+    @Enumerated(EnumType.STRING)
     @Column(length = 30)
-    private String returnReasonCode;
+    private ReturnReasonCode returnReasonCode;
 
     @Column(length = 300)
     private String returnReason;
@@ -350,6 +350,31 @@ public class Order extends BaseIdAndTime {
         this.confirmedAt = now;
         this.confirmType = confirmType;
         changeStatus(OrderStatus.CONFIRMED, null);   // 주문이력도 함께 쌓임
+    }
+
+    /**
+     * 반품 요청: 주문당 1회 → PAID → 배송 완료 → 사유 순으로 확인한다.
+     * 기한은 "구매 확정 전까지": 배송 완료 7일이 지나도 아직 자동 확정 전(PAID)이면 받는다.
+     * 배송지 없는 주문(배송 흐름 이전 경로)은 PAID면 받는다.
+     */
+    public void requestReturn(ReturnReasonCode reasonCode, String reason, LocalDateTime now) {
+        if (returnRequestedAt != null) {
+            throw new DomainException(OrderErrorCode.RETURN_ALREADY_REQUESTED);   // 거절된 뒤 다시 요청도 막는다
+        }
+        if (status != OrderStatus.PAID) {
+            throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);        // 결제 전·결제 중·확정·취소
+        }
+        if (hasShippingAddress() && deliveredAt == null) {
+            throw new DomainException(OrderErrorCode.ORDER_NOT_DELIVERED);
+        }
+        if (reasonCode == ReturnReasonCode.OTHER && (reason == null || reason.isBlank())) {
+            throw new DomainException(OrderErrorCode.RETURN_REASON_REQUIRED);
+        }
+
+        this.returnRequestedAt = now;
+        this.returnReasonCode = reasonCode;
+        this.returnReason = (reason == null || reason.isBlank()) ? null : reason;
+        changeStatus(OrderStatus.RETURN_REQUESTED, reasonCode.name());   // 이력 사유에는 코드만 남긴다
     }
 
     // 자동 구매 확정 대상 여부

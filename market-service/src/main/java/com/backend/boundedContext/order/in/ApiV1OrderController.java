@@ -25,7 +25,7 @@ import java.util.List;
 /**
  * 주문 API
  */
-@Tag(name = "주문", description = "주문 생성·조회·취소·구매확정")
+@Tag(name = "주문", description = "주문 생성·조회·취소·구매확정·반품 요청")
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
@@ -123,5 +123,23 @@ public class ApiV1OrderController {
     ) {
         return RsData.of("200-1", "구매를 확정했습니다.",
                 orderFacade.confirmOrder(authMember.memberId(), orderId));
+    }
+
+    @Operation(summary = "반품 요청", description = "결제 완료(PAID) 주문의 반품을 요청한다. 배송지가 있는 주문은 배송 완료 뒤에만, 구매 확정 전까지 요청할 수 있다"
+            + "(배송 완료 7일이 지났어도 아직 확정 전이면 가능). 주문당 한 번, 주문 전체 단위이고 거절된 뒤에는 다시 요청할 수 없다. "
+            + "사유 코드가 OTHER면 상세 사유(reason)가 필수다. 반품을 승인하면 쿠폰은 돌려주지 않는다.")
+    @ApiResponse(responseCode = "200", description = "200-1 반품 요청 완료(status: RETURN_REQUESTED)")
+    @ApiResponse(responseCode = "400", description = "400-VALIDATION_FAILED 사유 코드 누락, 상세 사유 300자 초과 / 400-INVALID_REQUEST 없는 사유 코드 / 400-RETURN_REASON_REQUIRED 기타(OTHER) 사유인데 상세 사유 없음")
+    @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND 없는 주문·다른 회원의 주문")
+    @ApiResponse(responseCode = "409", description = "409-RETURN_ALREADY_REQUESTED 이미 반품을 요청한 주문(거절 후 포함) / "
+            + "409-ORDER_STATE_INVALID 결제 완료(PAID)가 아닌 주문(결제 전·결제 중·구매 확정·취소) / 409-ORDER_NOT_DELIVERED 배송지가 있는 주문의 배송 완료 전")
+    @PostMapping("/{orderId}/returns")
+    public RsData<ReturnRequestResponse> requestReturn(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long orderId,
+            @Valid @RequestBody ReturnRequestRequest request
+    ) {
+        return RsData.of("200-1", "반품을 요청했습니다.",
+                orderFacade.requestReturn(authMember.memberId(), orderId, request.reasonCode(), request.reason()));
     }
 }
