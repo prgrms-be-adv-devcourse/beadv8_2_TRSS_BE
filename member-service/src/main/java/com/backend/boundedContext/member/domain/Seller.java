@@ -105,7 +105,7 @@ public class Seller extends BaseIdAndTime {
 
         SellerStatus fromStatus = status;
         submit(businessName, businessNumber, representativeName, phoneNumber, bankName, accountNumber, accountHolder);
-        return SellerStatusHistory.of(this, fromStatus, null);
+        return SellerStatusHistory.record(this, fromStatus, null);
     }
 
     public SellerStatusHistory approve() {
@@ -136,7 +136,7 @@ public class Seller extends BaseIdAndTime {
 
         SellerStatus from = status;
         status = SellerStatus.SANCTIONED;
-        return SellerStatusHistory.of(this, from, reason);
+        return SellerStatusHistory.record(this, from, reason);
     }
 
     // 판매 중인 판매자의 상호·연락처 수정. null은 그대로 둔다 (상태 변경이 아니라 이력은 남기지 않음)
@@ -215,7 +215,7 @@ public class Seller extends BaseIdAndTime {
         if (status != from) throw new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
 
         status = to;
-        if (!canReapply()) return SellerStatusHistory.of(this, from, reason);
+        if (!canReapply()) return SellerStatusHistory.record(this, from, reason);
 
         // 재신청하면 이 행이 덮어써지니, 그 전에 신청서를 이력에 남기고 사업자번호는 다른 회원이 쓸 수 있게 비운다
         SellerStatusHistory history = SellerStatusHistory.withSellerInfo(this, from, reason);

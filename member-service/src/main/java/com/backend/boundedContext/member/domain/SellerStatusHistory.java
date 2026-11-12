@@ -59,11 +59,11 @@ public class SellerStatusHistory extends BaseIdAndTime {
 
     // 처음 신청한 줄
     public static SellerStatusHistory applied(Seller seller) {
-        return of(seller, null, null);
+        return record(seller, null, null);
     }
 
     // seller의 지금 상태(바뀐 뒤)를 toStatus로 기록한다
-    static SellerStatusHistory of(Seller seller, SellerStatus fromStatus, String reason) {
+    static SellerStatusHistory record(Seller seller, SellerStatus fromStatus, String reason) {
         SellerStatusHistory history = new SellerStatusHistory();
         history.seller = seller;
         history.fromStatus = fromStatus;
@@ -80,7 +80,7 @@ public class SellerStatusHistory extends BaseIdAndTime {
     }
 
     static SellerStatusHistory withSellerInfo(Seller seller, SellerStatus fromStatus, String reason) {
-        SellerStatusHistory history = of(seller, fromStatus, reason);
+        SellerStatusHistory history = record(seller, fromStatus, reason);
         history.businessName = seller.getBusinessName();
         history.businessNumber = seller.getBusinessNumber();
         history.representativeName = seller.getRepresentativeName();
