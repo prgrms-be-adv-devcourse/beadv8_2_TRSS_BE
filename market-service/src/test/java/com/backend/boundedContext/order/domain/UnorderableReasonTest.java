@@ -14,11 +14,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UnorderableReasonTest {
 
     private OptionSnapshotDto saleable(int stock) {
-        return new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, stock, true, null, null);
+        return new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 15000, null, stock, true, null, null);
     }
 
     private OptionSnapshotDto unsaleable(ProductUnsaleableReason reason) {
-        return new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 5, false, reason, null);
+        return new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 15000, null, 5, false, reason, null);
     }
 
     @Test

@@ -77,7 +77,7 @@ class OrderShippingFeeIntegrationTest {
     /** 장바구니에 옵션 하나(price원 x 1)를 담고 상품·판매자 조회를 목으로 둔다. 장바구니 항목 ID를 돌려준다 */
     private Long givenCartItem(long price) {
         given(productApi.getOptions(anyCollection())).willReturn(List.of(
-                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", price, 10, true, null, null)));
+                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", price, price, null, 10, true, null, null)));
         given(memberApi.getSellers(any())).willReturn(List.of(new SellerDto(2L, 20L, "테스트상점", SellerStatus.APPROVED)));
 
         return transactionTemplate.execute(status -> {

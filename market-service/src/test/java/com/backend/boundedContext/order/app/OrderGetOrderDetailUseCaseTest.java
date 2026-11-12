@@ -65,6 +65,24 @@ class OrderGetOrderDetailUseCaseTest {
     }
 
     @Test
+    @DisplayName("주문 항목의 정가·할인율은 주문 때 저장한 값을 그대로 담는다 (할인 없던 항목은 정가 = 단가, 할인율 null)")
+    void listPriceAndDiscountRate() {
+        Order order = Order.create(BUYER_ID, List.of(
+                // 상품 10,000원 20% 할인 + 옵션 추가금 5,000원 → 단가 13,000원, 정가 15,000원, 할인율 20%
+                new OrderItemSpec(null, 10L, 100L, 2L, "립스틱", "대용량", "상점", 13_000, 2, 15_000, 20),
+                new OrderItemSpec(null, 11L, 101L, 2L, "블러셔", "기본", "상점", 5_000, 1)), LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(order, "id", 500L);
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.items()).extracting(OrderItemResponse::unitPrice, OrderItemResponse::listPrice,
+                        OrderItemResponse::discountRate, OrderItemResponse::lineAmount)
+                .containsExactly(tuple(13_000L, 15_000L, 20, 26_000L), tuple(5_000L, 5_000L, null, 5_000L));
+        assertThat(response.totalPrice()).isEqualTo(31_000);   // 금액은 단가 기준
+    }
+
+    @Test
     @DisplayName("본인 주문이면 항목 스냅샷과 금액을 담아 반환한다")
     void detail() {
         given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))

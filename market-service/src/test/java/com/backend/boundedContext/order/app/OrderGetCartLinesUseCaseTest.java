@@ -48,8 +48,8 @@ class OrderGetCartLinesUseCaseTest {
     void lines() {
         given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cart()));
         given(productApi.getOptions(List.of(300L, 100L, 200L))).willReturn(List.of(
-                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 20_000, 5, true, null, null),
-                new OptionSnapshotDto(200L, 20L, 2L, "섀도", "기본", 30_000, 5, false, ProductUnsaleableReason.PRODUCT_STOPPED, null)));
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 20_000, 20_000, null, 5, true, null, null),
+                new OptionSnapshotDto(200L, 20L, 2L, "섀도", "기본", 30_000, 30_000, null, 5, false, ProductUnsaleableReason.PRODUCT_STOPPED, null)));
 
         List<CartLineDto> lines = useCase.getLines(BUYER_ID, List.of(3L, 1L, 2L, 1L));
 
