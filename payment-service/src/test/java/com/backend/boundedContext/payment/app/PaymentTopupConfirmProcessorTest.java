@@ -202,6 +202,52 @@ class PaymentTopupConfirmProcessorTest {
         assertThat(topup.getStatus()).isEqualTo(TopupStatus.DONE);
     }
 
+    @Test
+    @DisplayName("허용하지 않은 결제 수단 취소 시작: PROCESSING → METHOD_CANCELING, 지갑·원장은 건드리지 않고 PG 취소에 필요한 값을 돌려준다")
+    void startMethodCancel() {
+        Wallet wallet = Wallet.create(MEMBER_ID);
+        Topup topup = processingTopup(wallet, 20_000);
+
+        Optional<TopupMethodCancelStart> start = processor.startMethodCancel(TOPUP_ID);
+
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.METHOD_CANCELING);
+        assertThat(start).hasValueSatisfying(s -> {
+            assertThat(s.paymentKey()).isEqualTo("pk_1");
+            assertThat(s.amount()).isEqualTo(20_000);
+            assertThat(s.attempt()).isEqualTo(1);
+            assertThat(s.idempotencyKey()).isEqualTo("TOPUP-" + TOPUP_ID + "-METHOD-CANCEL-1");
+        });
+        assertThat(wallet.getBalance()).isZero();
+        verify(walletTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단 취소 시작: PROCESSING이 아니면(다른 쪽이 먼저 처리) 아무것도 하지 않는다")
+    void startMethodCancel_notProcessing() {
+        Wallet wallet = Wallet.create(MEMBER_ID);
+        Topup topup = processingTopup(wallet, 20_000);
+        topup.startMethodCancel();
+
+        assertThat(processor.startMethodCancel(TOPUP_ID)).isEmpty();
+        assertThat(topup.getCancelAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단 취소 확정: 같은 회차면 FAILED_METHOD_NOT_ALLOWED, 회차가 다르면 그대로")
+    void completeMethodCancel() {
+        Wallet wallet = Wallet.create(MEMBER_ID);
+        Topup topup = processingTopup(wallet, 20_000);
+        topup.startMethodCancel();
+        topup.retryMethodCancel();
+
+        processor.completeMethodCancel(TOPUP_ID, 1, "사유");
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.METHOD_CANCELING);
+
+        processor.completeMethodCancel(TOPUP_ID, 2, "사유");
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        assertThat(topup.getCanceledAmount()).isEqualTo(20_000);
+    }
+
     // 승인 반영 대상: ID가 있는 PROCESSING 충전 건과 그 지갑을 잠금 조회로 돌려줌
     private Topup processingTopup(Wallet wallet, long amount) {
         Topup topup = Topup.create(MEMBER_ID, wallet, amount, PgProvider.TOSS);

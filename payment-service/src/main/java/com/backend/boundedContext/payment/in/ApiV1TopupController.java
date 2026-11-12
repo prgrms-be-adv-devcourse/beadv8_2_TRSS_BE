@@ -51,7 +51,7 @@ public class ApiV1TopupController {
             토스 결제 성공 리다이렉트 후 호출한다. 금액을 검증하고 토스 승인 API를 호출해 예치금에 반영한다.
             data.status가 DONE이면 반영 완료, PROCESSING이면 결과 확인 중(토스 응답 지연 등)이며 잠시 후 충전 내역에서 확인한다.""")
     @ApiResponse(responseCode = "200", description = "200-1 충전 완료(data.status: DONE) 또는 결과 확인 중(data.status: PROCESSING)")
-    @ApiResponse(responseCode = "400", description = "400-AMOUNT_MISMATCH 준비 금액과 다름 / 400-TOPUP_PAYMENT_DECLINED 카드 거절 등(data: 토스 오류 코드·메시지)")
+    @ApiResponse(responseCode = "400", description = "400-AMOUNT_MISMATCH 준비 금액과 다름 / 400-TOPUP_PAYMENT_DECLINED 카드 거절 등(data: 토스 오류 코드·메시지) / 400-TOPUP_METHOD_NOT_ALLOWED 충전에 쓸 수 없는 결제 수단(예치금에 반영하지 않고 결제를 자동 취소)")
     @ApiResponse(responseCode = "404", description = "404-TOPUP_NOT_FOUND 충전 건 없음")
     @ApiResponse(responseCode = "409", description = "409-TOPUP_ALREADY_PROCESSED 이미 처리된 충전·결제키")
     @ApiResponse(responseCode = "502", description = "502-EXTERNAL_SERVICE_ERROR 토스 인증 오류 등")

@@ -3,6 +3,7 @@ package com.backend.boundedContext.payment.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -161,6 +163,73 @@ class PaymentConfirmTopupUseCaseTest {
         TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
 
         assertProcessing(result);
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단: 예치금에 반영하지 않고 PG 전액 취소 후 확정, 400 TOPUP_METHOD_NOT_ALLOWED")
+    void confirm_notAllowedMethod() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approvedBy(PgPaymentMethod.OTHER));
+        given(processor.startMethodCancel(TOPUP_ID)).willReturn(Optional.of(methodCancelStart()));
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        verify(processor, never()).complete(anyLong(), any());
+        verify(gateway).cancel(PAYMENT_KEY, AMOUNT, "충전에 허용하지 않은 결제 수단", "TOPUP-7-METHOD-CANCEL-1");
+        verify(processor).completeMethodCancel(eq(TOPUP_ID), eq(1), anyString());
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단: PG 취소 결과를 모르면 확정하지 않고(METHOD_CANCELING 유지) 400으로 응답한다")
+    void confirm_notAllowedMethod_cancelUnknown() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approvedBy(PgPaymentMethod.OTHER));
+        given(processor.startMethodCancel(TOPUP_ID)).willReturn(Optional.of(methodCancelStart()));
+        given(gateway.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new PgResultUnknownException(new RuntimeException("Read timed out")));
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        verify(processor, never()).completeMethodCancel(anyLong(), anyInt(), anyString());
+        verify(processor, never()).complete(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단: 대사가 먼저 처리해 PROCESSING이 아니면 PG 취소를 다시 보내지 않는다")
+    void confirm_notAllowedMethod_alreadyHandled() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approvedBy(PgPaymentMethod.OTHER));
+        given(processor.startMethodCancel(TOPUP_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        verify(gateway, never()).cancel(anyString(), anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("계좌이체·간편결제는 허용 수단이라 그대로 반영한다")
+    void confirm_allowedMethods() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approvedBy(PgPaymentMethod.TRANSFER));
+
+        useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
+
+        verify(processor).complete(eq(TOPUP_ID), any());
+        verify(processor, never()).startMethodCancel(anyLong());
+    }
+
+    private PgPaymentResult approvedBy(PgPaymentMethod method) {
+        return new PgPaymentResult(PAYMENT_KEY, ORDER_ID, PgPaymentStatus.APPROVED, "DONE", AMOUNT, 0, method, null);
+    }
+
+    private TopupMethodCancelStart methodCancelStart() {
+        return new TopupMethodCancelStart(TOPUP_ID, PgProvider.TOSS, PAYMENT_KEY, AMOUNT, 1, "TOPUP-7-METHOD-CANCEL-1");
     }
 
     private void started() {

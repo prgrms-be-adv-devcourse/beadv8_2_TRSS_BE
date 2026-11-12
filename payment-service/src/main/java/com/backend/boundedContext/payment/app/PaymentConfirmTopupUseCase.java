@@ -29,11 +29,16 @@ import lombok.extern.slf4j.Slf4j;
  * - 거절(카드 거절·한도 초과 등) → FAILED_PG_DECLINED 기록 후 400 TOPUP_PAYMENT_DECLINED
  * - 설정 오류(API 키 등) → 우리 설정 문제이므로 FAILED_SYSTEM_ERROR 기록 후 502 EXTERNAL_SERVICE_ERROR
  * - 결과 모름(응답 없음·5xx·이미 처리된 결제) → 승인 여부를 알 수 없으므로 PROCESSING 유지, 200 + status PROCESSING
+ * - 승인됐지만 허용하지 않은 결제 수단 → 예치금에 반영하지 않고 PG 전액 취소, 400 TOPUP_METHOD_NOT_ALLOWED
+ *   (취소 결과를 모르거나 실패하면 METHOD_CANCELING으로 남겨 대사가 다시 취소)
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class PaymentConfirmTopupUseCase {
+
+    // 허용하지 않은 결제 수단 전액 취소 때 PG에 남기는 사유
+    private static final String METHOD_CANCEL_REASON = "충전에 허용하지 않은 결제 수단";
 
     private final PaymentTopupConfirmProcessor paymentTopupConfirmProcessor;
     private final TopupGateways topupGateways;
@@ -68,12 +73,35 @@ public class PaymentConfirmTopupUseCase {
             throw new DomainException(PaymentErrorCode.TOPUP_PAYMENT_DECLINED, Map.of("code", Objects.requireNonNullElse(e.getCode(), "UNKNOWN"), "message", message));
         }
 
+        // 허용하지 않은 결제 수단이면 반영하지 않고 PG 전액 취소
+        if (!PaymentTopupConfirmProcessor.isAllowedMethod(result.method())) {
+            cancelNotAllowedMethod(topupId, result);
+            throw new DomainException(PaymentErrorCode.TOPUP_METHOD_NOT_ALLOWED);
+        }
+
         // Tx2: 예치금 반영. PG는 이미 승인했으므로 반영에 실패해도 오류로 끝내지 않고 PROCESSING으로 두어 스케줄러가 반영
         try {
             return paymentTopupConfirmProcessor.complete(topupId, result);
         } catch (RuntimeException e) {
             log.error("PG 승인 후 예치금 반영에 실패해 결과 확인 대기로 둡니다. topupId={}", topupId, e);
             return TopupConfirmDto.processing(topupId, orderId, amount);
+        }
+    }
+
+    /**
+     * 허용하지 않은 결제 수단으로 승인된 충전 건을 PG에 전액 취소
+     * Tx1(METHOD_CANCELING) → PG 전액 취소(트랜잭션 밖) → 성공하면 Tx2(FAILED_METHOD_NOT_ALLOWED 확정)
+     * 실패해도 예외를 던지지 않음: 충전 건이 METHOD_CANCELING이나 PROCESSING으로 남아 대사가 다시 취소함
+     */
+    private void cancelNotAllowedMethod(Long topupId, PgPaymentResult result) {
+        log.warn("허용하지 않은 결제 수단으로 충전이 승인돼 PG에 전액 취소합니다. topupId={}, method={}", topupId, result.method());
+        try {
+            paymentTopupConfirmProcessor.startMethodCancel(topupId).ifPresent(start -> {
+                topupGateways.get(start.pgProvider()).cancel(start.paymentKey(), start.amount(), METHOD_CANCEL_REASON, start.idempotencyKey());
+                paymentTopupConfirmProcessor.completeMethodCancel(topupId, start.attempt(), "허용하지 않은 결제 수단이라 PG에서 결제를 취소했습니다. (" + result.method() + ")");
+            });
+        } catch (RuntimeException e) {
+            log.error("허용하지 않은 결제 수단의 PG 취소를 끝내지 못해 결과 확인 대기로 둡니다. topupId={}", topupId, e);
         }
     }
 }

@@ -3,6 +3,7 @@ package com.backend.boundedContext.payment.app;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.domain.PageRequest;
@@ -75,7 +76,8 @@ public class PaymentTopupConfirmProcessor {
      * 1. 충전 건 행 잠금 조회. PROCESSING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환
      *    (승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하려 해도 한 번만 반영됨)
      * 2. 지갑 잠금 조회 → 원장 CHARGE 기록(잔액 증가) → 충전 건 DONE
-     * 3. 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이면 경고 로그 (반영은 그대로 진행, 자동 취소는 아직 없음)
+     * 3. 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이면 경고 로그 후 반영은 그대로 진행
+     *    (승인 응답은 이 메서드 전에 걸러 PG 전액 취소함. 대사는 아직 거르지 않아 여기로 옴)
      * 잠금 순서: 충전 건 → 지갑
      */
     @Transactional
@@ -105,6 +107,41 @@ public class PaymentTopupConfirmProcessor {
         topup.approve(result.approvedAt() != null ? result.approvedAt() : LocalDateTime.now());
 
         return TopupConfirmDto.of(topup, wallet.getBalance());
+    }
+
+    // 충전에 허용하는 결제 수단인지. 허용하지 않으면 예치금에 반영하지 않고 PG 전액 취소함
+    public static boolean isAllowedMethod(PgPaymentMethod method) {
+        return ALLOWED_METHODS.contains(method);
+    }
+
+    /**
+     * 허용하지 않은 결제 수단으로 승인된 충전 건의 전액 취소 시작: PROCESSING → METHOD_CANCELING
+     * 예치금에 반영하지 않으므로 지갑은 잠그지 않음
+     * PROCESSING이 아니면(승인 응답과 대사 중 다른 쪽이 먼저 처리) 아무것도 하지 않고 빈 값 반환 (같은 결제에 PG 취소가 두 번 가지 않게)
+     */
+    @Transactional
+    public Optional<TopupMethodCancelStart> startMethodCancel(Long topupId) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (topup.getStatus() != TopupStatus.PROCESSING) {
+            return Optional.empty();
+        }
+        topup.startMethodCancel();
+        return Optional.of(new TopupMethodCancelStart(topup.getId(), topup.getPgProvider(), topup.getPaymentKey(),
+                topup.getAmount(), topup.getCancelAttempts(), topup.methodCancelIdempotencyKey()));
+    }
+
+    /**
+     * 허용하지 않은 결제 수단 전액 취소 확정: METHOD_CANCELING → FAILED_METHOD_NOT_ALLOWED
+     * 이 회차가 아직 진행 중일 때만 반영 (이미 확정됐거나 재시도로 회차가 바뀌었으면 아무것도 하지 않음)
+     */
+    @Transactional
+    public void completeMethodCancel(Long topupId, int attempt, String reason) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (topup.isMethodCancelingAttempt(attempt)) {
+            topup.completeMethodCancel(reason, LocalDateTime.now());
+        }
     }
 
     /**
