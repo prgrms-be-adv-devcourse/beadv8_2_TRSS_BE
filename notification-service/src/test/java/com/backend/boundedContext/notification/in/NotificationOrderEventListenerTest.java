@@ -51,7 +51,19 @@ class NotificationOrderEventListenerTest {
     void orderPaid_createsNotification() {
         receive(paidEvent(), true, true);
 
-        verify(notificationFacade).createOrderPaid(BUYER_ID, ORDER_ID);
+        verify(notificationFacade).createOrderPaid(BUYER_ID, ORDER_ID, "상품", 1);
+    }
+
+    @Test
+    @DisplayName("주문 항목이 여러 개면 첫 항목의 상품명과 항목 수(수량 합계 아님)를 넘김")
+    void orderPaid_multipleItems() {
+        PaidOrderItemDto first = new PaidOrderItemDto(1L, 2L, 3L, 4L, "판매자", "라이트 윈드브레이커", "M", 2);
+        PaidOrderItemDto second = new PaidOrderItemDto(2L, 5L, 6L, 4L, "판매자", "립스틱", "기본", 3);
+        OrderPaidEvent event = new OrderPaidEvent(ORDER_ID, "ORD-1", BUYER_ID, LocalDateTime.now(), address(), List.of(first, second));
+
+        receive(event, true, true);
+
+        verify(notificationFacade).createOrderPaid(BUYER_ID, ORDER_ID, "라이트 윈드브레이커", 2);
     }
 
     @Test
@@ -59,7 +71,7 @@ class NotificationOrderEventListenerTest {
     void alreadyProcessed_skips() {
         receive(paidEvent(), false, true);
 
-        verify(notificationFacade, never()).createOrderPaid(any(), any());
+        verify(notificationFacade, never()).createOrderPaid(any(), any(), any(), any());
     }
 
     @Test
@@ -88,13 +100,16 @@ class NotificationOrderEventListenerTest {
     void orderPaidWithoutHeader_createsNotification() {
         receive(paidEvent(), true, false);
 
-        verify(notificationFacade).createOrderPaid(BUYER_ID, ORDER_ID);
+        verify(notificationFacade).createOrderPaid(BUYER_ID, ORDER_ID, "상품", 1);
     }
 
     private OrderPaidEvent paidEvent() {
-        ShippingAddressDto address = new ShippingAddressDto("구매자", "01012345678", "12345", "서울시 강남구", "101호", null);
         PaidOrderItemDto item = new PaidOrderItemDto(1L, 2L, 3L, 4L, "판매자", "상품", "옵션", 1);
-        return new OrderPaidEvent(ORDER_ID, "ORD-1", BUYER_ID, LocalDateTime.now(), address, List.of(item));
+        return new OrderPaidEvent(ORDER_ID, "ORD-1", BUYER_ID, LocalDateTime.now(), address(), List.of(item));
+    }
+
+    private ShippingAddressDto address() {
+        return new ShippingAddressDto("구매자", "01012345678", "12345", "서울시 강남구", "101호", null);
     }
 
     private void receive(DomainEvent event, boolean firstTime, boolean withHeader) {

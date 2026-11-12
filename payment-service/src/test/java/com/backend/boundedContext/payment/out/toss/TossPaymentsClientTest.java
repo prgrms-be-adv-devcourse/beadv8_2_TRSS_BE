@@ -10,10 +10,18 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,11 +32,21 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import com.sun.net.httpserver.HttpServer;
+
 class TossPaymentsClientTest {
 
     private static final String BASE_URL = "https://api.tosspayments.com";
     private static final String SECRET_KEY = "test_sk_dummy";
     private static final String ORDER_ID = "TOPUP-123e4567-e89b-12d3-a456-426614174000";
+
+    // 실제 HTTP 서버 테스트용 짧은 제한 시간
+    private static final Duration TEST_CONNECT_TIMEOUT = Duration.ofSeconds(1);
+    private static final Duration TEST_READ_TIMEOUT = Duration.ofMillis(500);
+
+    // 실제 HTTP 서버가 마지막으로 받은 요청의 프로토콜·Upgrade 헤더
+    private static volatile String lastRequestProtocol;
+    private static volatile String lastRequestUpgradeHeader;
 
     private static final String PAYMENT_JSON = """
             {
@@ -70,7 +88,7 @@ class TossPaymentsClientTest {
         server.verify();
         assertThat(response.paymentKey()).isEqualTo("pk_1");
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
-        assertThat(response.isApproved()).isTrue();
+        assertThat(response.status()).isEqualTo("DONE");
         assertThat(response.totalAmount()).isEqualTo(20_000);
         assertThat(response.method()).isEqualTo("카드");
         assertThat(response.approvedAtKst()).isEqualTo(LocalDateTime.of(2026, 10, 12, 15, 0));
@@ -117,6 +135,16 @@ class TossPaymentsClientTest {
     }
 
     @Test
+    @DisplayName("승인: 성공 응답을 해석하지 못하면(응답을 읽는 단계의 실패) TossTimeoutException")
+    void confirm_unreadableSuccessResponse() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+                .andRespond(withSuccess("not json", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.confirm("pk_1", ORDER_ID, 20_000))
+                .isInstanceOf(TossTimeoutException.class);
+    }
+
+    @Test
     @DisplayName("주문번호 조회: 주문번호로 결제 결과를 받는다")
     void getPaymentByOrderId_success() {
         server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_ID))
@@ -127,7 +155,7 @@ class TossPaymentsClientTest {
 
         server.verify();
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
-        assertThat(response.isApproved()).isTrue();
+        assertThat(response.status()).isEqualTo("DONE");
     }
 
     @Test
@@ -142,5 +170,84 @@ class TossPaymentsClientTest {
                     assertThat(e.getHttpStatus()).isEqualTo(404);
                     assertThat(e.getCode()).isEqualTo("NOT_FOUND_PAYMENT");
                 });
+    }
+
+    // ── 실제 HTTP 서버로 확인: MockRestServiceServer는 예외를 요청을 보내는 단계에서 던져서 실제 네트워크의 응답 대기 시간 초과·연결 끊김과 동작이 다름 ──
+
+    @Test
+    @DisplayName("실제 HTTP 서버: HTTP/1.1로 승인 요청을 보내고 응답을 결제 결과로 변환한다")
+    void realServer_confirm_success() throws IOException {
+        HttpServer httpServer = startHttpServer(Duration.ZERO);
+        try {
+            TossPaymentResponse response = realClient(httpServer.getAddress().getPort()).confirm("pk_1", ORDER_ID, 20_000);
+
+            assertThat(lastRequestProtocol).isEqualTo("HTTP/1.1");
+            assertThat(lastRequestUpgradeHeader).isNull();   // HTTP/2 업그레이드(h2c)를 시도하지 않음
+            assertThat(response.orderId()).isEqualTo(ORDER_ID);
+            assertThat(response.status()).isEqualTo("DONE");
+        } finally {
+            httpServer.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("실제 HTTP 서버: 응답 대기 시간을 넘기면 TossTimeoutException (결과 모름)")
+    void realServer_confirm_readTimeout() throws IOException {
+        HttpServer httpServer = startHttpServer(Duration.ofSeconds(2));
+        try {
+            assertThatThrownBy(() -> realClient(httpServer.getAddress().getPort()).confirm("pk_1", ORDER_ID, 20_000))
+                    .isInstanceOf(TossTimeoutException.class);
+        } finally {
+            httpServer.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("실제 HTTP 서버: 응답 없이 연결이 끊기면 TossTimeoutException (결과 모름)")
+    void realServer_confirm_connectionClosed() throws IOException {
+        try (ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            // 요청을 받고 아무 응답 없이 연결을 닫는 서버
+            Thread.ofVirtual().start(() -> {
+                try (Socket socket = serverSocket.accept()) {
+                    InputStream in = socket.getInputStream();
+                    in.read(new byte[1024]);
+                } catch (IOException ignored) {
+                    // 테스트 종료 시 소켓이 닫히면 무시
+                }
+            });
+
+            assertThatThrownBy(() -> realClient(serverSocket.getLocalPort()).confirm("pk_1", ORDER_ID, 20_000))
+                    .isInstanceOf(TossTimeoutException.class);
+        }
+    }
+
+    // 승인 요청에 delay만큼 기다렸다가 결제 결과를 돌려주는 실제 HTTP 서버
+    private static HttpServer startHttpServer(Duration delay) throws IOException {
+        HttpServer httpServer = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        httpServer.createContext("/v1/payments/confirm", exchange -> {
+            try {
+                lastRequestProtocol = exchange.getProtocol();
+                lastRequestUpgradeHeader = exchange.getRequestHeaders().getFirst("Upgrade");
+                exchange.getRequestBody().readAllBytes();
+                Thread.sleep(delay);
+                byte[] body = PAYMENT_JSON.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            } catch (InterruptedException | IOException ignored) {
+                // 클라이언트가 먼저 끊으면 무시
+            } finally {
+                exchange.close();
+            }
+        });
+        httpServer.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+        httpServer.start();
+        return httpServer;
+    }
+
+    private static TossPaymentsClient realClient(int port) {
+        RestClient.Builder builder = RestClient.builder()
+                .requestFactory(TossPaymentsClient.requestFactory(TEST_CONNECT_TIMEOUT, TEST_READ_TIMEOUT));
+        return new TossPaymentsClient(builder, "http://localhost:" + port, SECRET_KEY);
     }
 }

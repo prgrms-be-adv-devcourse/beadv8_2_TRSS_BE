@@ -1,6 +1,7 @@
 package com.backend.boundedContext.notification.app;
 
 import com.backend.boundedContext.notification.app.dto.NotificationListDto;
+import com.backend.boundedContext.notification.domain.NotificationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +22,8 @@ public class NotificationFacade {
     private final NotificationReadUseCase notificationReadUseCase;
 
     @Transactional
-    public void createOrderPaid(Long memberId, Long orderId) {
-        notificationCreateUseCase.createOrderPaid(memberId, orderId);
+    public void createOrderPaid(Long memberId, Long orderId, String productName, Integer itemCount) {
+        notificationCreateUseCase.createOrderPaid(memberId, orderId, productName, itemCount);
     }
 
     @Transactional
@@ -36,8 +37,8 @@ public class NotificationFacade {
     }
 
     @Transactional(readOnly = true)
-    public NotificationListDto getNotifications(Long memberId, Long cursor, int size) {
-        return notificationGetNotificationsUseCase.getNotifications(memberId, cursor, size);
+    public NotificationListDto getNotifications(Long memberId, NotificationType type, Long cursor, int size) {
+        return notificationGetNotificationsUseCase.getNotifications(memberId, type, cursor, size);
     }
 
     @Transactional(readOnly = true)

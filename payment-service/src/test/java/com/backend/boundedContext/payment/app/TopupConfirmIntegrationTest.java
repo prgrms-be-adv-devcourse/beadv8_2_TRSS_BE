@@ -46,7 +46,7 @@ import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
 import com.backend.global.exception.DomainException;
 
 /**
- * 충전 준비 → 승인 흐름을 실제 DB로 확인한다 (토스 호출만 mock).
+ * 충전 준비 → 승인 흐름을 실제 DB로 확인한다 (토스 클라이언트만 mock, 토스 어댑터·PG 포트는 실제 빈).
  * 잠금으로 같은 승인 요청이 한 번만 반영되는지, 금액 불일치 실패 기록이 커밋되는지 본다.
  * 로컬 Docker PostgreSQL이 필요하다.
  */

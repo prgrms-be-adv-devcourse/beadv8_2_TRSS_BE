@@ -17,9 +17,9 @@ class TopupTest {
     private final Wallet wallet = Wallet.create(1L);
 
     @Test
-    @DisplayName("충전 건을 만들면 TOPUP- 주문번호가 발급되고 READY, 남은 금액 0이다")
+    @DisplayName("충전 건을 만들면 TOPUP- 주문번호가 발급되고 READY, 남은 금액 0, 결제할 PG가 기록된다")
     void create() {
-        Topup topup = Topup.create(1L, wallet, 20_000);
+        Topup topup = Topup.create(1L, wallet, 20_000, PgProvider.TOSS);
 
         assertThat(topup.getMemberId()).isEqualTo(1L);
         assertThat(topup.getWallet()).isSameAs(wallet);
@@ -27,13 +27,14 @@ class TopupTest {
         assertThat(topup.getAmount()).isEqualTo(20_000);
         assertThat(topup.getRemainingAmount()).isZero();
         assertThat(topup.getStatus()).isEqualTo(TopupStatus.READY);
+        assertThat(topup.getPgProvider()).isEqualTo(PgProvider.TOSS);
     }
 
     @Test
     @DisplayName("충전 건마다 다른 주문번호가 발급된다")
     void create_uniqueOrderId() {
-        Topup first = Topup.create(1L, wallet, 10_000);
-        Topup second = Topup.create(1L, wallet, 10_000);
+        Topup first = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
+        Topup second = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
 
         assertThat(first.getTossOrderId()).isNotEqualTo(second.getTossOrderId());
     }
@@ -41,7 +42,7 @@ class TopupTest {
     @Test
     @DisplayName("READY 충전 건은 결제키를 저장하고 PROCESSING이 된다")
     void markProcessing() {
-        Topup topup = Topup.create(1L, wallet, 10_000);
+        Topup topup = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
 
         topup.markProcessing("pk_1");
 
@@ -52,7 +53,7 @@ class TopupTest {
     @Test
     @DisplayName("READY가 아닌 충전 건은 PROCESSING으로 바꿀 수 없다")
     void markProcessing_notReady() {
-        Topup topup = Topup.create(1L, wallet, 10_000);
+        Topup topup = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
         topup.markProcessing("pk_1");
 
         assertThatThrownBy(() -> topup.markProcessing("pk_2"))
@@ -63,7 +64,7 @@ class TopupTest {
     @Test
     @DisplayName("승인되면 DONE이 되고 충전 금액 전체가 남은 금액이 된다")
     void approve() {
-        Topup topup = Topup.create(1L, wallet, 30_000);
+        Topup topup = Topup.create(1L, wallet, 30_000, PgProvider.TOSS);
         topup.markProcessing("pk_1");
 
         topup.approve(NOW);
@@ -77,7 +78,7 @@ class TopupTest {
     @Test
     @DisplayName("PROCESSING이 아닌 충전 건은 승인할 수 없다")
     void approve_notProcessing() {
-        Topup topup = Topup.create(1L, wallet, 10_000);
+        Topup topup = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
 
         assertThatThrownBy(() -> topup.approve(NOW))
                 .isInstanceOf(DomainException.class)
@@ -87,8 +88,8 @@ class TopupTest {
     @Test
     @DisplayName("READY·PROCESSING 충전 건은 실패 상태와 사유를 기록한다")
     void fail() {
-        Topup ready = Topup.create(1L, wallet, 10_000);
-        Topup processing = Topup.create(1L, wallet, 10_000);
+        Topup ready = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
+        Topup processing = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
         processing.markProcessing("pk_1");
 
         ready.fail(TopupStatus.FAILED_USER_CANCEL, "사용자가 결제를 취소했습니다.");
@@ -103,7 +104,7 @@ class TopupTest {
     @Test
     @DisplayName("이미 완료된 충전 건은 실패로 바꿀 수 없다")
     void fail_alreadyDone() {
-        Topup topup = Topup.create(1L, wallet, 10_000);
+        Topup topup = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
         topup.markProcessing("pk_1");
         topup.approve(NOW);
 
@@ -115,7 +116,7 @@ class TopupTest {
     @Test
     @DisplayName("실패가 아닌 상태로는 실패를 기록할 수 없다")
     void fail_notFailureStatus() {
-        Topup topup = Topup.create(1L, wallet, 10_000);
+        Topup topup = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
 
         assertThatThrownBy(() -> topup.fail(TopupStatus.DONE, "오류"))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -145,14 +146,14 @@ class TopupTest {
     @Test
     @DisplayName("승인 완료되지 않은 충전 건은 쓸 수 없다")
     void use_notDone() {
-        Topup topup = Topup.create(1L, wallet, 10_000);
+        Topup topup = Topup.create(1L, wallet, 10_000, PgProvider.TOSS);
 
         assertThatThrownBy(() -> topup.use(1_000))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     private Topup doneTopup(long amount) {
-        Topup topup = Topup.create(1L, wallet, amount);
+        Topup topup = Topup.create(1L, wallet, amount, PgProvider.TOSS);
         topup.markProcessing("pk_" + amount);
         topup.approve(NOW);
         return topup;

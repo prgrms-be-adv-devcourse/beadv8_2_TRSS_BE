@@ -95,7 +95,7 @@ public class PaymentFacade {
         return paymentPrepareTopupUseCase.prepareTopup(memberId, amount);
     }
 
-    // 충전 승인. 토스 호출을 DB 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음 (트랜잭션은 PaymentTopupConfirmProcessor의 Tx1·Tx2에서 각각 실행)
+    // 충전 승인. PG 호출을 DB 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음 (트랜잭션은 PaymentTopupConfirmProcessor의 Tx1·Tx2에서 각각 실행)
     public TopupConfirmDto confirmTopup(Long memberId, String paymentKey, String orderId, long amount) {
         return paymentConfirmTopupUseCase.confirmTopup(memberId, paymentKey, orderId, amount);
     }
@@ -142,7 +142,7 @@ public class PaymentFacade {
         return paymentExpireTopupsUseCase.expireReadyTopups(LocalDateTime.now());
     }
 
-    // PROCESSING 충전 건 결과 확인 (스케줄러). 토스 조회를 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음
+    // PROCESSING 충전 건 결과 확인 (스케줄러). PG 조회를 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음
     // (반영·실패 기록은 PaymentTopupConfirmProcessor에서 건마다 짧은 트랜잭션으로 실행)
     public TopupReconcileResult reconcileProcessingTopups() {
         return paymentReconcileTopupsUseCase.reconcileProcessingTopups(LocalDateTime.now());

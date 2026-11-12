@@ -748,20 +748,23 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 
 | 요청 | 응답 `data` | 비고 |
 | --- | --- | --- |
-| `GET /api/v1/notifications?cursor=&size=20` | `{ items: [{ id, type, message, orderId, read, createdAt }], nextCursor, hasNext }` | 최신순. 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. `size`는 1~100 |
-| `GET /api/v1/notifications/unread-count` | 안 읽은 알림 개수(숫자) | 헤더 종 아이콘 뱃지용. 실시간 전달(SSE) 전까지 프론트가 주기적으로 부른다 |
+| `GET /api/v1/notifications?type=&cursor=&size=20` | `{ items: [{ id, type, message, orderId, productName, itemCount, carrierName, trackingNumber, read, createdAt }], nextCursor, hasNext }` | 최근 30일 알림을 최신순으로. `type`을 넘기면 그 유형만(없으면 전체). 다음 페이지는 같은 `type`에 `nextCursor`를 `cursor`로 넘긴다. `size`는 1~100. 없는 `type`이면 400 `INVALID_REQUEST` |
+| `GET /api/v1/notifications/unread-count` | 안 읽은 알림 개수(숫자) | 헤더 종 아이콘 뱃지용. 최근 30일 알림 중 유형과 관계없이 센다. 실시간 전달(SSE) 전까지 프론트가 주기적으로 부른다 |
 | `PATCH /api/v1/notifications/{notificationId}/read` | 없음 | 이미 읽은 알림이면 그대로 성공. 없거나 다른 회원의 알림이면 404 `NOTIFICATION_NOT_FOUND` |
 | `PATCH /api/v1/notifications/read-all` | 없음 | 안 읽은 내 알림을 모두 읽음 처리 |
 
 - 목록은 다른 목록 API의 `PageResponse`(page·totalPages)가 아니라 커서 방식이다. 폴링 중 새 알림이 생겨도 다음 페이지가 밀리지 않게 하기 위해서다.
 - `type`은 `ORDER_PAID`(주문 완료)·`DELIVERY_STARTED`(배송 시작)·`DELIVERY_COMPLETED`(배송 완료)이고, `message`는 알림을 만들 때 완성해 저장한 문구다.
+- `productName`은 대표 상품명(주문의 첫 상품), `itemCount`는 주문 항목(상품 줄) 수다(수량 합계가 아님). 화면에서 "라이트 윈드브레이커 외 2개"처럼 쓴다. 주문 완료 알림에 저장하고, 배송 알림은 같은 주문의 주문 완료 알림 값을 그대로 쓴다. 주문 완료 알림이 없거나 이 필드가 생기기 전 알림이면 null이다.
+- `carrierName`(택배사 표시 이름)·`trackingNumber`(송장번호)는 배송 시작 알림에만 있고 그 외는 null이다. `message`에도 같은 값이 들어 있지만, 화면은 문구를 잘라 쓰지 말고 이 필드를 쓴다.
+- 최근 30일(`custom.notification.visibleDays`) 안에 생긴 알림만 목록·안 읽은 개수에 나온다. 오래된 알림은 지우지 않고 조회에서만 뺀다. 읽음 처리 API는 기간과 관계없이 동작한다.
 
 ### 받는 이벤트
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderPaidEvent` (주문, `order.events`) | 구매자(`buyerId`)에게 주문 완료 알림 저장 | `processed_event`(eventId, `notification`) |
-| `DeliveryShippedEvent` (배송, `delivery.events`) | 구매자에게 배송 시작 알림 저장. 문구에 `carrierName`·`trackingNumber`를 넣음 | 위와 같음 |
+| `OrderPaidEvent` (주문, `order.events`) | 구매자(`buyerId`)에게 주문 완료 알림 저장. `items`의 첫 상품명과 항목 수를 함께 저장 | `processed_event`(eventId, `notification`) |
+| `DeliveryShippedEvent` (배송, `delivery.events`) | 구매자에게 배송 시작 알림 저장. `carrierName`·`trackingNumber`를 문구에 넣고 따로도 저장 | 위와 같음 |
 | `DeliveryCompletedEvent` (배송, `delivery.events`) | 구매자에게 배송 완료 알림 저장 | 위와 같음 |
 
 - 두 토픽을 같은 groupId `notification`으로 받는다(`NotificationOrderEventListener`, `NotificationDeliveryEventListener`). 같은 토픽의 다른 이벤트(구매 확정·반품 등)는 `eventType` 헤더로 거르고, 헤더가 없는 메시지는 봉투를 읽어 거른다.
