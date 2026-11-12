@@ -17,6 +17,7 @@ import com.backend.shared.event.OutboxTestEvent;
 import com.backend.shared.order.dto.PaidOrderItemDto;
 import com.backend.shared.order.dto.ShippingAddressDto;
 import com.backend.shared.order.event.OrderPaidEvent;
+import com.backend.shared.order.event.OrderReturnedEvent;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -48,6 +49,20 @@ class EventMessagesTest {
 
         assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("order.events");
         assertThat(read.eventType()).isEqualTo("OrderPaidEvent");
+        assertThat(read.aggregateId()).isEqualTo(10L);
+        assertThat(read.payload()).isEqualTo(event);
+    }
+
+    @Test
+    @DisplayName("반품 승인 이벤트는 order.events로 가고, JSON으로 보냈다 읽으면 환불 금액·시각이 그대로다")
+    void orderReturnedEventRoundTrip() {
+        OrderReturnedEvent event = new OrderReturnedEvent(10L, 3L, 53_000L,
+                LocalDateTime.of(2026, 11, 12, 16, 45, 30, 321_000_000));
+
+        EventEnvelope<DomainEvent> read = roundTrip(event);
+
+        assertThat(EventMessages.topicOf(read.aggregateType())).isEqualTo("order.events");
+        assertThat(read.eventType()).isEqualTo("OrderReturnedEvent");
         assertThat(read.aggregateId()).isEqualTo(10L);
         assertThat(read.payload()).isEqualTo(event);
     }
