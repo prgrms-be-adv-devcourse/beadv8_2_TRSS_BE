@@ -17,6 +17,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.backend.boundedContext.member.app.dto.MyInfoDto;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.SocialProvider;
+import com.backend.boundedContext.member.out.InfluencerRepository;
 import com.backend.boundedContext.member.out.MemberRepository;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.global.exception.DomainException;
@@ -32,6 +33,9 @@ class MemberGetMyInfoUseCaseTest {
 
     @Mock
     private MemberSocialAccountRepository memberSocialAccountRepository;
+
+    @Mock
+    private InfluencerRepository influencerRepository;
 
     @InjectMocks
     private MemberGetMyInfoUseCase memberGetMyInfoUseCase;
@@ -52,6 +56,7 @@ class MemberGetMyInfoUseCaseTest {
         assertThat(myInfo.name()).isEqualTo("홍길동");
         assertThat(myInfo.role()).isEqualTo(MemberRole.USER);
         assertThat(myInfo.kakaoLinked()).isTrue();
+        assertThat(myInfo.influencerStatus()).isNull();   // 인플루언서 신청 전
     }
 
     @Test

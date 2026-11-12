@@ -56,8 +56,12 @@ public class Influencer extends BaseIdAndTime {
         return influencer;
     }
 
+    public InfluencerStatusHistory recordApplied() {
+        return InfluencerStatusHistory.record(this, null, null);
+    }
+
     // 반려 뒤 재신청
-    public InfluencerStatusHistory reapply(String activityName, String snsUrl, String introduction) {
+    public InfluencerStatusHistory applyAgain(String activityName, String snsUrl, String introduction) {
         if (status == InfluencerStatus.REVOKED) throw new DomainException(MemberErrorCode.INFLUENCER_REAPPLY_NOT_ALLOWED);
         if (status != InfluencerStatus.REJECTED) throw new DomainException(MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
 

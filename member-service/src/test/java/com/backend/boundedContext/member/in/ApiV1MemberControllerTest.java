@@ -59,7 +59,7 @@ class ApiV1MemberControllerTest {
     @DisplayName("내 정보 조회: 토큰의 회원 ID로 조회해 돌려준다")
     void getMyInfo_success() throws Exception {
         given(memberFacade.getMyInfo(3L)).willReturn(
-                new MyInfoDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, LocalDateTime.of(2026, 10, 11, 15, 0), true));
+                new MyInfoDto(3L, "buyer@palette.test", "구매자", MemberRole.USER, LocalDateTime.of(2026, 10, 11, 15, 0), true, null));
         String token = jwtTokenProvider.createAccessToken(3L, MemberRole.USER);
 
         mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + token))

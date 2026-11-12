@@ -40,10 +40,6 @@ public class InfluencerStatusHistory extends BaseIdAndTime {
     @Column(nullable = false)
     private LocalDateTime changedAt;
 
-    public static InfluencerStatusHistory applied(Influencer influencer) {
-        return record(influencer, null, null);
-    }
-
     static InfluencerStatusHistory record(Influencer influencer, InfluencerStatus fromStatus, String reason) {
         InfluencerStatusHistory history = new InfluencerStatusHistory();
         history.influencer = influencer;

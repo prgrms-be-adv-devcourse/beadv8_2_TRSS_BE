@@ -28,7 +28,7 @@ class InfluencerTest {
     @Test
     @DisplayName("처음 신청한 이력은 from이 없고 to가 PENDING")
     void appliedHistory() {
-        InfluencerStatusHistory history = InfluencerStatusHistory.applied(pending());
+        InfluencerStatusHistory history = pending().recordApplied();
 
         assertThat(history.getFromStatus()).isNull();
         assertThat(history.getToStatus()).isEqualTo(InfluencerStatus.PENDING);
@@ -90,7 +90,7 @@ class InfluencerTest {
         Influencer influencer = pending();
         influencer.reject("본인 확인이 어려워요");
 
-        InfluencerStatusHistory history = influencer.reapply("새 활동명", "https://instagram.com/new", "새 소개");
+        InfluencerStatusHistory history = influencer.applyAgain("새 활동명", "https://instagram.com/new", "새 소개");
 
         assertThat(influencer.getStatus()).isEqualTo(InfluencerStatus.PENDING);
         assertThat(influencer.getActivityName()).isEqualTo("새 활동명");
@@ -102,8 +102,8 @@ class InfluencerTest {
     @Test
     @DisplayName("심사 중·승인된 회원이 다시 신청하면 409 ALREADY_APPLIED")
     void reapplyWhileOpen() {
-        assertErrorCode(() -> pending().reapply("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
-        assertErrorCode(() -> approved().reapply("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
+        assertErrorCode(() -> pending().applyAgain("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
+        assertErrorCode(() -> approved().applyAgain("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_ALREADY_APPLIED);
     }
 
     @Test
@@ -112,7 +112,7 @@ class InfluencerTest {
         Influencer influencer = approved();
         influencer.revoke("쿠폰 무단 배포");
 
-        assertErrorCode(() -> influencer.reapply("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_REAPPLY_NOT_ALLOWED);
+        assertErrorCode(() -> influencer.applyAgain("a", "https://a.com", "b"), MemberErrorCode.INFLUENCER_REAPPLY_NOT_ALLOWED);
     }
 
     private static Influencer pending() {

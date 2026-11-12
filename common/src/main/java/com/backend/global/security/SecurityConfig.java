@@ -43,6 +43,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_GET_API_URLS = {
             "/api/v1/products/**",
             "/api/v1/categories/**",
+            "/api/v1/influencers/*",   // 인플루언서 프로필
             "/images/**"   // 로컬 저장소의 상품 이미지 파일
     };
     private static final String[] PUBLIC_POST_API_URLS = {
@@ -63,7 +64,7 @@ public class SecurityConfig {
     private static final String[] SELLER_API_URLS = {
             "/api/v1/seller/**"
     };
-    // 인플루언서 전용 (/api/v1/influencers/** (복수, 인플루언서 신청, 검색)와 다른 경로)
+    // 인플루언서 전용 (/api/v1/influencers/** (복수, 인플루언서 신청, 프로필)와 다른 경로)
     private static final String[] INFLUENCER_API_URLS = {
             "/api/v1/influencer/**"
     };
@@ -77,7 +78,8 @@ public class SecurityConfig {
             "/api/v1/users/me/coupon-usages",
             "/api/v1/topups/**",
             "/api/v1/wallet/**",
-            "/api/v1/sellers/**"
+            "/api/v1/sellers/**",
+            "/api/v1/influencers/**"   // 인플루언서 신청 (프로필 GET은 위에서 공개)
     };
     // 회원 탈퇴(조건 조회 포함)도 구매자만. 관리자 계정은 탈퇴할 수 없음 (1번 관리자는 수수료를 받는 계정이라 탈퇴하면 정산 지급이 실패)
     private static final String[] WITHDRAWAL_API_URLS = {
@@ -134,6 +136,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(SWAGGER_URLS).permitAll()
                         .requestMatchers(PUBLIC_API_URLS).permitAll()
+                        // 인플루언서 프로필(/api/v1/influencers/*)은 공개지만 내 신청 정보는 로그인 필요. 공개 규칙보다 먼저 둔다
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_API_URLS).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_API_URLS).permitAll()
                         .requestMatchers(ADMIN_API_URLS).hasRole("ADMIN")
