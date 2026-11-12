@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
@@ -14,16 +15,23 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.out.PaymentMemberPort;
-import com.backend.boundedContext.payment.out.toss.TossPaymentException;
-import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
-import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
-import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
+import com.backend.boundedContext.payment.out.pg.PgConfigurationException;
+import com.backend.boundedContext.payment.out.pg.PgDeclinedException;
+import com.backend.boundedContext.payment.out.pg.PgPaymentMethod;
+import com.backend.boundedContext.payment.out.pg.PgPaymentResult;
+import com.backend.boundedContext.payment.out.pg.PgPaymentStatus;
+import com.backend.boundedContext.payment.out.pg.PgResultUnknownException;
+import com.backend.boundedContext.payment.out.pg.TopupGatewayPort;
+import com.backend.boundedContext.payment.out.pg.TopupGateways;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
 
@@ -36,28 +44,35 @@ class PaymentConfirmTopupUseCaseTest {
     private static final long AMOUNT = 20_000;
 
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
-    private final TossPaymentsClient tossPaymentsClient = mock(TossPaymentsClient.class);
+    private final TopupGateways topupGateways = mock(TopupGateways.class);
+    private final TopupGatewayPort gateway = mock(TopupGatewayPort.class);
     private final PaymentMemberPort memberPort = mock(PaymentMemberPort.class);
-    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, tossPaymentsClient, memberPort);
+    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, topupGateways, memberPort);
 
-    private final TossPaymentResponse tossDone =
-            new TossPaymentResponse(PAYMENT_KEY, ORDER_ID, "DONE", AMOUNT, "카드", null);
+    private final PgPaymentResult approved =
+            new PgPaymentResult(PAYMENT_KEY, ORDER_ID, PgPaymentStatus.APPROVED, "DONE", AMOUNT, PgPaymentMethod.CARD, null);
+
+    @BeforeEach
+    void setUp() {
+        given(topupGateways.get(PgProvider.TOSS)).willReturn(gateway);
+    }
 
     @Test
-    @DisplayName("승인 성공: 선점 → 토스 승인 → 예치금 반영 결과를 돌려준다")
+    @DisplayName("승인 성공: 선점 → 충전 건의 PG로 승인 → 예치금 반영 결과를 돌려준다")
     void confirm_success() {
         started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(tossDone);
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approved);
         TopupConfirmDto done = new TopupConfirmDto(TOPUP_ID, ORDER_ID, TopupStatus.DONE, AMOUNT, 25_000L);
-        given(processor.complete(TOPUP_ID, tossDone)).willReturn(done);
+        given(processor.complete(TOPUP_ID, approved)).willReturn(done);
 
         TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
 
         assertThat(result).isEqualTo(done);
+        verify(topupGateways).get(PgProvider.TOSS);
     }
 
     @Test
-    @DisplayName("탈퇴한 회원: 충전 건을 선점하지 않고 토스도 호출하지 않으며 401 UNAUTHORIZED (탈퇴 후 남은 Access Token)")
+    @DisplayName("탈퇴한 회원: 충전 건을 선점하지 않고 PG도 호출하지 않으며 401 UNAUTHORIZED (탈퇴 후 남은 Access Token)")
     void confirm_withdrawnMember() {
         willThrow(new DomainException(GlobalErrorCode.UNAUTHORIZED)).given(memberPort).checkActiveMember(MEMBER_ID);
 
@@ -65,27 +80,27 @@ class PaymentConfirmTopupUseCaseTest {
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("401-UNAUTHORIZED");
 
-        verifyNoInteractions(processor, tossPaymentsClient);
+        verifyNoInteractions(processor, gateway);
     }
 
     @Test
-    @DisplayName("금액 불일치: 토스를 호출하지 않고 400 AMOUNT_MISMATCH")
+    @DisplayName("금액 불일치: PG를 호출하지 않고 400 AMOUNT_MISMATCH")
     void confirm_amountMismatch() {
         given(processor.start(MEMBER_ID, ORDER_ID, PAYMENT_KEY, AMOUNT))
-                .willReturn(new TopupConfirmStartResult(TOPUP_ID, TopupConfirmStartResult.Outcome.AMOUNT_MISMATCH));
+                .willReturn(new TopupConfirmStartResult(TOPUP_ID, PgProvider.TOSS, TopupConfirmStartResult.Outcome.AMOUNT_MISMATCH));
 
         assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("400-AMOUNT_MISMATCH");
-        verify(tossPaymentsClient, never()).confirm(anyString(), anyString(), anyLong());
+        verify(gateway, never()).confirm(anyString(), anyString(), anyLong());
     }
 
     @Test
-    @DisplayName("토스 응답 없음: 실패로 단정하지 않고 PROCESSING으로 응답한다")
-    void confirm_timeout() {
+    @DisplayName("PG 결과 모름(응답 없음·5xx·이미 처리된 결제): 실패로 단정하지 않고 PROCESSING으로 응답한다")
+    void confirm_resultUnknown() {
         started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .willThrow(new PgResultUnknownException(new RuntimeException("Read timed out")));
 
         TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
 
@@ -93,35 +108,11 @@ class PaymentConfirmTopupUseCaseTest {
     }
 
     @Test
-    @DisplayName("이미 승인된 결제(ALREADY_PROCESSED_PAYMENT): 실패가 아니므로 PROCESSING으로 응답한다")
-    void confirm_alreadyProcessedPayment() {
-        started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .willThrow(tossError(400, "ALREADY_PROCESSED_PAYMENT", "이미 처리된 결제 입니다."));
-
-        TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
-
-        assertProcessing(result);
-    }
-
-    @Test
-    @DisplayName("토스 5xx: 승인 여부가 불확실하므로 PROCESSING으로 응답한다")
-    void confirm_tossServerError() {
-        started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .willThrow(tossError(500, "FAILED_INTERNAL_SYSTEM_PROCESSING", "내부 시스템 처리 작업이 실패했습니다."));
-
-        TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
-
-        assertProcessing(result);
-    }
-
-    @Test
-    @DisplayName("카드 거절(4xx): FAILED_PG_DECLINED로 기록하고 400 TOPUP_PAYMENT_DECLINED, data에 토스 코드·메시지")
+    @DisplayName("PG 거절: FAILED_PG_DECLINED로 기록하고 400 TOPUP_PAYMENT_DECLINED, data에 PG 코드·메시지")
     void confirm_declined() {
         started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .willThrow(tossError(403, "REJECT_CARD_PAYMENT", "한도초과 혹은 잔액부족으로 결제에 실패했습니다."));
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .willThrow(new PgDeclinedException("REJECT_CARD_PAYMENT", "한도초과 혹은 잔액부족으로 결제에 실패했습니다.", null));
 
         assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
                 .isInstanceOfSatisfying(DomainException.class, e -> {
@@ -133,38 +124,39 @@ class PaymentConfirmTopupUseCaseTest {
     }
 
     @Test
-    @DisplayName("토스 인증 오류(401): FAILED_SYSTEM_ERROR로 기록하고 502 EXTERNAL_SERVICE_ERROR")
-    void confirm_unauthorized() {
+    @DisplayName("PG 거절인데 메시지가 없으면 기본 문구로 기록하고 응답한다")
+    void confirm_declinedWithoutMessage() {
         started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .willThrow(tossError(401, "UNAUTHORIZED_KEY", "인증되지 않은 시크릿 키 혹은 클라이언트 키 입니다."));
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .willThrow(new PgDeclinedException(null, null, null));
+        String defaultMessage = PaymentErrorCode.TOPUP_PAYMENT_DECLINED.msg();
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOfSatisfying(DomainException.class, e ->
+                        assertThat(e.getData()).isEqualTo(Map.of("code", "UNKNOWN", "message", defaultMessage)));
+        verify(processor).fail(TOPUP_ID, TopupStatus.FAILED_PG_DECLINED, defaultMessage);
+    }
+
+    @Test
+    @DisplayName("PG 설정 오류(API 키 등): 카드 거절이 아니라 FAILED_SYSTEM_ERROR로 기록하고 502 EXTERNAL_SERVICE_ERROR")
+    void confirm_configurationError() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .willThrow(new PgConfigurationException("INVALID_API_KEY", null));
 
         assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
                 .isInstanceOf(DomainException.class)
                 .extracting("resultCode").isEqualTo("502-EXTERNAL_SERVICE_ERROR");
-        verify(processor).fail(TOPUP_ID, TopupStatus.FAILED_SYSTEM_ERROR, "토스 인증에 실패했습니다.");
+        verify(processor).fail(TOPUP_ID, TopupStatus.FAILED_SYSTEM_ERROR, "PG 인증에 실패했습니다.");
+        verify(processor, never()).fail(anyLong(), eq(TopupStatus.FAILED_PG_DECLINED), any());
     }
 
     @Test
-    @DisplayName("키 세트 불일치(400 INVALID_API_KEY): 카드 거절이 아니라 FAILED_SYSTEM_ERROR로 기록하고 502")
-    void confirm_invalidApiKey() {
-        started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .willThrow(tossError(400, "INVALID_API_KEY", "잘못된 시크릿키 연동 정보 입니다."));
-
-        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
-                .isInstanceOf(DomainException.class)
-                .extracting("resultCode").isEqualTo("502-EXTERNAL_SERVICE_ERROR");
-        verify(processor).fail(TOPUP_ID, TopupStatus.FAILED_SYSTEM_ERROR, "토스 인증에 실패했습니다.");
-        verify(processor, never()).fail(TOPUP_ID, TopupStatus.FAILED_PG_DECLINED, "잘못된 시크릿키 연동 정보 입니다.");
-    }
-
-    @Test
-    @DisplayName("토스 승인 후 예치금 반영 실패: 오류로 끝내지 않고 PROCESSING으로 응답한다")
+    @DisplayName("PG 승인 후 예치금 반영 실패: 오류로 끝내지 않고 PROCESSING으로 응답한다")
     void confirm_completeFails() {
         started();
-        given(tossPaymentsClient.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(tossDone);
-        given(processor.complete(TOPUP_ID, tossDone)).willThrow(new RuntimeException("DB 오류"));
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approved);
+        given(processor.complete(TOPUP_ID, approved)).willThrow(new RuntimeException("DB 오류"));
 
         TopupConfirmDto result = useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
 
@@ -173,11 +165,7 @@ class PaymentConfirmTopupUseCaseTest {
 
     private void started() {
         given(processor.start(MEMBER_ID, ORDER_ID, PAYMENT_KEY, AMOUNT))
-                .willReturn(new TopupConfirmStartResult(TOPUP_ID, TopupConfirmStartResult.Outcome.STARTED));
-    }
-
-    private static TossPaymentException tossError(int httpStatus, String code, String message) {
-        return new TossPaymentException(httpStatus, code, message, new RuntimeException());
+                .willReturn(new TopupConfirmStartResult(TOPUP_ID, PgProvider.TOSS, TopupConfirmStartResult.Outcome.STARTED));
     }
 
     // 결과 확인 대기: 실패 기록도 반영도 하지 않음

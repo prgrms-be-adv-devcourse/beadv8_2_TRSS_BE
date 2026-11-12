@@ -18,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import com.backend.boundedContext.payment.app.dto.TopupDto;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
@@ -34,7 +35,7 @@ class PaymentGetTopupsUseCaseTest {
     @Test
     @DisplayName("요청한 정렬은 무시하고 최신순(createdAt, id 역순)으로 내 충전 건을 조회해 목록 항목으로 바꾼다")
     void getTopups() {
-        Topup topup = Topup.create(MEMBER_ID, Wallet.create(MEMBER_ID), 20_000);
+        Topup topup = Topup.create(MEMBER_ID, Wallet.create(MEMBER_ID), 20_000, PgProvider.TOSS);
         given(topupRepository.findByMemberId(eq(MEMBER_ID), any(Pageable.class)))
                 .willAnswer(invocation -> new PageImpl<>(List.of(topup), invocation.getArgument(1), 1));
 

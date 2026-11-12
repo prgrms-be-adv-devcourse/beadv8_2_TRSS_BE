@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.backend.boundedContext.payment.app.dto.TopupDto;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.TopupStatus;
 import com.backend.boundedContext.payment.domain.Wallet;
@@ -27,7 +28,7 @@ class PaymentGetTopupUseCaseTest {
     @Test
     @DisplayName("내 충전 건이면 목록 항목과 같은 형식으로 돌려준다")
     void getTopup() {
-        Topup topup = Topup.create(MEMBER_ID, Wallet.create(MEMBER_ID), 20_000);
+        Topup topup = Topup.create(MEMBER_ID, Wallet.create(MEMBER_ID), 20_000, PgProvider.TOSS);
         topup.fail(TopupStatus.FAILED_USER_CANCEL, "사용자에 의해 결제가 취소되었습니다.");
         given(topupRepository.findByIdAndMemberId(7L, MEMBER_ID)).willReturn(Optional.of(topup));
 

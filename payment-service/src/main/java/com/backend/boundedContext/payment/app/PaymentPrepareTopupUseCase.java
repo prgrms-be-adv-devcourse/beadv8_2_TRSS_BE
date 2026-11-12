@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
 import com.backend.boundedContext.payment.domain.PaymentPolicy;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.out.PaymentMemberPort;
@@ -32,7 +33,7 @@ public class PaymentPrepareTopupUseCase {
         Wallet wallet = walletRepository.findByMemberId(memberId)
                 .orElseThrow(() -> new DomainException(PaymentErrorCode.WALLET_NOT_FOUND));
 
-        Topup topup = topupRepository.save(Topup.create(memberId, wallet, amount));
+        Topup topup = topupRepository.save(Topup.create(memberId, wallet, amount, PgProvider.TOSS));
 
         return TopupPrepareDto.from(topup);
     }

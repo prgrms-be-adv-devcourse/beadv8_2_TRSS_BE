@@ -25,6 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentStatus;
+import com.backend.boundedContext.payment.domain.PgProvider;
 import com.backend.boundedContext.payment.domain.Topup;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletHolding;
@@ -257,7 +258,7 @@ class PaymentCancelPaymentIntegrationTest {
     }
 
     private Topup doneTopup(long amount) {
-        Topup topup = Topup.create(buyerMemberId, wallet, amount);
+        Topup topup = Topup.create(buyerMemberId, wallet, amount, PgProvider.TOSS);
         topup.markProcessing("TEST-PK-" + UUID.randomUUID());
         topup.approve(LocalDateTime.now().minusDays(1));
         Topup saved = topupRepository.save(topup);

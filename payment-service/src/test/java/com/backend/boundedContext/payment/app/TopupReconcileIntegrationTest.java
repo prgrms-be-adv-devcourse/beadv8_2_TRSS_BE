@@ -33,11 +33,14 @@ import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
+import com.backend.boundedContext.payment.out.pg.PgPaymentMethod;
+import com.backend.boundedContext.payment.out.pg.PgPaymentResult;
+import com.backend.boundedContext.payment.out.pg.PgPaymentStatus;
 import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
 import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
 
 /**
- * PROCESSING 결과 확인(대사)을 실제 DB로 확인한다 (토스 호출만 mock).
+ * PROCESSING 결과 확인(대사)을 실제 DB로 확인한다 (토스 클라이언트만 mock, 토스 어댑터·PG 포트는 실제 빈).
  * 오래된 PROCESSING 건 반영, 승인 응답과 대사가 겹쳐도 1회 반영, 확인 대기 시간 전 건 제외를 본다.
  * 로컬 Docker PostgreSQL이 필요하다.
  */
@@ -111,12 +114,14 @@ class TopupReconcileIntegrationTest {
         moveUpdatedAtMinutesAgo(topup.topupId(), 6);
         TossPaymentResponse toss = tossDone(topup);
         given(tossPaymentsClient.getPaymentByOrderId(topup.orderId())).willReturn(toss);
+        PgPaymentResult approved = new PgPaymentResult(toss.paymentKey(), toss.orderId(), PgPaymentStatus.APPROVED, toss.status(),
+                toss.totalAmount(), PgPaymentMethod.CARD, toss.approvedAtKst());
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         Future<?> confirm = executor.submit(() -> {
             start.await();
-            return paymentTopupConfirmProcessor.complete(topup.topupId(), toss);   // 승인 응답 쪽 Tx2
+            return paymentTopupConfirmProcessor.complete(topup.topupId(), approved);   // 승인 응답 쪽 Tx2
         });
         Future<?> reconcile = executor.submit(() -> {
             start.await();
