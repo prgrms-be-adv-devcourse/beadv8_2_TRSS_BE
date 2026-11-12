@@ -38,29 +38,59 @@ public class Notification extends BaseIdAndTime {
     @Column(nullable = false)
     private Long orderId;
 
+    // 대표 상품명(주문의 첫 상품)·상품 개수(주문 항목 수). 배송 알림은 같은 주문의 결제 완료 알림 값을 씀
+    @Column(length = 100)
+    private String productName;
+
+    private Integer itemCount;
+
+    // 배송 시작 알림의 택배사 표시 이름·송장번호. 그 외 알림은 null
+    @Column(length = 30)
+    private String carrierName;
+
+    @Column(length = 30)
+    private String trackingNumber;
+
     // null이면 안 읽음
     private LocalDateTime readAt;
 
-    private Notification(Long memberId, NotificationType type, String message, Long orderId) {
+    private Notification(Long memberId, NotificationType type, String message, Long orderId,
+                         String productName, Integer itemCount, String carrierName, String trackingNumber) {
         this.memberId = memberId;
         this.type = type;
         this.message = message;
         this.orderId = orderId;
+        this.productName = productName;
+        this.itemCount = itemCount;
+        this.carrierName = carrierName;
+        this.trackingNumber = trackingNumber;
     }
 
     // 주문 완료(결제 성공)
-    public static Notification orderPaid(Long memberId, Long orderId) {
-        return new Notification(memberId, NotificationType.ORDER_PAID, "주문이 완료되어 스토어에서 상품 준비 중입니다.", orderId);
+    public static Notification orderPaid(Long memberId, Long orderId, String productName, Integer itemCount) {
+        return new Notification(memberId, NotificationType.ORDER_PAID, "주문이 완료되어 스토어에서 상품 준비 중입니다.", orderId,
+                productName, itemCount, null, null);
     }
 
-    // 배송 시작(송장 등록). 택배사·송장번호를 문구에 포함함
-    public static Notification deliveryStarted(Long memberId, Long orderId, String carrier, String trackingNumber) {
-        return new Notification(memberId, NotificationType.DELIVERY_STARTED, "상품이 발송되었습니다. (%s %s)".formatted(carrier, trackingNumber), orderId);
+    // 배송 시작(송장 등록). 택배사·송장번호를 문구에 포함하고 따로도 저장함
+    // orderPaid는 같은 주문의 결제 완료 알림. 없으면 null이고 상품명·개수도 null
+    public static Notification deliveryStarted(Long memberId, Long orderId, String carrierName, String trackingNumber, Notification orderPaid) {
+        return new Notification(memberId, NotificationType.DELIVERY_STARTED, "상품이 발송되었습니다. (%s %s)".formatted(carrierName, trackingNumber), orderId,
+                productNameOf(orderPaid), itemCountOf(orderPaid), carrierName, trackingNumber);
     }
 
-    // 배송 완료
-    public static Notification deliveryCompleted(Long memberId, Long orderId) {
-        return new Notification(memberId, NotificationType.DELIVERY_COMPLETED, "상품이 배송 완료되었습니다.", orderId);
+    // 배송 완료. orderPaid는 deliveryStarted와 같음
+    public static Notification deliveryCompleted(Long memberId, Long orderId, Notification orderPaid) {
+        return new Notification(memberId, NotificationType.DELIVERY_COMPLETED, "상품이 배송 완료되었습니다.", orderId,
+                productNameOf(orderPaid), itemCountOf(orderPaid), null, null);
+    }
+
+    private static String productNameOf(Notification orderPaid) {
+        return orderPaid == null ? null : orderPaid.productName;
+    }
+
+    private static Integer itemCountOf(Notification orderPaid) {
+        return orderPaid == null ? null : orderPaid.itemCount;
     }
 
     public boolean isRead() {

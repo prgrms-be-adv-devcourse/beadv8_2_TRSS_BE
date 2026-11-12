@@ -53,6 +53,8 @@ public class NotificationOrderEventListener {
         EventEnvelope<DomainEvent> envelope = eventMessages.read(record.value());
         if (!(envelope.payload() instanceof OrderPaidEvent event)) return;         // 헤더 없이 온 다른 주문 이벤트는 무시
         if (!processedEvents.markProcessed(envelope.eventId(), CONSUMER)) return;  // 이미 처리한 이벤트
-        notificationFacade.createOrderPaid(event.buyerId(), event.orderId());
+        // 대표 상품명은 첫 주문 항목, 개수는 주문 항목(상품 줄) 수
+        String productName = event.items().isEmpty() ? null : event.items().getFirst().productName();
+        notificationFacade.createOrderPaid(event.buyerId(), event.orderId(), productName, event.items().size());
     }
 }
