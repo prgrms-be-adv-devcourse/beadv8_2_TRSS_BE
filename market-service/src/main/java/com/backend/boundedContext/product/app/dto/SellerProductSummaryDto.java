@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
  *
  * @param optionId      재고 조정에 쓰는 옵션 ID (지금은 상품마다 옵션 1개)
  * @param thumbnailUrl  대표 이미지. 이미지 기능 전까지 null
+ * @param price         정가
+ * @param salePrice     진행 중인 할인의 할인가. 할인 중이 아니면 null (예약된 할인은 수정 폼에서 본다)
+ * @param discountRate  진행 중인 할인의 할인율 (%, 소수점 내림). 할인 중이 아니면 null
  * @param stock         삭제되지 않은 옵션의 재고 합계
  * @param stoppedBy     판매 중지 주체. 판매 중지가 아니면 null
  * @param stoppedReason 판매 중지 사유. 판매 중지가 아니면 null
@@ -22,6 +25,8 @@ public record SellerProductSummaryDto(
         String name,
         String categoryName,
         long price,
+        Long salePrice,
+        Integer discountRate,
         int stock,
         ProductDisplayStatus status,
         ProductStoppedBy stoppedBy,

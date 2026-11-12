@@ -22,7 +22,7 @@ import static jakarta.persistence.FetchType.LAZY;
 /**
  * 상품 옵션. 장바구니에 담는 판매 단위(SKU)이고, 옵션 값의 조합 하나가 한 줄이다 (예: 흰색 / M).
  * 옵션 이름(색상·사이즈)은 상품에 있고, 여기에는 이름 순서대로 값만 둔다. 옵션이 없는 상품은 값이 없는 옵션 1개를 가진다.
- * 단가는 상품 가격 + 추가금이다. 재고는 다른 행({@link OptionStock})에 둔다.
+ * 정가 단가는 상품 가격 + 추가금이고, 할인 중이면 할인가 + 추가금을 단가로 쓴다. 재고는 다른 행({@link OptionStock})에 둔다.
  */
 @Entity
 @Table(name = "product_option")
@@ -109,8 +109,8 @@ public class ProductOption extends BaseIdAndTime {
         return values.isEmpty() ? DEFAULT_NAME : String.join(NAME_SEPARATOR, values);
     }
 
-    /** 이 옵션 하나의 가격 = 상품 가격 + 추가금 */
-    public long getUnitPrice() {
+    /** 이 옵션 하나의 정가 = 상품 가격 + 추가금. 할인을 적용한 단가는 {@link ProductPrice#unitPrice}로 구한다. */
+    public long getListPrice() {
         return Math.addExact(product.getPrice(), additionalPrice);
     }
 

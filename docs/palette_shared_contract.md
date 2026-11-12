@@ -231,11 +231,12 @@ public interface ProductApi {
     /**
      * 옵션 여러 개의 현재 정보. 장바구니 담기·조회와 주문 생성에 쓴다.
      * 삭제된 상품·옵션도 결과에 포함하고(saleable = false), 없는 ID만 빠진다. 결과 순서는 보장하지 않는다.
+     * price는 부르는 시각에 진행 중인 상품 할인을 반영한 단가다.
      */
     List<OptionSnapshotDto> getOptions(Collection<Long> optionIds);
 
     /**
-     * 상품 여러 개의 현재 정보 (상품 단위). 쿠폰 발행과 협약 pick 상품 목록에서 쓴다.
+     * 상품 여러 개의 현재 정보 (상품 단위). 쿠폰 발행과 협약 pick 상품 목록에서 쓴다. price는 할인과 무관한 정가다.
      * 삭제, 판매 중지 상품도 포함하고(onSale = false) 없는 ID만 빠진다. 순서는 보장하지 않는다.
      */
     List<ProductSnapshotDto> getProducts(Collection<Long> productIds);
@@ -292,12 +293,21 @@ package com.backend.shared.product.dto;
  * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 따로 판단한다.
  * unsaleableReason은 saleable이면 null, 여러 개에 해당하면 enum 선언 순서가 우선순위다.
  * optionName은 옵션 값을 " / "로 이은 표시 이름(예: "흰색 / M", 최대 48자)이고, 옵션이 없는 상품이면 "기본".
- * price는 옵션 하나의 단가 = 상품 가격 + 옵션 추가금이다. 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)도 이 값이다.
+ * price는 옵션 하나의 단가 = (할인 중이면 할인가, 아니면 상품 가격) + 옵션 추가금이다.
+ * 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)·정산도 이 값이다.
+ * listPrice는 정가 단가 = 상품 가격 + 옵션 추가금이다. 화면 표시용이고, 할인 중이 아니면 price와 같다.
+송 * discountRate는 할인율(%, 소수점 내림)이고 할인 중이 아니면 null이다. 상품 가격 기준이라 옵션 추가금과 무관하게 상품 상세의 할인율과 같다.
+ * 화면 표시용이며 (listPrice - price)로 다시 계산하지 않는다(추가금이 있으면 값이 달라진다).
  * thumbnailUrl은 대표 이미지가 없으면 null.
  */
 public record OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
-                                long price, int stock, boolean saleable,
-                                ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { }
+                                long price, long listPrice, Integer discountRate, int stock, boolean saleable,
+                                ProductUnsaleableReason unsaleableReason, String thumbnailUrl) {
+    /** listPrice = price, discountRate = null로 채우는 호환 생성자. 주문 컨텍스트가 두 값을 쓰게 되면 지운다 */
+    public OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
+                             long price, int stock, boolean saleable,
+                             ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { ... }
+}
 
 /** 주문 항목 한 줄. orderId·orderItemId는 재고 이력에 남고 중복 처리를 막는 기준이 된다. quantity는 1 이상 */
 public record StockChangeDto(Long orderId, Long orderItemId, Long optionId, int quantity) { }
@@ -310,11 +320,40 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 - 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
 - 잠금 순서는 항상 **상품 → 주문(→ 옵션 재고)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
 - 구현 상태: 모든 메서드가 `ProductApiAdapter`에 구현되어 있습니다.
-- 옵션(TRSS-200): 상품은 옵션 이름을 최대 3개(예: 색상·사이즈) 갖고, 옵션 하나는 값의 조합 한 줄(SKU)이다. 옵션이 없는 상품은 값 없는 옵션 1개다.
-  옵션 값은 하나에 14자까지라, 표시 이름이 주문·리뷰의 `option_name`(varchar(50))에 그대로 들어간다.
+
+### 상품 옵션
+
+상품은 옵션 이름(예: 색상·사이즈)을 최대 3개 갖고, 옵션 하나는 값의 조합 한 줄(SKU)입니다. 옵션이 없는 상품은 값 없는 옵션 1개를 갖습니다.
+장바구니·주문은 옵션 ID 단위로 담고, 재고와 단가도 옵션마다 따로 있습니다.
+
+| 항목 | 규칙 |
+| --- | --- |
+| 옵션 이름 | 0~3개, 각각 1~20자, 서로 달라야 한다. 등록 뒤에는 바꾸지 않는다 |
+| 옵션 값 | 옵션 이름마다 하나씩, 각각 1~14자. 같은 조합은 한 상품에 한 번만 (409 `OPTION_DUPLICATED`) |
+| 조합 수 | 한 상품에 삭제되지 않은 조합 최대 100개 |
+| 표시 이름 | 값을 " / "로 잇는다(예: "흰색 / M", 최대 48자). 옵션이 없는 상품은 "기본". 주문·리뷰의 `option_name`(varchar(50))에 그대로 들어간다 |
+| 단가 | 상품 가격(할인 중이면 할인가) + 옵션 추가금(0 이상). 판매자는 추가금만 바꿀 수 있고, 값은 바꿀 수 없다(다른 조합은 삭제 후 추가) |
+| 삭제 | 소프트 삭제. 마지막 남은 옵션은 지울 수 없다 (409 `LAST_OPTION_NOT_DELETABLE`) |
+
 - 판매자가 옵션을 지우면 그 옵션은 `saleable = false`(`OPTION_DELETED`)가 된다. `cancelPendingOrders`는 상품 단위라 옵션 삭제로는 부르지 않는다.
-  그 옵션이 담긴 결제 대기 주문은 결제 때 `getOptions`로 판매 가능 여부를 다시 보므로 결제되지 않고(409 PRODUCT_NOT_ON_SALE),
-  구매자 취소나 결제 만료로 취소될 때 재고가 복원된다(ORDER_RESTORE는 삭제된 옵션도 재고를 늘린다).
+- 지운 옵션이 담긴 결제 대기 주문은 결제 때 `getOptions`로 판매 가능 여부를 다시 보므로 결제되지 않고(409 `PRODUCT_NOT_ON_SALE`), 구매자 취소나 결제 만료로 취소될 때 재고가 복원된다(ORDER_RESTORE는 삭제된 옵션도 재고를 늘린다).
+
+### 상품 할인
+
+판매자가 상품에 기간 할인(할인가, 시작·끝 시각)을 겁니다. 할인은 상품 가격에만 적용하고, 옵션 추가금은 할인한 가격에 그대로 더합니다.
+할인이 진행 중인지는 조회 시각으로 계산하므로(스케줄러 없음), `getOptions`를 부르는 시각의 할인이 price에 들어갑니다.
+
+| 항목 | 규칙 |
+| --- | --- |
+| 할인가 | 정가의 10~99% (할인율 1~90%). 할인율은 소수점 내림으로 보여 준다 |
+| 기간 | 시작은 지금 이후, 끝은 시작 뒤 1년 이내. 시작 이상·끝 미만이 할인 기간이다 |
+| 겹침 | 한 상품의 할인 기간은 겹칠 수 없다 (409 `DISCOUNT_PERIOD_OVERLAPPED`) |
+| 변경 | 시작 전은 할인가·시작·끝을 바꾸거나 삭제할 수 있다. 진행 중은 끝 시각만 바꾸거나(연장·단축) 지금 종료할 수 있다. 끝난 할인은 이력으로 남는다 |
+| 정가 수정 | 진행 중이거나 예약된 할인이 있으면 상품 가격을 바꿀 수 없다 (409 `PRICE_LOCKED_BY_DISCOUNT`) |
+
+- 할인이 시작되거나 끝나는 순간 장바구니에서 본 금액과 주문 생성 때 금액이 달라지면 주문 생성은 409 `PRICE_CHANGED`다. 잘못된 가격으로 주문되지 않게 하려는 의도된 동작이다.
+- 주문 금액은 주문 생성 때의 스냅샷으로 고정된다. 할인 중에 만든 주문은 할인이 끝난 뒤 결제해도 할인가다.
+- 주문 컨텍스트 후속(금액과 무관, 표시용): 주문 항목에 정가 단가와 할인율을 저장하고 장바구니·주문 상세 응답에 `listPrice`·`discountRate`를 그대로 추가한 뒤 호환 생성자를 지운다. 그 전까지 장바구니·주문 화면에는 할인가만 보인다.
 
 ### 받는 이벤트
 
@@ -444,7 +483,8 @@ public interface CouponApi {
 }
 ```
 
-- 상품 금액은 옵션 단가(상품 가격 + 옵션 추가금) x 수량이다. 상품 쿠폰도 추가금을 포함한 이 금액에 할인을 적용한다.
+- 상품 금액은 옵션 단가(`OptionSnapshotDto.price`) x 수량이다. 상품 쿠폰도 추가금을 포함한 이 금액에 할인을 적용한다.
+- 할인은 상품 할인 → 상품 쿠폰 → 장바구니 쿠폰 순서로 적용한다. 할인 상품에도 쿠폰을 쓸 수 있고, 상품 쿠폰 할인액이 할인가 기준 상품 금액 이상이면 400 `COUPON_NOT_APPLICABLE`이다.
 - 주문 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. 결제 요청(PayCommand.amount)은 이 결제 금액(payAmount)이다.
   배송비는 배송비 작업에서 상품 쿠폰 할인 후 금액을 기준으로 더한다(장바구니 쿠폰 기준 금액은 배송비 제외라 바뀌지 않는다).
 - 장바구니 쿠폰 할인은 플랫폼 부담이다. 주문의 장바구니 쿠폰 할인액을 PayCommand.couponSubsidyAmount로 보내고, 결제가 플랫폼 지갑에서 홀딩으로 채운다.
@@ -844,4 +884,5 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
 - [x] 결제 `PROCESSING`은 쓰지 않아 제거 (지은)
+- [ ] 주문 항목에 정가 단가·할인율을 저장하고 장바구니·주문 상세에 정가·할인율 표시, 이후 `OptionSnapshotDto` 호환 생성자 제거 (유진·은정)
 - [x] 판매자의 회원 탈퇴: 판매자는 판매자 철회 완료(WITHDRAWN) 후에만 회원 탈퇴할 수 있다. 철회 승인 시점에 진행 중인 판매(`OrderApi.hasActiveSales`)와 미정산 금액(`SettlementApi.getUnsettledAmount`)이 없어야 한다. 탈퇴 후 정산금이 탈퇴 회원 지갑으로 들어가는 것을 막기 위함 (시연·지은·은정·다은)

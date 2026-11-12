@@ -36,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -59,6 +60,10 @@ public class ProductFacade {
     private final ProductAddOptionUseCase productAddOptionUseCase;
     private final ProductModifyOptionUseCase productModifyOptionUseCase;
     private final ProductDeleteOptionUseCase productDeleteOptionUseCase;
+    private final ProductCreateDiscountUseCase productCreateDiscountUseCase;
+    private final ProductModifyDiscountUseCase productModifyDiscountUseCase;
+    private final ProductDeleteDiscountUseCase productDeleteDiscountUseCase;
+    private final ProductEndDiscountUseCase productEndDiscountUseCase;
     private final ProductSearchProductsUseCase productSearchProductsUseCase;
     private final ProductGetProductDetailUseCase productGetProductDetailUseCase;
     private final ProductGetSellerProductsUseCase productGetSellerProductsUseCase;
@@ -240,6 +245,35 @@ public class ProductFacade {
     public void deleteOption(Long memberId, Long productId, Long optionId) {
         Long sellerId = productSupport.getSellableSellerId(memberId);
         productDeleteOptionUseCase.deleteOption(sellerId, productId, optionId);
+    }
+
+    /** 승인된 판매자가 본인 상품에 기간 할인을 걸고, 만든 할인 ID를 돌려준다. */
+    @Transactional
+    public Long createDiscount(Long memberId, Long productId, long salePrice, LocalDateTime startsAt, LocalDateTime endsAt) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        return productCreateDiscountUseCase.createDiscount(sellerId, productId, salePrice, startsAt, endsAt).getId();
+    }
+
+    /** 승인된 판매자가 본인 상품의 할인을 부분 수정한다 (null인 값은 그대로, 진행 중이면 끝 시각만). */
+    @Transactional
+    public void modifyDiscount(Long memberId, Long productId, Long discountId, Long salePrice,
+                               LocalDateTime startsAt, LocalDateTime endsAt) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productModifyDiscountUseCase.modifyDiscount(sellerId, productId, discountId, salePrice, startsAt, endsAt);
+    }
+
+    /** 승인된 판매자가 본인 상품의 시작 전인 할인을 지운다. */
+    @Transactional
+    public void deleteDiscount(Long memberId, Long productId, Long discountId) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productDeleteDiscountUseCase.deleteDiscount(sellerId, productId, discountId);
+    }
+
+    /** 승인된 판매자가 본인 상품의 진행 중인 할인을 지금 끝낸다. */
+    @Transactional
+    public void endDiscount(Long memberId, Long productId, Long discountId) {
+        Long sellerId = productSupport.getSellableSellerId(memberId);
+        productEndDiscountUseCase.endDiscount(sellerId, productId, discountId);
     }
 
     /** 승인된 판매자가 자기 상품 옵션의 재고를 증감량만큼 조정하고, 조정 후 재고를 돌려준다. */
