@@ -60,6 +60,7 @@ class WalletTransactionTest {
     void typeDirection() {
         assertThat(WalletTransactionType.CHARGE.isDeposit()).isTrue();
         assertThat(WalletTransactionType.CHARGE_CANCEL.isDeposit()).isFalse();
+        assertThat(WalletTransactionType.CHARGE_CANCEL_RESTORE.isDeposit()).isTrue();
         assertThat(WalletTransactionType.PAYMENT.isDeposit()).isFalse();
         assertThat(WalletTransactionType.REFUND.isDeposit()).isTrue();
         assertThat(WalletTransactionType.SETTLEMENT.isDeposit()).isTrue();
@@ -71,6 +72,7 @@ class WalletTransactionTest {
     void typeReference() {
         assertThat(WalletTransactionType.CHARGE.getReferenceType()).isEqualTo(WalletTransactionReferenceType.TOPUP);
         assertThat(WalletTransactionType.CHARGE_CANCEL.getReferenceType()).isEqualTo(WalletTransactionReferenceType.TOPUP);
+        assertThat(WalletTransactionType.CHARGE_CANCEL_RESTORE.getReferenceType()).isEqualTo(WalletTransactionReferenceType.TOPUP);
         assertThat(WalletTransactionType.PAYMENT.getReferenceType()).isEqualTo(WalletTransactionReferenceType.PAYMENT);
         assertThat(WalletTransactionType.REFUND.getReferenceType()).isEqualTo(WalletTransactionReferenceType.REFUND);
         assertThat(WalletTransactionType.SETTLEMENT.getReferenceType()).isEqualTo(WalletTransactionReferenceType.SETTLEMENT);

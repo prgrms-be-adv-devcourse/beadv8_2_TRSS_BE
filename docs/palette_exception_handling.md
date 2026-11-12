@@ -215,6 +215,12 @@ if (updated == 0) throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
   - 그 밖의 4xx(카드 거절 등) → 충전 FAILED_PG_DECLINED, `400-TOPUP_PAYMENT_DECLINED`(`data.code`·`message`)
   - 5xx·`ALREADY_PROCESSED_PAYMENT`·승인 후 DB 반영 실패 → 충전 PROCESSING, `200-1` + `data.status: "PROCESSING"`
   - 연결 5초·응답 30초 제한 (`custom.toss`)
+- 토스 충전 취소의 오류 처리 (취소 시작 때 잔액을 먼저 빼고, 확정 실패면 되돌린다):
+  - 401·`INVALID_API_KEY`·`UNAUTHORIZED_KEY`(키 오류) → 잔액·남은 금액 되돌림(원장 `CHARGE_CANCEL_RESTORE`), `502-EXTERNAL_SERVICE_ERROR`
+  - 그 밖의 4xx(환불 기간 지남·부분 취소 불가 수단 등) → 되돌림, `400-TOPUP_CANCEL_DECLINED`(`data.code`·`message`)
+  - 응답 없음·5xx·`ALREADY_CANCELED_PAYMENT`·`IDEMPOTENT_REQUEST_PROCESSING`·`ALREADY_PROCESSING_REQUEST`·`FORBIDDEN_CONSECUTIVE_REQUEST`·`PROVIDER_ERROR`·취소 후 DB 반영 실패 → 취소됐을 수 있으므로 되돌리지 않고 충전 CANCELING, `200-1` + `data.status: "CANCELING"`. 대사 스케줄러가 토스 결제키 조회의 취소 금액 합계로 확정하거나 되돌린다
+  - 토스 `Idempotency-Key`는 취소 회차마다 다르게(`TOPUP-{id}-CANCEL-{회차}`) 보내 재시도해도 같은 취소가 두 번 처리되지 않게 한다
+- 대사 스케줄러의 토스 조회는 결제키(`GET /v1/payments/{paymentKey}`)로 한다. 주문번호 조회(`/v1/payments/orders/{orderId}`)는 결제위젯 시크릿 키로 호출할 수 없다
 - **응답 시간 초과는 실패로 단정하지 않는다.** 카드 승인은 이미 됐을 수 있다. 충전을 `PROCESSING`으로 두고 성공 응답 `200-1` + `data.status: "PROCESSING"`(결과 확인 중)으로 돌려준다. 프론트는 `data.status`로 완료와 확인 중을 구분한다. 대사 스케줄러가 토스 조회로 결과를 확정한다.
 - 같은 `Idempotency-Key` + 같은 요청은 오류가 아니라 처음 응답을 그대로 돌려준다. 다른 본문이면 `409-IDEMPOTENCY_KEY_REUSED`다. (주문 생성 `POST /orders`는 구현: 같은 구매자·같은 키면 처음 만든 주문을 돌려주고(그 주문이 취소됐으면 `409-IDEMPOTENCY_KEY_EXPIRED`), 본문은 비교하지 않는다. 그 밖의 API는 헤더 미구현. 지금은 충전 승인 재요청이 `409-TOPUP_ALREADY_PROCESSED`이고 상태는 `GET /topups/{id}`로 확인한다. 내부 `PaymentApi.pay()`만 같은 키에 처음 결과를 돌려준다)
 
@@ -301,7 +307,8 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-AMOUNT_MISMATCH | 저장 금액 ≠ 승인 요청 금액 |
 | | 400-TOPUP_PAYMENT_DECLINED | 토스가 결제를 승인하지 않음(카드 거절·한도 초과 등) (`data.code`·`message`: 토스 오류 코드·메시지) |
 | | 409-TOPUP_ALREADY_PROCESSED | READY가 아닌 충전 건(승인 중·완료·실패·만료)에 승인·실패 기록 요청, 이미 쓰인 결제키 |
-| | 409-TOPUP_ALREADY_USED | 남은 금액 ≠ 충전 금액이라 취소 불가 (충전 취소 API 미구현, 현재 미사용) |
+| | 409-TOPUP_NOT_CANCELABLE | 승인 완료(DONE)가 아니거나 취소할 남은 금액이 없는 충전 건에 취소 요청 |
+| | 400-TOPUP_CANCEL_DECLINED | 토스가 충전 취소를 거절함(환불 기간 지남·부분 취소 불가 등). 잔액은 되돌림 (`data.code`·`message`: 토스 오류 코드·메시지) |
 | | 409-PAYMENT_ALREADY_PAID | 다른 멱등 키로 이미 PAID인 주문을 결제 (내부 `PaymentApi.pay`) |
 | | 404-HOLDING_NOT_FOUND / 409-HOLDING_INSUFFICIENT / 409-TRANSFER_AMOUNT_MISMATCH | 정산 지급(`PaymentApi.transfer`)에서 홀딩 없음 / 홀딩 남은 금액 부족 / 주문별 금액 합 ≠ 지급액 + 수수료 |
 | | 404-TOPUP_NOT_FOUND / 404-WALLET_NOT_FOUND | |
@@ -394,6 +401,6 @@ public RsData<PayResponse> pay(...) { ... }
 | 실패 응답을 `RsData`로 통일, 405·415 처리 | 완료 |
 | 성공 응답 HTTP 200 통일 | 완료 (별도 코드 없음) |
 | Security `AuthenticationEntryPoint`·`AccessDeniedHandler` | 완료 (`JwtAuthenticationEntryPoint`·`JwtAccessDeniedHandler`) |
-| 토스 연동 예외(`TossPaymentException`·`TossTimeoutException`)·충전 대사 스케줄러 | 완료 |
+| 토스 연동 예외(`TossPaymentException`·`TossTimeoutException`)·충전 대사 스케줄러(승인·취소) | 완료 |
 | 요청별 `traceId`(MDC, `X-Trace-Id` 헤더) | 미구현 |
 | 운영 프로필에서 `show-sql` 끄기 | 미구현 |

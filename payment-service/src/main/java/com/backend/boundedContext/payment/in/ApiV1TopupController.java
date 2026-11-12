@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.backend.boundedContext.payment.app.PaymentFacade;
+import com.backend.boundedContext.payment.app.dto.TopupCancelDto;
 import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
 import com.backend.boundedContext.payment.app.dto.TopupDto;
 import com.backend.boundedContext.payment.app.dto.TopupFailDto;
@@ -79,6 +80,26 @@ public class ApiV1TopupController {
             @Valid @RequestBody TopupFailRequest request
     ) {
         return RsData.of("200-1", "충전 실패가 기록되었습니다.", paymentFacade.failTopup(authMember.memberId(), topupId, request.code(), request.message()));
+    }
+
+    @Operation(summary = "충전 취소", description = """
+            충전 건에서 아직 쓰지 않은 금액(cancelableAmount) 전부를 결제한 PG로 취소한다. 일부를 쓴 충전 건은 남은 금액만 부분 취소된다.
+            취소 금액은 요청 즉시 예치금 잔액에서 빠진다.
+            data.status가 CANCELED(전부 취소)·DONE(일부 취소)이면 취소 완료, CANCELING이면 결과 확인 중이며 잠시 후 충전 내역에서 확인한다.
+            결제 취소로 남은 금액이 다시 생기면 다시 취소할 수 있다.""")
+    @ApiResponse(responseCode = "200", description = "200-1 취소 완료(data.status: CANCELED·DONE) 또는 결과 확인 중(data.status: CANCELING)")
+    @ApiResponse(responseCode = "400", description = "400-TOPUP_CANCEL_DECLINED 취소 가능 기간 지남·부분 취소 불가 수단 등(data: PG 오류 코드·메시지). 잔액은 원래대로 돌아옴")
+    @ApiResponse(responseCode = "404", description = "404-TOPUP_NOT_FOUND 충전 건이 없거나 남의 충전 건")
+    @ApiResponse(responseCode = "409", description = "409-TOPUP_NOT_CANCELABLE 승인 완료(DONE)가 아니거나 취소할 남은 금액이 없음")
+    @ApiResponse(responseCode = "502", description = "502-EXTERNAL_SERVICE_ERROR PG 인증 오류 등. 잔액은 원래대로 돌아옴")
+    @PostMapping("/{topupId}/cancel")
+    public RsData<TopupCancelDto> cancelTopup(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long topupId
+    ) {
+        TopupCancelDto result = paymentFacade.cancelTopup(authMember.memberId(), topupId);
+        String msg = result.status() == TopupStatus.CANCELING ? "충전 취소 결과를 확인하고 있습니다." : "충전이 취소되었습니다.";
+        return RsData.of("200-1", msg, result);
     }
 
     @Operation(summary = "내 충전 목록", description = "충전 준비 최신순. page(0부터)·size(기본 20, 최대 100), 정렬은 고정이라 sort는 무시한다")

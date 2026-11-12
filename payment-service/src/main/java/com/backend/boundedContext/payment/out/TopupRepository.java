@@ -53,6 +53,10 @@ public interface TopupRepository extends JpaRepository<Topup, Long>, JpaSpecific
             """)
     List<Topup> findUsableForUpdate(@Param("memberId") Long memberId, @Param("status") TopupStatus status);
 
+    // 충전 건의 회원 ID만 조회 (잠그지 않음). 충전 취소 반영 때 지갑을 먼저 잠그려고 회원 ID를 먼저 알아냄
+    @Query("select t.memberId from Topup t where t.id = :id")
+    Optional<Long> findMemberIdById(@Param("id") Long id);
+
     // 승인 결과 반영 전 충전 건 행을 잠금. 승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하지 않게 함
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Topup t where t.id = :id")
