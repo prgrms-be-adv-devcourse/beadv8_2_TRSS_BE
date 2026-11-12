@@ -67,7 +67,7 @@ class OrderCouponReservationIntegrationTest {
     /** 진행 중 협약과 그 협약의 상품 쿠폰(정액 3,000원, 수량 10장) */
     private Long saveProductCoupon() {
         LocalDateTime now = now();
-        Partnership partnership = Partnership.request(SELLER_ID, INFLUENCER_ID, null, now.minusDays(2));
+        Partnership partnership = Partnership.request(SELLER_ID, INFLUENCER_ID, 20, null, now.minusDays(2));
         partnership.accept(now.minusDays(1));
         partnershipRepository.save(partnership);
 

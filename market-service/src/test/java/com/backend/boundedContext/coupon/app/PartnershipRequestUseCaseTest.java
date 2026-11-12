@@ -58,7 +58,7 @@ class PartnershipRequestUseCaseTest {
             return partnership;
         });
 
-        Long partnershipId = useCase.request(MEMBER_ID, INFLUENCER_ID, "함께해요");
+        Long partnershipId = useCase.request(MEMBER_ID, INFLUENCER_ID, 20, "함께해요");
 
         ArgumentCaptor<Partnership> captor = ArgumentCaptor.forClass(Partnership.class);
         verify(partnershipRepository).saveAndFlush(captor.capture());
@@ -66,6 +66,7 @@ class PartnershipRequestUseCaseTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(PartnershipStatus.REQUESTED);
         assertThat(captor.getValue().getSellerId()).isEqualTo(SELLER_ID);
         assertThat(captor.getValue().getRequestMessage()).isEqualTo("함께해요");
+        assertThat(captor.getValue().getCommissionRate()).isEqualTo(20);
     }
 
     @Test
@@ -74,7 +75,7 @@ class PartnershipRequestUseCaseTest {
         given(couponSellerPort.getApprovedSellerId(MEMBER_ID)).willReturn(SELLER_ID);
         given(couponInfluencerPort.findInfluencer(INFLUENCER_ID)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, null))
+        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, 20, null))
                 .extracting("resultCode").isEqualTo("404-INFLUENCER_NOT_FOUND");
     }
 
@@ -83,7 +84,7 @@ class PartnershipRequestUseCaseTest {
     void influencerNotApproved() {
         givenSellerAndInfluencer(false);
 
-        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, null))
+        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, 20, null))
                 .extracting("resultCode").isEqualTo("409-INFLUENCER_STATE_INVALID");
         verify(partnershipRepository, never()).saveAndFlush(any());
     }
@@ -95,7 +96,7 @@ class PartnershipRequestUseCaseTest {
         given(partnershipRepository.existsBySellerIdAndInfluencerIdAndStatusIn(eq(SELLER_ID), eq(INFLUENCER_ID), anyCollection()))
                 .willReturn(true);
 
-        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, null))
+        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, 20, null))
                 .extracting("resultCode").isEqualTo("409-PARTNERSHIP_ALREADY_EXISTS");
         verify(partnershipRepository, never()).saveAndFlush(any());
     }
@@ -109,7 +110,7 @@ class PartnershipRequestUseCaseTest {
         given(partnershipRepository.saveAndFlush(any(Partnership.class)))
                 .willThrow(new DataIntegrityViolationException("uk_partnership_open"));
 
-        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, null))
+        assertThatThrownBy(() -> useCase.request(MEMBER_ID, INFLUENCER_ID, 20, null))
                 .extracting("resultCode").isEqualTo("409-PARTNERSHIP_ALREADY_EXISTS");
     }
 }

@@ -33,7 +33,7 @@ public class PartnershipRequestUseCase {
     private final CouponInfluencerPort couponInfluencerPort;
     private final PartnershipRepository partnershipRepository;
 
-    public Long request(Long memberId, Long influencerId, String message) {
+    public Long request(Long memberId, Long influencerId, Integer commissionRate, String message) {
         Long sellerId = couponSellerPort.getApprovedSellerId(memberId);
 
         CouponInfluencer influencer = couponInfluencerPort.findInfluencer(influencerId)
@@ -48,7 +48,7 @@ public class PartnershipRequestUseCase {
 
         try {
             return partnershipRepository.saveAndFlush(
-                    Partnership.request(sellerId, influencerId, message, LocalDateTime.now())).getId();
+                    Partnership.request(sellerId, influencerId, commissionRate, message, LocalDateTime.now())).getId();
         } catch (DataIntegrityViolationException e) {
             // 확인 뒤 같은 요청이 먼저 커밋한 경우 (uk_partnership_open)
             throw new DomainException(CouponErrorCode.PARTNERSHIP_ALREADY_EXISTS, e);

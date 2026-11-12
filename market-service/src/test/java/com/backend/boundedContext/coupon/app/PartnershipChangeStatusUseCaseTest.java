@@ -46,7 +46,7 @@ class PartnershipChangeStatusUseCaseTest {
 
     private Partnership requested() {
         return CouponFixtures.withId(
-                Partnership.request(CouponFixtures.SELLER_ID, CouponFixtures.INFLUENCER_ID, null, LocalDateTime.now()), PARTNERSHIP_ID);
+                Partnership.request(CouponFixtures.SELLER_ID, CouponFixtures.INFLUENCER_ID, 20, null, LocalDateTime.now()), PARTNERSHIP_ID);
     }
 
     @Test

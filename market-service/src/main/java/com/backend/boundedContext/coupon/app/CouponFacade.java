@@ -119,8 +119,8 @@ public class CouponFacade {
 
     // 협약 요청 (판매자) → 협약 ID
     @Transactional
-    public Long requestPartnership(Long memberId, Long influencerId, String message) {
-        return partnershipRequestUseCase.request(memberId, influencerId, message);
+    public Long requestPartnership(Long memberId, Long influencerId, Integer commissionRate, String message) {
+        return partnershipRequestUseCase.request(memberId, influencerId, commissionRate, message);
     }
 
     // 내 협약 목록 (판매자)

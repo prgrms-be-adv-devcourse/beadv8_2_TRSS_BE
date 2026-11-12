@@ -39,6 +39,10 @@ public class Partnership extends BaseIdAndTime {
     @Column(nullable = false, length = 20)
     private PartnershipStatus status;
 
+    // 인플루언서 수수료율(%), 15~30. 요청할 때 정하고 바꿀 수 없다 (바꾸려면 종료 뒤 다시 요청)
+    @Column(nullable = false)
+    private Integer commissionRate;
+
     @Column(length = 500)
     private String requestMessage;
 
@@ -56,10 +60,11 @@ public class Partnership extends BaseIdAndTime {
     private PartnershipEndedBy endedBy;
 
     // 판매자가 인플루언서에게 협약 요청
-    public static Partnership request(Long sellerId, Long influencerId, String message, LocalDateTime now) {
+    public static Partnership request(Long sellerId, Long influencerId, Integer commissionRate, String message, LocalDateTime now) {
         Partnership partnership = new Partnership();
         partnership.sellerId = sellerId;
         partnership.influencerId = influencerId;
+        partnership.commissionRate = commissionRate;
         partnership.requestMessage = message;
         partnership.status = PartnershipStatus.REQUESTED;
         partnership.requestedAt = now;
