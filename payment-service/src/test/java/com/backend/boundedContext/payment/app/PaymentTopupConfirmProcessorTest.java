@@ -141,7 +141,7 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     @Test
-    @DisplayName("승인 반영: 허용하지 않은 결제 수단(카드·간편결제 외)이어도 승인된 금액이므로 반영한다")
+    @DisplayName("승인 반영: 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이어도 승인된 금액이므로 반영한다")
     void complete_notAllowedMethod() {
         Wallet wallet = Wallet.create(MEMBER_ID);
         Topup topup = processingTopup(wallet, 10_000);
