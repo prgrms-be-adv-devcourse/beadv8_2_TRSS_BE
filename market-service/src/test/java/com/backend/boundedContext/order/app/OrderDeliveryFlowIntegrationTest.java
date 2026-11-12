@@ -125,7 +125,7 @@ class OrderDeliveryFlowIntegrationTest {
     }
 
     @Test
-    @DisplayName("결제 실패(잔액 부족) + 배송지: 402, 주문은 결제 전으로 롤백되고 OrderPaidEvent는 0행")
+    @DisplayName("결제 실패(잔액 부족) + 배송지: 402, 주문은 PAYMENT_FAILED(다시 결제 가능)로 커밋되고 OrderPaidEvent는 0행")
     void pay_insufficientBalance_rollsBack() {
         long orderId = saveCreatedOrder(true);
         given(paymentApi.pay(any())).willReturn(
@@ -137,7 +137,7 @@ class OrderDeliveryFlowIntegrationTest {
                 .isEqualTo(OrderErrorCode.INSUFFICIENT_BALANCE.resultCode());
 
         assertThat(outboxRows(orderId, "OrderPaidEvent")).isEmpty();
-        assertThat(status(orderId)).isEqualTo(OrderStatus.CREATED);
+        assertThat(status(orderId)).isEqualTo(OrderStatus.PAYMENT_FAILED);
     }
 
     // ---------- 주문 상세: delivery 장애 격리 ----------
