@@ -176,7 +176,7 @@ class TopupConfirmIntegrationTest {
     }
 
     private TossPaymentResponse tossDone() {
-        return new TossPaymentResponse(paymentKey, orderId, "DONE", AMOUNT, "카드", APPROVED_AT);
+        return new TossPaymentResponse(paymentKey, orderId, "DONE", AMOUNT, "카드", APPROVED_AT, null);
     }
 
     private Topup savedTopup() {

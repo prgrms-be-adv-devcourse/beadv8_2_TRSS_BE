@@ -115,7 +115,7 @@ class TopupReconcileIntegrationTest {
         TossPaymentResponse toss = tossDone(topup);
         given(tossPaymentsClient.getPaymentByOrderId(topup.orderId())).willReturn(toss);
         PgPaymentResult approved = new PgPaymentResult(toss.paymentKey(), toss.orderId(), PgPaymentStatus.APPROVED, toss.status(),
-                toss.totalAmount(), PgPaymentMethod.CARD, toss.approvedAtKst());
+                toss.totalAmount(), 0, PgPaymentMethod.CARD, toss.approvedAtKst());
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -163,7 +163,7 @@ class TopupReconcileIntegrationTest {
     }
 
     private TossPaymentResponse tossDone(Processing topup) {
-        return new TossPaymentResponse("pk_reconcile_" + topup.topupId(), topup.orderId(), "DONE", AMOUNT, "카드", null);
+        return new TossPaymentResponse("pk_reconcile_" + topup.topupId(), topup.orderId(), "DONE", AMOUNT, "카드", null, null);
     }
 
     private List<WalletTransaction> transactionsOfWallet() {

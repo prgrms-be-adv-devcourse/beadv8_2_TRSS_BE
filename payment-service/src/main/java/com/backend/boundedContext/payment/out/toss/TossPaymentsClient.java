@@ -28,6 +28,8 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class TossPaymentsClient {
 
+    private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
     // baseUrl·인증 헤더·타임아웃이 모두 설정된 RestClient. 앱 시작 시 한 번 만들어 모든 호출에서 재사용
     private final RestClient restClient;
 
@@ -84,7 +86,21 @@ public class TossPaymentsClient {
     }
 
     /**
-     * 요청 실행과 예외 변환을 한곳에서 처리 (confirm·getPaymentByOrderId가 같은 try-catch를 반복하지 않게 함)
+     * 결제 취소. cancelAmount만큼 부분 취소하며, 남은 금액 전부를 넘기면 전액 취소와 같음
+     * Idempotency-Key 헤더: 같은 키로 다시 요청하면 토스가 실제로 다시 취소하지 않고 첫 응답을 그대로 돌려줌 (15일간 유효)
+     */
+    public TossPaymentResponse cancel(String paymentKey, long cancelAmount, String reason, String idempotencyKey) {
+        return call(() -> restClient.post()
+                .uri("/v1/payments/{paymentKey}/cancel", paymentKey)
+                .header(IDEMPOTENCY_KEY_HEADER, idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CancelRequest(reason, cancelAmount))
+                .retrieve()
+                .body(TossPaymentResponse.class));
+    }
+
+    /**
+     * 요청 실행과 예외 변환을 한곳에서 처리 (confirm·getPaymentByOrderId·cancel이 같은 try-catch를 반복하지 않게 함)
      * request는 아직 실행되지 않은 요청 코드이고, request.get()을 부를 때 실제로 실행됨
      * Spring HTTP 예외를 우리 예외로 바꿔, app 계층이 HTTP 라이브러리를 몰라도 되게 함
      */
@@ -148,5 +164,11 @@ public class TossPaymentsClient {
             String paymentKey,
             String orderId,
             long amount
+    ) {}
+
+    // 취소 요청 본문. cancelReason은 토스 필수값(최대 200자)
+    private record CancelRequest(
+            String cancelReason,
+            long cancelAmount
     ) {}
 }

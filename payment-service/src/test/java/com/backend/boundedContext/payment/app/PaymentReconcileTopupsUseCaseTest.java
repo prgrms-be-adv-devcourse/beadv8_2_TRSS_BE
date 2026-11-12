@@ -155,6 +155,6 @@ class PaymentReconcileTopupsUseCaseTest {
     }
 
     private static PgPaymentResult pg(PgPaymentStatus status, String pgStatus, String orderId) {
-        return new PgPaymentResult("pk_1", orderId, status, pgStatus, 20_000, PgPaymentMethod.CARD, null);
+        return new PgPaymentResult("pk_1", orderId, status, pgStatus, 20_000, 0, PgPaymentMethod.CARD, null);
     }
 }
