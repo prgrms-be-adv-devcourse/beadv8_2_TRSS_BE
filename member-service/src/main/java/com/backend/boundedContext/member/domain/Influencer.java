@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Influencer extends BaseIdAndTime {
 
+    public static final String WITHDRAWAL_REASON = "회원 탈퇴";
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false, unique = true)
     private Member member;
@@ -80,6 +82,14 @@ public class Influencer extends BaseIdAndTime {
 
     public InfluencerStatusHistory revoke(String reason) {
         return changeStatus(InfluencerStatus.APPROVED, InfluencerStatus.REVOKED, reason);
+    }
+
+    // 회원 탈퇴: 관리자 해제와 달리 심사 중인 신청도 끝낸다 (남겨 두면 탈퇴한 회원이 나중에 승인될 수 있다)
+    public InfluencerStatusHistory revokeByWithdrawal() {
+        if (status != InfluencerStatus.PENDING && status != InfluencerStatus.APPROVED) {
+            throw new DomainException(MemberErrorCode.INFLUENCER_STATE_INVALID);
+        }
+        return changeStatus(status, InfluencerStatus.REVOKED, WITHDRAWAL_REASON);
     }
 
     public boolean isApproved() {

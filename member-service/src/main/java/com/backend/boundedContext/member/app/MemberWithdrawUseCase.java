@@ -5,15 +5,21 @@ import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.member.app.dto.WithdrawalCheckDto;
 import com.backend.boundedContext.member.app.dto.WithdrawalNotAllowedResponse;
+import com.backend.boundedContext.member.domain.Influencer;
+import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.domain.Member;
 import com.backend.boundedContext.member.domain.MemberErrorCode;
 import com.backend.boundedContext.member.domain.MemberPolicy;
 import com.backend.boundedContext.member.domain.SellerStatusHistory;
+import com.backend.boundedContext.member.out.InfluencerRepository;
+import com.backend.boundedContext.member.out.InfluencerStatusHistoryRepository;
 import com.backend.boundedContext.member.out.LoginAttemptStore;
 import com.backend.boundedContext.member.out.MemberSocialAccountRepository;
 import com.backend.boundedContext.member.out.SellerRepository;
 import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
+import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
+import com.backend.shared.member.event.InfluencerRevokedEvent;
 
 import lombok.RequiredArgsConstructor;
 
@@ -29,8 +35,11 @@ public class MemberWithdrawUseCase {
     private final SellerRepository sellerRepository;
     private final SellerStatusHistoryRepository sellerStatusHistoryRepository;
     private final MemberSocialAccountRepository memberSocialAccountRepository;
+    private final InfluencerRepository influencerRepository;
+    private final InfluencerStatusHistoryRepository influencerStatusHistoryRepository;
+    private final EventPublisher eventPublisher;
 
-    // 비밀번호로 본인 확인 → 탈퇴 조건 재확인 → 회원·판매자 비식별화, 소셜 연결 정보 삭제
+    // 비밀번호로 본인 확인 → 탈퇴 조건 재확인 → 회원·판매자 비식별화, 인플루언서 자격 해제, 소셜 연결 정보 삭제
     public void withdraw(Long memberId, String password) {
         Member member = memberSupport.getLoginMember(memberId);
         checkPassword(member, password);
@@ -45,10 +54,22 @@ public class MemberWithdrawUseCase {
             seller.anonymize();
             sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(seller.getId()).forEach(SellerStatusHistory::anonymize);
         });
+        influencerRepository.findByMemberId(memberId)
+                .filter(influencer -> influencer.getStatus() == InfluencerStatus.PENDING || influencer.isApproved())
+                .ifPresent(this::revokeInfluencer);
         // 탈퇴한 회원의 카카오 계정으로는 로그인할 수 없게 하고, 같은 카카오 계정을 새 회원에게 다시 연결할 수 있게 지움
         // (카카오 쪽 연결은 끊지 않음. unlink API 연동은 이번 범위 밖)
         memberSocialAccountRepository.deleteAllByMemberId(memberId);
         member.withdraw();
+    }
+
+    // 심사 중이던 회원은 협약이 없어서, 승인된 인플루언서였을 때만 협약 종료 이벤트를 보낸다
+    private void revokeInfluencer(Influencer influencer) {
+        boolean wasApproved = influencer.isApproved();
+        influencerStatusHistoryRepository.save(influencer.revokeByWithdrawal());
+        if (wasApproved) {
+            eventPublisher.publish(new InfluencerRevokedEvent(influencer.getId(), influencer.getMember().getId(), Influencer.WITHDRAWAL_REASON));
+        }
     }
 
     // Access Token만 가진 사람이 비밀번호를 계속 넣어 볼 수 없도록, 로그인과 같은 이메일별 실패 횟수·잠금을 씀

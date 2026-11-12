@@ -1,5 +1,8 @@
 package com.backend.boundedContext.member.app;
 
+import com.backend.boundedContext.member.app.dto.AdminInfluencerDetailDto;
+import com.backend.boundedContext.member.app.dto.AdminInfluencerListDto;
+import com.backend.boundedContext.member.domain.InfluencerStatus;
 import com.backend.boundedContext.member.in.dto.InfluencerApplyRequest;
 import com.backend.boundedContext.member.in.dto.InfluencerProfileResponse;
 import com.backend.boundedContext.member.in.dto.MyInfluencerResponse;
@@ -18,6 +21,11 @@ public class MemberInfluencerFacade {
 
     private final MemberApplyInfluencerUseCase memberApplyInfluencerUseCase;
     private final MemberGetInfluencerUseCase memberGetInfluencerUseCase;
+    private final MemberGetInfluencersUseCase memberGetInfluencersUseCase;
+    private final MemberGetInfluencerDetailUseCase memberGetInfluencerDetailUseCase;
+    private final MemberApproveInfluencerUseCase memberApproveInfluencerUseCase;
+    private final MemberRejectInfluencerUseCase memberRejectInfluencerUseCase;
+    private final MemberRevokeInfluencerUseCase memberRevokeInfluencerUseCase;
 
     @Transactional
     public MyInfluencerResponse applyInfluencer(Long memberId, InfluencerApplyRequest request) {
@@ -37,5 +45,30 @@ public class MemberInfluencerFacade {
     @Transactional(readOnly = true)
     public InfluencerProfileResponse getInfluencerProfile(Long influencerId) {
         return memberGetInfluencerUseCase.getProfile(influencerId);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminInfluencerListDto getInfluencersForAdmin(InfluencerStatus status, Pageable pageable) {
+        return memberGetInfluencersUseCase.getInfluencers(status, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminInfluencerDetailDto getInfluencerDetail(Long influencerId) {
+        return memberGetInfluencerDetailUseCase.getInfluencerDetail(influencerId);
+    }
+
+    @Transactional
+    public AdminInfluencerDetailDto approveInfluencer(Long influencerId) {
+        return memberApproveInfluencerUseCase.approve(influencerId);
+    }
+
+    @Transactional
+    public AdminInfluencerDetailDto rejectInfluencer(Long influencerId, String reason) {
+        return memberRejectInfluencerUseCase.reject(influencerId, reason);
+    }
+
+    @Transactional
+    public AdminInfluencerDetailDto revokeInfluencer(Long influencerId, String reason) {
+        return memberRevokeInfluencerUseCase.revoke(influencerId, reason);
     }
 }
