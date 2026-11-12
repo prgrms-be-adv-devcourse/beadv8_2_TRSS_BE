@@ -24,13 +24,16 @@ public interface PaymentApi {
     boolean hasPendingTopups(Long memberId);
 
     /**
-     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.
+     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록.
+     * market은 HTTP(POST /internal/v1/payments/pay)로 부르므로 호출한 쪽 트랜잭션에 참여하지 않는다.
+     * 주문 쪽은 주문을 PAYING으로 커밋한 뒤 부르고, 결과는 별도 트랜잭션으로 반영한다(공유 계약 9.1).
      * command.amount는 배송비를 포함한 결제 금액이다. 배송비(command.shippingFee)는 구매자 지갑 → 플랫폼 지갑(원장 SHIPPING_FEE)으로 옮기고,
      * 나머지(amount − shippingFee)는 홀딩에 넣는다. 장바구니 쿠폰 지원금(command.couponSubsidyAmount)은 플랫폼 지갑 → 홀딩(원장 COUPON_SUBSIDY).
      * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount.
      * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.
-     * 주문 쪽은 결과가 PAID가 아니면 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
-     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다.
+     * 주문 쪽은 결과가 PAID가 아니면 주문을 PAYMENT_FAILED로 커밋한 뒤 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
+     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환하고, 아직 처리하지 않은 키면 그때 처리한다.
+     * 주문 쪽 재확인 스케줄러는 결과를 모르는 결제(응답 시간 초과 등)를 같은 키·같은 내용으로 다시 불러 확정한다.
      */
     PayResultDto pay(PayCommand command);
 

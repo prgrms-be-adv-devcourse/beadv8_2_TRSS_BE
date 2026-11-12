@@ -27,6 +27,11 @@ public class OrderCouponApiAdapter implements OrderCouponPort {
     }
 
     @Override
+    public void validateReservedCouponsUsable(Long orderId, LocalDateTime now) {
+        couponApi.validateReservedCouponsUsable(orderId, now);
+    }
+
+    @Override
     public void useReservedCoupons(Long orderId, LocalDateTime now) {
         couponApi.useReservedCoupons(orderId, now);
     }

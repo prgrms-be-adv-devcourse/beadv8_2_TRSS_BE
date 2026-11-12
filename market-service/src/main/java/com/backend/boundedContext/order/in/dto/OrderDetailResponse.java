@@ -9,7 +9,8 @@ import java.util.List;
  * 주문 상세
  *
  * @param remainingSeconds 결제 가능 남은 시간(초)
- * @param payments            결제 내역 (결제 시도가 없으면 빈 목록)
+ * @param payments            결제 내역 (결제 시도가 없거나 조회하지 못했으면 빈 목록)
+ * @param paymentUnavailable  결제 내역을 조회하지 못했으면 true (payment 서비스 장애). 이때도 주문 상세는 200으로 응답한다
  * @param shippingAddress     배송지. 배송지 없이 만든 주문이면 null
  * @param deliveredAt         배송 완료 시각(market이 받은 배송 완료 이벤트 기준). 배송 전이면 null
  * @param delivery            배송 정보. 배송지 없는 주문·결제 전·배송 건이 아직 없음(결제 직후)·조회 실패면 null
@@ -40,6 +41,7 @@ public record OrderDetailResponse(
         long productDiscountAmount,
         long cartCouponDiscountAmount,
         long payAmount,
-        long shippingFee
+        long shippingFee,
+        boolean paymentUnavailable
 ) {
 }

@@ -207,11 +207,11 @@ public class OrderCreateOrderUseCase {
         }
     }
 
-    // 결제 대기 주문에 들어 있는 옵션으로는 새 주문을 만들 수 없음
+    // 결제가 끝나지 않은(결제 대기·결제 중) 주문에 들어 있는 옵션으로는 새 주문을 만들 수 없음
     // 응답 유실 후 키 없이 다시 보낸 경우에도 주문서로 돌아갈 수 있게 결제 대기 주문 ID를 담는다
     private void validateNotInPendingOrder(Long buyerId, List<Long> optionIds) {
         List<Long> pendingOrderIds = orderRepository.findOrderIdsContainingOptions(
-                buyerId, optionIds, Order.PAYMENT_PENDING_STATUSES);
+                buyerId, optionIds, Order.PAYMENT_UNFINISHED_STATUSES);
 
         if (!pendingOrderIds.isEmpty()) {
             throw new DomainException(OrderErrorCode.CART_ITEM_IN_PENDING_ORDER,

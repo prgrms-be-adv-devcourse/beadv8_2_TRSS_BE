@@ -79,24 +79,30 @@ public class ApiV1OrderController {
                 orderFacade.getOrderDetail(authMember.memberId(), orderId));
     }
 
-    @Operation(summary = "주문 결제", description = "결제 대기상태이고 만료 전인 주문만 예치금 결제가 가능하다.")
-    @ApiResponse(responseCode = "200", description = "200-1 결제 완료")
+    @Operation(summary = "주문 결제", description = "결제 대기상태이고 만료 전인 주문만 예치금 결제가 가능하다. "
+            + "결제 결과를 바로 알 수 없으면 200-2(status: PAYING, 결제 확인 중)로 응답하고, 서버가 결과를 확인해 PAID·PAYMENT_FAILED로 바꾼다. "
+            + "프론트는 주문 상세를 다시 조회해 상태를 확인한다.")
+    @ApiResponse(responseCode = "200", description = "200-1 결제 완료 / 200-2 결제 확인 중(status: PAYING, paidAt·paymentId 없음)")
     @ApiResponse(responseCode = "402", description = "402-INSUFFICIENT_BALANCE 잔액 부족(data: 부족액·추천 충전액·남은 시간)")
     @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND")
-    @ApiResponse(responseCode = "409", description = "409-ORDER_EXPIRED / 409-ORDER_STATE_INVALID / 409-PRODUCT_NOT_ON_SALE")
+    @ApiResponse(responseCode = "409", description = "409-ORDER_EXPIRED / 409-ORDER_STATE_INVALID / 409-PRODUCT_NOT_ON_SALE / "
+            + "409-COUPON_NOT_ACTIVE / 409-PAYMENT_IN_PROGRESS 결제 확인 중인 주문")
     @PostMapping("/{orderId}/payment")
     public RsData<OrderPayResponse> payOrder(
             @AuthenticationPrincipal AuthMember authMember,
             @PathVariable Long orderId
     ) {
-        return RsData.of("200-1", "결제를 완료했습니다.",
-                orderFacade.payOrder(authMember.memberId(), orderId));
+        OrderPayResponse response = orderFacade.payOrder(authMember.memberId(), orderId);
+        if (response.status() == OrderStatus.PAYING) {
+            return RsData.of("200-2", "결제를 확인하고 있습니다. 잠시 후 주문 상태를 확인해 주세요.", response);
+        }
+        return RsData.of("200-1", "결제를 완료했습니다.", response);
     }
 
     @Operation(summary = "주문 취소", description = "결제 전(결제 대기·결제 실패) 주문만 전체 취소하고 재고를 복원한다.")
     @ApiResponse(responseCode = "200", description = "200-1 취소 완료")
     @ApiResponse(responseCode = "404", description = "404-ORDER_NOT_FOUND")
-    @ApiResponse(responseCode = "409", description = "409-ORDER_NOT_CANCELABLE 결제 후이거나 이미 취소된 주문")
+    @ApiResponse(responseCode = "409", description = "409-ORDER_NOT_CANCELABLE 결제 후이거나 이미 취소된 주문 / 409-PAYMENT_IN_PROGRESS 결제 확인 중인 주문")
     @PostMapping("/{orderId}/cancel")
     public RsData<OrderCancelResponse> cancelOrder(
             @AuthenticationPrincipal AuthMember authMember,

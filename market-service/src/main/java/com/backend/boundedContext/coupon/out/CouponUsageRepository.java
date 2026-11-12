@@ -41,14 +41,25 @@ public interface CouponUsageRepository extends JpaRepository<CouponUsage, Long> 
             """)
     List<CouponUsage> findAllWithCouponByOrderIdAndStatus(Long orderId, CouponUsageStatus status);
 
-    /** 주문의 사용 기록 중 이 상태인 것의 수 (결제 성공: 예약 수와 사용 처리한 수를 비교) */
-    long countByOrderIdAndStatus(Long orderId, CouponUsageStatus status);
+    /**
+     * 결제 시작 확인: 주문의 예약(RESERVED) 기록 중 쿠폰을 지금 쓸 수 없는 것의 수 (중지됐거나 유효 기간 밖)
+     * 쿠폰 조건은 Coupon.isUsableAt의 반대: ACTIVE가 아니거나 now < validFrom 이거나 validUntil <= now
+     */
+    @Query("""
+            select count(u)
+              from CouponUsage u
+             where u.orderId = :orderId
+               and u.status = com.backend.boundedContext.coupon.domain.CouponUsageStatus.RESERVED
+               and (u.coupon.status <> com.backend.boundedContext.coupon.domain.CouponStatus.ACTIVE
+                    or u.coupon.validFrom > :now
+                    or u.coupon.validUntil <= :now)
+            """)
+    long countReservedWithUnusableCoupon(Long orderId, LocalDateTime now);
 
     /**
-     * 결제 성공: 주문의 예약(RESERVED) 기록 중 쿠폰을 지금 쓸 수 있는 것만 USED로 바꾼다. 바뀐 행 수를 돌려준다
-     * 기록 상태를 조건에 넣어, 동시에 해제(취소·만료)가 먼저 커밋했으면 그 행은 바꾸지 않는다(나중에 커밋한 쪽이 덮어쓰지 않음)
-     * 쿠폰도 조건에 넣어, 예약 뒤 중지됐거나 유효 기간이 끝난 쿠폰은 사용 처리하지 않는다(호출한 쪽이 예약 수와 비교해 결제를 막는다)
-     * 쿠폰 조건은 Coupon.isUsableAt과 같다: ACTIVE이고 validFrom <= now < validUntil
+     * 결제 성공 반영: 주문의 예약(RESERVED) 기록을 모두 USED로 바꾼다. 바뀐 행 수를 돌려준다
+     * 쿠폰 상태·기간은 보지 않는다(결제 시작 때 확인했고, 예약이 할인을 보장한다)
+     * 기록 상태를 조건에 넣어, 해제(취소·만료)가 먼저 커밋했으면 그 행은 바꾸지 않는다(나중에 커밋한 쪽이 덮어쓰지 않음)
      * 벌크 UPDATE라 수정 시각 자동 기록(@LastModifiedDate)이 돌지 않으므로 updatedAt도 직접 넣는다
      */
     @Modifying(flushAutomatically = true)
@@ -59,12 +70,8 @@ public interface CouponUsageRepository extends JpaRepository<CouponUsage, Long> 
                    u.updatedAt = :now
              where u.orderId = :orderId
                and u.status = com.backend.boundedContext.coupon.domain.CouponUsageStatus.RESERVED
-               and u.coupon.id in (select c.id from Coupon c
-                                    where c.status = com.backend.boundedContext.coupon.domain.CouponStatus.ACTIVE
-                                      and c.validFrom <= :now
-                                      and c.validUntil > :now)
             """)
-    int markUsedIfReservedAndCouponUsable(Long orderId, LocalDateTime now);
+    int markUsedIfReserved(Long orderId, LocalDateTime now);
 
     /**
      * 예약 해제: 이 기록이 아직 예약(RESERVED)일 때만 RELEASED로 바꾼다. 바꿨으면 1, 이미 처리됐으면 0

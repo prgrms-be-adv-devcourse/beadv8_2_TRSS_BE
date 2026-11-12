@@ -1,7 +1,6 @@
 package com.backend.boundedContext.coupon.app;
 
 import com.backend.boundedContext.coupon.domain.CouponErrorCode;
-import com.backend.boundedContext.coupon.domain.CouponUsageStatus;
 import com.backend.boundedContext.coupon.out.CouponUsageRepository;
 import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
@@ -10,14 +9,15 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
 /**
- * 결제 성공 → 주문에 예약된 쿠폰을 모두 사용 처리 (OrderPayOrderUseCase가 결제 요청 전에 부름)
- * 예약이 없거나 이미 처리됐으면 아무것도 하지 않는다. 처리한 수를 돌려준다.
- * 상태가 아직 RESERVED인 행만 바꾸는 조건부 UPDATE라, 동시에 해제(취소·만료)가 먼저 처리한 기록은 USED로 덮어쓰지 않는다.
+ * 주문에 예약된 쿠폰의 결제 시작 확인과 결제 성공 사용 처리
  *
- * 예약 뒤 관리자가 쿠폰을 중지했거나 유효 기간이 끝났으면 결제를 막는다: 지금 쓸 수 있는 쿠폰의 예약만 사용 처리하고, 예약 수보다 적게 바뀌었으면
- * 409-COUPON_NOT_ACTIVE를 던진다. 결제 트랜잭션에 참여하므로 결제(주문 PAID·결제 기록)와 이미 바꾼 사용 처리가 함께 롤백된다.
- * 쿠폰 상태와 기간은 UPDATE 조건으로 보므로(결제 시각 now 기준), 예약 수를 센 뒤 중지가 커밋된 경우도 막힌다.
- * (같은 주문의 결제와 취소·만료는 주문 쪽이 주문 상태 조건부 UPDATE로 먼저 막으므로, 그사이 예약이 해제돼 수가 어긋나는 일은 없다고 본다)
+ * 결제는 HTTP라 "결제 시작(주문 PAYING) → 결제 요청 → 결과 반영"이 트랜잭션 두 개로 나뉜다.
+ * - validateUsable: 결제 시작 트랜잭션에서 부른다. 예약 뒤 관리자가 쿠폰을 중지했거나 유효 기간이 끝났으면 409-COUPON_NOT_ACTIVE로
+ *   돈이 움직이기 전에 멈춘다. 쿠폰 조건은 Coupon.isUsableAt과 같다
+ * - use: 결제 결과가 PAID일 때 반영 트랜잭션에서 부른다. 쿠폰 상태·기간은 보지 않는다. 결제 시작 때 확인했고 예약이 할인을 보장하므로,
+ *   결제 요청 중에 쿠폰이 중지되거나 기간이 끝나도 이미 할인된 금액으로 결제됐으니 사용 처리한다
+ * 사용 처리는 상태가 아직 RESERVED인 행만 바꾸는 조건부 UPDATE라, 해제(취소·만료)가 먼저 처리한 기록은 USED로 덮어쓰지 않는다.
+ * (결제 중(PAYING) 주문은 취소·만료 대상이 아니므로 결제 중에 예약이 해제되는 일은 없다고 본다)
  */
 @Component
 @RequiredArgsConstructor
@@ -25,13 +25,13 @@ public class CouponUseReservedCouponsUseCase {
 
     private final CouponUsageRepository couponUsageRepository;
 
-    public int use(Long orderId, LocalDateTime now) {
-        long reserved = couponUsageRepository.countByOrderIdAndStatus(orderId, CouponUsageStatus.RESERVED);
-        int used = couponUsageRepository.markUsedIfReservedAndCouponUsable(orderId, now);
-        if (used < reserved) {
-            // 예약 뒤 중지됐거나 유효 기간이 끝난 쿠폰이 있다. 결제 트랜잭션 전체를 롤백시킨다
+    public void validateUsable(Long orderId, LocalDateTime now) {
+        if (couponUsageRepository.countReservedWithUnusableCoupon(orderId, now) > 0) {
             throw new DomainException(CouponErrorCode.COUPON_NOT_ACTIVE);
         }
-        return used;
+    }
+
+    public int use(Long orderId, LocalDateTime now) {
+        return couponUsageRepository.markUsedIfReserved(orderId, now);
     }
 }
