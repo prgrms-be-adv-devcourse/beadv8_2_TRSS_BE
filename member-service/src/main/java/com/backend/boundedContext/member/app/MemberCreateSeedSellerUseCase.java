@@ -46,7 +46,7 @@ public class MemberCreateSeedSellerUseCase {
         );
 
         sellerRepository.saveAndFlush(seller);
-        sellerStatusHistoryRepository.save(SellerStatusHistory.applied(seller));
+        sellerStatusHistoryRepository.save(seller.recordApplied());
         sellerStatusHistoryRepository.save(seller.approve());
 
         log.info("시드 판매자 생성: sellerId={}, memberId={}", seller.getId(), member.getId());

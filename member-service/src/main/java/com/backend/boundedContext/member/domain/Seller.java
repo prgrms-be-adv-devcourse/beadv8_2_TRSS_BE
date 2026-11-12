@@ -91,8 +91,12 @@ public class Seller extends BaseIdAndTime {
         return seller;
     }
 
+    public SellerStatusHistory recordApplied() {
+        return SellerStatusHistory.record(this, null, null);
+    }
+
     // 반려·본인 철회 뒤 재신청: 같은 행의 신청 정보를 새 값으로 바꾸고 다시 PENDING
-    public SellerStatusHistory reapply(
+    public SellerStatusHistory applyAgain(
             String businessName,
             String businessNumber,
             String representativeName,

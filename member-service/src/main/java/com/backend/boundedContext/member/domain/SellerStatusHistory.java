@@ -57,11 +57,6 @@ public class SellerStatusHistory extends BaseIdAndTime {
     @Column(length = 4)
     private String accountLast4;
 
-    // 처음 신청한 줄
-    public static SellerStatusHistory applied(Seller seller) {
-        return record(seller, null, null);
-    }
-
     // seller의 지금 상태(바뀐 뒤)를 toStatus로 기록한다
     static SellerStatusHistory record(Seller seller, SellerStatus fromStatus, String reason) {
         SellerStatusHistory history = new SellerStatusHistory();

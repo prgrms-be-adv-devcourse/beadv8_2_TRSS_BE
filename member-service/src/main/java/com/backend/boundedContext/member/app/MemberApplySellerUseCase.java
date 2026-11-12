@@ -29,7 +29,7 @@ public class MemberApplySellerUseCase {
         Member member = memberSupport.getMember(memberId);
 
         return sellerRepository.findByMemberId(memberId)
-                .map(seller -> reapply(seller, request))
+                .map(seller -> applyAgain(seller, request))
                 .orElseGet(() -> applyFirst(member, request));
     }
 
@@ -48,12 +48,12 @@ public class MemberApplySellerUseCase {
                 request.accountHolder()
         );
         sellerRepository.saveAndFlush(seller);
-        sellerStatusHistoryRepository.save(SellerStatusHistory.applied(seller));
+        sellerStatusHistoryRepository.save(seller.recordApplied());
         return SellerApplyResponse.from(seller);
     }
 
     // 재신청: 반려·본인 철회 뒤에만 같은 판매자를 다시 PENDING으로
-    private SellerApplyResponse reapply(Seller seller, SellerApplyRequest request) {
+    private SellerApplyResponse applyAgain(Seller seller, SellerApplyRequest request) {
         if (seller.getStatus() == SellerStatus.SANCTIONED) {
             throw new DomainException(MemberErrorCode.SELLER_SANCTIONED);
         }
@@ -63,7 +63,7 @@ public class MemberApplySellerUseCase {
         }
         checkBusinessNumberAvailable(request.businessNumber());
 
-        SellerStatusHistory history = seller.reapply(
+        SellerStatusHistory history = seller.applyAgain(
                 request.businessName(),
                 request.businessNumber(),
                 request.representativeName(),

@@ -58,7 +58,7 @@ class SellerTest {
     @Test
     @DisplayName("처음 신청한 이력은 from이 없고 to가 PENDING")
     void appliedHistory() {
-        SellerStatusHistory history = SellerStatusHistory.applied(pending());
+        SellerStatusHistory history = pending().recordApplied();
 
         assertThat(history.getFromStatus()).isNull();
         assertThat(history.getToStatus()).isEqualTo(SellerStatus.PENDING);
@@ -152,7 +152,7 @@ class SellerTest {
         seller.requestWithdrawal("폐업 예정");
         seller.approveWithdrawal();
 
-        reapply(seller);
+        applyAgain(seller);
 
         assertThat(seller.getApprovedAt()).isNull();
     }
@@ -181,7 +181,7 @@ class SellerTest {
         Seller seller = pending();
         seller.reject("사업자번호 불일치");
 
-        SellerStatusHistory history = seller.reapply("팔레트 의류", "987-65-43210", "김철수",
+        SellerStatusHistory history = seller.applyAgain("팔레트 의류", "987-65-43210", "김철수",
                 "010-9999-8888", "신한은행", "110-123-456789", "김철수");
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.PENDING);
@@ -198,7 +198,7 @@ class SellerTest {
         seller.requestWithdrawal("폐업 예정");
         seller.approveWithdrawal();
 
-        SellerStatusHistory history = seller.reapply("팔레트 뷰티", "123-45-67890", "홍길동",
+        SellerStatusHistory history = seller.applyAgain("팔레트 뷰티", "123-45-67890", "홍길동",
                 "010-1234-5678", "국민은행", "123456-01-123456", "홍길동");
 
         assertThat(seller.getStatus()).isEqualTo(SellerStatus.PENDING);
@@ -211,9 +211,9 @@ class SellerTest {
         Seller sanctioned = approved();
         sanctioned.sanction("허위 상품");
 
-        assertStateInvalid(() -> reapply(pending()));
-        assertStateInvalid(() -> reapply(approved()));
-        assertStateInvalid(() -> reapply(sanctioned));
+        assertStateInvalid(() -> applyAgain(pending()));
+        assertStateInvalid(() -> applyAgain(approved()));
+        assertStateInvalid(() -> applyAgain(sanctioned));
     }
 
     @Test
@@ -307,8 +307,8 @@ class SellerTest {
         return seller;
     }
 
-    private static void reapply(Seller seller) {
-        seller.reapply("팔레트 뷰티", "123-45-67890", "홍길동",
+    private static void applyAgain(Seller seller) {
+        seller.applyAgain("팔레트 뷰티", "123-45-67890", "홍길동",
                 "010-1234-5678", "국민은행", "123456-01-123456", "홍길동");
     }
 
