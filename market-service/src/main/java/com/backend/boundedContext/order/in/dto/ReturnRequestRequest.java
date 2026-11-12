@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 /**
  * 반품 요청
  *
- * @param reasonCode 반품 사유 코드 (CHANGE_OF_MIND, DEFECTIVE, WRONG_ITEM, NOT_AS_DESCRIBED, OTHER)
+ * @param reasonCode 반품 사유 코드 (CHANGE_OF_MIND, DEFECTIVE, OTHER)
  * @param reason     상세 사유 (최대 300자). reasonCode가 OTHER면 필수
  */
 public record ReturnRequestRequest(

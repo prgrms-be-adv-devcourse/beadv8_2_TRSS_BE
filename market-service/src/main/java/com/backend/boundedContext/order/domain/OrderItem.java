@@ -91,6 +91,11 @@ public class OrderItem extends BaseIdAndTime {
         this.discountAmount = discountAmount;
     }
 
+    // 반품 승인 때 재고 복원 여부 기록 (Order.approveReturn에서만 부른다)
+    void decideRestoreStock(boolean restore) {
+        this.restoreStock = restore;
+    }
+
     // 상품 쿠폰 할인 후 항목 금액
     public long getDiscountedLineAmount() {
         return lineAmount - discountAmount;

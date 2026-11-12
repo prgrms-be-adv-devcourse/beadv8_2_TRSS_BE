@@ -33,6 +33,7 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_EXPIRED(409, "결제 가능 시간이 지난 주문입니다."),
     RETURN_ALREADY_REQUESTED(409, "이미 반품을 요청한 주문입니다."),
     RETURN_REASON_REQUIRED(400, "기타 사유는 상세 내용을 적어 주세요."),
+    RETURN_ITEMS_MISMATCH(400, "주문 항목마다 재고 복원 여부를 한 번씩 정해 주세요."),
     ORDER_ITEM_EMPTY(400, "주문할 상품을 선택해 주세요."),
     ORDER_OPTION_DUPLICATED(400, "한 주문에 같은 옵션을 두 번 담을 수 없습니다."),
     ORDER_QUANTITY_INVALID(400, "주문 수량은 1개 이상이어야 합니다."),

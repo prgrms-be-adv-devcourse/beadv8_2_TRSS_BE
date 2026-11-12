@@ -15,8 +15,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -375,6 +377,50 @@ public class Order extends BaseIdAndTime {
         this.returnReasonCode = reasonCode;
         this.returnReason = (reason == null || reason.isBlank()) ? null : reason;
         changeStatus(OrderStatus.RETURN_REQUESTED, reasonCode.name());   // 이력 사유에는 코드만 남긴다
+    }
+
+    /**
+     * 반품 승인: RETURN_REQUESTED → RETURNED. 재고 복원 자체는 UseCase가 ProductApi로 한다.
+     * 주문 항목마다 재고 복원 여부를 정확히 한 번씩 정해야 한다(누락·중복·다른 주문의 항목이면 400-RETURN_ITEMS_MISMATCH).
+     * 쿠폰은 돌려주지 않는다(정책).
+     */
+    public void approveReturn(List<ReturnItemDecision> decisions, LocalDateTime now) {
+        if (status != OrderStatus.RETURN_REQUESTED) {
+            throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);   // 이미 승인·거절된 주문 포함
+        }
+
+        Map<Long, Boolean> restoreByItemId = new HashMap<>();
+        for (ReturnItemDecision decision : decisions) {
+            if (restoreByItemId.put(decision.orderItemId(), decision.restoreStock()) != null) {
+                throw new DomainException(OrderErrorCode.RETURN_ITEMS_MISMATCH);   // 같은 항목 두 번
+            }
+        }
+        Set<Long> itemIds = new HashSet<>();
+        items.forEach(item -> itemIds.add(item.getId()));
+        if (!restoreByItemId.keySet().equals(itemIds)) {
+            throw new DomainException(OrderErrorCode.RETURN_ITEMS_MISMATCH);       // 누락·다른 주문의 항목
+        }
+
+        items.forEach(item -> item.decideRestoreStock(restoreByItemId.get(item.getId())));
+        this.returnedAt = now;
+        changeStatus(OrderStatus.RETURNED, null);
+    }
+
+    /**
+     * 반품 거절: RETURN_REQUESTED → PAID. 거절 사유는 필수(구매자에게 보여 줄 근거).
+     * 즉시 구매 확정 여부는 UseCase가 isAutoConfirmable로 판단한다. 거절해도 자동 확정 기준일은 늘어나지 않는다.
+     */
+    public void rejectReturn(String reason, LocalDateTime now) {
+        if (status != OrderStatus.RETURN_REQUESTED) {
+            throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("반품 거절 사유가 없습니다. orderId=" + getId());   // 요청 검증(@NotBlank)이 먼저 막는다
+        }
+
+        this.returnRejectedAt = now;
+        this.returnRejectReason = reason;
+        changeStatus(OrderStatus.PAID, reason);
     }
 
     // 자동 구매 확정 대상 여부
