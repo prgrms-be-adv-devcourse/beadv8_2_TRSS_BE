@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.out;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -44,4 +45,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.sellerId = :sellerId and p.status = :status order by p.id")
     List<Product> findAllForUpdateBySellerIdAndStatus(Long sellerId, ProductSaleStatus status);
+
+    /** 이 상태 상품의 ID를 afterId 다음부터 ID 순으로 limit개 (검색 전체 재색인용) */
+    @Query("select p.id from Product p where p.status = :status and p.id > :afterId order by p.id")
+    List<Long> findIdsByStatusAfter(ProductSaleStatus status, Long afterId, Limit limit);
 }

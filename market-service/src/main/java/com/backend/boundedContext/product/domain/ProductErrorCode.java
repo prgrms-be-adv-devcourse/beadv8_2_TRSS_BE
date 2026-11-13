@@ -53,7 +53,10 @@ public enum ProductErrorCode implements ErrorCode {
     OPTION_DELETED(409, "삭제된 옵션입니다."),
 
     // 찜
-    SELF_WISH_NOT_ALLOWED(400, "본인이 판매하는 상품은 찜할 수 없습니다.");
+    SELF_WISH_NOT_ALLOWED(400, "본인이 판매하는 상품은 찜할 수 없습니다."),
+
+    // 검색 색인
+    SEARCH_INDEX_DISABLED(409, "검색 색인을 쓰지 않는 설정입니다 (DB 검색).");
 
     private final int status;
     private final String msg;
