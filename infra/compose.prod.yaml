@@ -26,8 +26,9 @@ x-app-healthcheck: &app-healthcheck
   timeout: 15s
   retries: 3
   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다. 이 시간 안에 응답하면 바로 healthy가 된다.
-  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초). 그보다 넉넉하게 둔다
-  start_period: 180s
+  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초, 6개 동시: 189초). 그보다 넉넉하게 둔다
+  # 정말 안 뜨는 앱은 이 시간이 지나야 실패로 잡히지만, 배포 대기 상한(deploy.sh wait_limit 600초)보다는 짧다
+  start_period: 300s
 
 services:
   nginx:

@@ -48,7 +48,7 @@ public class ApiV1WalletController {
     @GetMapping("/transactions")
     public RsData<PageResponse<WalletTransactionDto>> getTransactions(
             @AuthenticationPrincipal AuthMember authMember,
-            @Parameter(description = "거래 유형 (CHARGE, CHARGE_CANCEL, PAYMENT, REFUND, SETTLEMENT, FEE)")
+            @Parameter(description = "거래 유형 (CHARGE, CHARGE_CANCEL, CHARGE_CANCEL_RESTORE, PAYMENT, PAYMENT_CANCEL, REFUND, SETTLEMENT, FEE)")
             @RequestParam(required = false) WalletTransactionType type,
             @Parameter(description = "조회 시작일 (yyyy-MM-dd)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

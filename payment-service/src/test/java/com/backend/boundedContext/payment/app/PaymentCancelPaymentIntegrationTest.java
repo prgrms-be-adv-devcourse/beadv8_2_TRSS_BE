@@ -136,7 +136,7 @@ class PaymentCancelPaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("결제에 쓴 충전 건의 남은 금액을 되돌려, 다시 토스 취소할 수 있는 상태가 된다")
+    @DisplayName("결제에 쓴 충전 건의 남은 금액을 되돌려, 되돌린 금액만큼 다시 취소할 수 있다")
     void cancel_restoresTopups() {
         Topup topup = doneTopup(20_000);
         String key = newKey();
@@ -147,7 +147,7 @@ class PaymentCancelPaymentIntegrationTest {
 
         Topup restored = topupRepository.findById(topup.getId()).orElseThrow();
         assertThat(restored.getRemainingAmount()).isEqualTo(20_000);
-        assertThat(restored.isCancelable()).isTrue();
+        assertThat(restored.cancelableAmount()).isEqualTo(20_000);
     }
 
     @Test

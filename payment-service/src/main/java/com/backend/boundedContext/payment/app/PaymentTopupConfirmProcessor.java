@@ -37,8 +37,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class PaymentTopupConfirmProcessor {
 
-    // 충전에 허용하는 결제 수단. 나중에 PG 취소로 환불하기 쉬운 수단만 허용
-    private static final Set<PgPaymentMethod> ALLOWED_METHODS = EnumSet.of(PgPaymentMethod.CARD, PgPaymentMethod.EASY_PAY);
+    // 충전에 허용하는 결제 수단. 남은 금액을 PG 부분 취소로 돌려줄 수 있는 수단만 허용
+    private static final Set<PgPaymentMethod> ALLOWED_METHODS = EnumSet.of(PgPaymentMethod.CARD, PgPaymentMethod.EASY_PAY, PgPaymentMethod.TRANSFER);
 
     private final TopupRepository topupRepository;
     private final WalletRepository walletRepository;
@@ -75,7 +75,7 @@ public class PaymentTopupConfirmProcessor {
      * 1. 충전 건 행 잠금 조회. PROCESSING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환
      *    (승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하려 해도 한 번만 반영됨)
      * 2. 지갑 잠금 조회 → 원장 CHARGE 기록(잔액 증가) → 충전 건 DONE
-     * 3. 허용하지 않은 결제 수단(카드·간편결제 외)이면 경고 로그 (충전 취소가 보류되어 되돌릴 수 없으므로 반영은 그대로 진행)
+     * 3. 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이면 경고 로그 (반영은 그대로 진행, 자동 취소는 아직 없음)
      * 잠금 순서: 충전 건 → 지갑
      */
     @Transactional
@@ -124,12 +124,12 @@ public class PaymentTopupConfirmProcessor {
 
     /**
      * 결과 확인 대상: 기준 시각 이전부터 PROCESSING으로 남은 충전 건 (오래된 순, 최대 limit건)
-     * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 ID·주문번호·PG만 넘김
+     * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 ID·결제키·PG만 넘김
      */
     @Transactional(readOnly = true)
     public List<TopupReconcileTarget> findReconcileTargets(LocalDateTime cutoff, int limit) {
         return topupRepository.findStale(TopupStatus.PROCESSING, cutoff, PageRequest.of(0, limit)).stream()
-                .map(topup -> new TopupReconcileTarget(topup.getId(), topup.getTossOrderId(), topup.getPgProvider()))
+                .map(topup -> new TopupReconcileTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider()))
                 .toList();
     }
 }

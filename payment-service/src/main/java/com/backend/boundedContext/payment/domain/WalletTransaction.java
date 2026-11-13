@@ -30,7 +30,7 @@ public class WalletTransaction extends BaseIdAndTime {
     private Wallet wallet;  // 지갑 ID
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private WalletTransactionType type;  // 유형
 
     // 지갑 기준 증감. 입금은 +, 차감은 -

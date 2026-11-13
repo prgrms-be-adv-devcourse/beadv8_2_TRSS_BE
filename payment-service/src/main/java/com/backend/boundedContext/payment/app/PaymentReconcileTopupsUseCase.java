@@ -26,7 +26,7 @@ import lombok.extern.slf4j.Slf4j;
  * - APPROVED(승인) → complete(): 예치금 반영
  * - NOT_APPROVED(중단·만료) → FAILED_PG_DECLINED (실패 사유에 PG 원래 상태값을 남겨 중단·만료를 구분)
  * - CANCELED(PG에서 취소됨) → FAILED_SYSTEM_ERROR (예치금 반영 없이 돈이 돌려졌으므로)
- * - 결제 없음 → FAILED_SYSTEM_ERROR (승인 요청이 PG에 닿지 않음)
+ * - 결제 없음 → FAILED_SYSTEM_ERROR (PG에 결제 내역이 없어 돈이 빠지지 않음)
  * - 결과 모름(응답 없음·그 외 오류)·PENDING(진행 중 등) → PROCESSING 유지, 다음 회차에 다시 확인
  */
 @Slf4j
@@ -62,7 +62,7 @@ public class PaymentReconcileTopupsUseCase {
     private Outcome reconcile(TopupReconcileTarget target) {
         PgPaymentResult result;
         try {
-            result = topupGateways.get(target.pgProvider()).getPaymentByOrderId(target.orderId());
+            result = topupGateways.get(target.pgProvider()).getPayment(target.paymentKey());
         } catch (PgPaymentNotFoundException e) {
             paymentTopupConfirmProcessor.fail(target.topupId(), TopupStatus.FAILED_SYSTEM_ERROR, "PG에 결제 내역이 없어 승인되지 않은 것으로 처리했습니다.");
             return Outcome.FAILED;

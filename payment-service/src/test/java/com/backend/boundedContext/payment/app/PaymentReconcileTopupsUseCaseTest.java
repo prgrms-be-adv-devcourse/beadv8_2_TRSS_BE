@@ -32,7 +32,7 @@ import com.backend.boundedContext.payment.out.pg.TopupGateways;
 class PaymentReconcileTopupsUseCaseTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 14, 10, 0);
-    private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "TOPUP-7", PgProvider.TOSS);
+    private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "pk_7", PgProvider.TOSS);
 
     private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
@@ -62,7 +62,7 @@ class PaymentReconcileTopupsUseCaseTest {
     void approved() {
         targets(TARGET);
         PgPaymentResult approved = pg(PgPaymentStatus.APPROVED);
-        given(gateway.getPaymentByOrderId("TOPUP-7")).willReturn(approved);
+        given(gateway.getPayment("pk_7")).willReturn(approved);
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
@@ -74,9 +74,9 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("PG에서 승인되지 않음(NOT_APPROVED)이 확정되면 FAILED_PG_DECLINED로 기록하고, 실패 사유에 PG 원래 상태값을 남긴다")
     void notApproved() {
-        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS));
-        given(gateway.getPaymentByOrderId("TOPUP-7")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "ABORTED", "TOPUP-7"));
-        given(gateway.getPaymentByOrderId("TOPUP-8")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "EXPIRED", "TOPUP-8"));
+        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS));
+        given(gateway.getPayment("pk_7")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "ABORTED", "TOPUP-7"));
+        given(gateway.getPayment("pk_8")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "EXPIRED", "TOPUP-8"));
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
@@ -89,7 +89,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @DisplayName("PG에서 취소(CANCELED)된 결제면 반영하지 않고 FAILED_SYSTEM_ERROR로 기록한다")
     void canceled() {
         targets(TARGET);
-        given(gateway.getPaymentByOrderId("TOPUP-7")).willReturn(pg(PgPaymentStatus.CANCELED));
+        given(gateway.getPayment("pk_7")).willReturn(pg(PgPaymentStatus.CANCELED));
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
@@ -102,7 +102,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @DisplayName("PG에 결제가 없으면 FAILED_SYSTEM_ERROR로 기록한다")
     void notFoundPayment() {
         targets(TARGET);
-        given(gateway.getPaymentByOrderId("TOPUP-7")).willThrow(new PgPaymentNotFoundException(new RuntimeException()));
+        given(gateway.getPayment("pk_7")).willThrow(new PgPaymentNotFoundException(new RuntimeException()));
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
@@ -113,10 +113,10 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("PG 결과를 알 수 없거나 아직 확정되지 않았으면(PENDING) PROCESSING으로 두고 다음 회차에 다시 확인한다")
     void pending() {
-        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS));
-        given(gateway.getPaymentByOrderId("TOPUP-7"))
+        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS));
+        given(gateway.getPayment("pk_7"))
                 .willThrow(new PgResultUnknownException(new RuntimeException("Read timed out")));
-        given(gateway.getPaymentByOrderId("TOPUP-8")).willReturn(pg(PgPaymentStatus.PENDING));
+        given(gateway.getPayment("pk_8")).willReturn(pg(PgPaymentStatus.PENDING));
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
@@ -128,11 +128,11 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("한 건에서 오류가 나도 나머지 건은 계속 처리한다")
     void errorDoesNotStopOthers() {
-        targets(TARGET, new TopupReconcileTarget(8L, "TOPUP-8", PgProvider.TOSS));
+        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS));
         PgPaymentResult done7 = pg(PgPaymentStatus.APPROVED, "TOPUP-7");
         PgPaymentResult done8 = pg(PgPaymentStatus.APPROVED, "TOPUP-8");
-        given(gateway.getPaymentByOrderId("TOPUP-7")).willReturn(done7);
-        given(gateway.getPaymentByOrderId("TOPUP-8")).willReturn(done8);
+        given(gateway.getPayment("pk_7")).willReturn(done7);
+        given(gateway.getPayment("pk_8")).willReturn(done8);
         given(processor.complete(7L, done7)).willThrow(new RuntimeException("DB 오류"));
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
@@ -155,6 +155,6 @@ class PaymentReconcileTopupsUseCaseTest {
     }
 
     private static PgPaymentResult pg(PgPaymentStatus status, String pgStatus, String orderId) {
-        return new PgPaymentResult("pk_1", orderId, status, pgStatus, 20_000, PgPaymentMethod.CARD, null);
+        return new PgPaymentResult("pk_1", orderId, status, pgStatus, 20_000, 0, PgPaymentMethod.CARD, null);
     }
 }

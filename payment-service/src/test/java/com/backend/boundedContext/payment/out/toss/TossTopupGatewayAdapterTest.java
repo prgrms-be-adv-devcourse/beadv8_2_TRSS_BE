@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,8 @@ class TossTopupGatewayAdapterTest {
     private static final String PAYMENT_KEY = "pk_1";
     private static final String ORDER_ID = "TOPUP-123e4567-e89b-12d3-a456-426614174000";
     private static final long AMOUNT = 20_000;
+    private static final String REASON = "충전 취소";
+    private static final String CANCEL_KEY = "TOPUP-7-CANCEL-0";
 
     @Mock
     private TossPaymentsClient tossPaymentsClient;
@@ -57,6 +60,7 @@ class TossTopupGatewayAdapterTest {
         assertThat(result.orderId()).isEqualTo(ORDER_ID);
         assertThat(result.isApproved()).isTrue();
         assertThat(result.totalAmount()).isEqualTo(AMOUNT);
+        assertThat(result.canceledAmount()).isZero();
         assertThat(result.method()).isEqualTo(PgPaymentMethod.CARD);
         assertThat(result.approvedAt()).isEqualTo(LocalDateTime.of(2026, 10, 12, 15, 0));
     }
@@ -69,13 +73,13 @@ class TossTopupGatewayAdapterTest {
             "CANCELED, CANCELED",
             "IN_PROGRESS, PENDING",
             "READY, PENDING",
-            "PARTIAL_CANCELED, PENDING",
+            "PARTIAL_CANCELED, PARTIALLY_CANCELED",
     })
     @DisplayName("토스 결제 status를 PG 결제 상태로 바꾸고, 원래 값도 담는다")
     void status(String tossStatus, PgPaymentStatus expected) {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss(tossStatus, "카드", null));
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY)).willReturn(toss(tossStatus, "카드", null));
 
-        PgPaymentResult result = adapter.getPaymentByOrderId(ORDER_ID);
+        PgPaymentResult result = adapter.getPayment(PAYMENT_KEY);
 
         assertThat(result.status()).isEqualTo(expected);
         assertThat(result.pgStatus()).isEqualTo(tossStatus);   // 원래 값은 기록용으로 그대로 담음
@@ -92,17 +96,17 @@ class TossTopupGatewayAdapterTest {
     })
     @DisplayName("토스 결제 method(한글 값)를 결제 수단으로 바꾼다 (결제창에 없는 수단은 OTHER)")
     void method(String tossMethod, PgPaymentMethod expected) {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss("DONE", tossMethod, null));
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY)).willReturn(toss("DONE", tossMethod, null));
 
-        assertThat(adapter.getPaymentByOrderId(ORDER_ID).method()).isEqualTo(expected);
+        assertThat(adapter.getPayment(PAYMENT_KEY).method()).isEqualTo(expected);
     }
 
     @Test
     @DisplayName("method가 없으면 OTHER, 승인 시각이 없으면 null")
     void method_null() {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID)).willReturn(toss("IN_PROGRESS", null, null));
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY)).willReturn(toss("IN_PROGRESS", null, null));
 
-        PgPaymentResult result = adapter.getPaymentByOrderId(ORDER_ID);
+        PgPaymentResult result = adapter.getPayment(PAYMENT_KEY);
 
         assertThat(result.method()).isEqualTo(PgPaymentMethod.OTHER);
         assertThat(result.approvedAt()).isNull();
@@ -164,10 +168,10 @@ class TossTopupGatewayAdapterTest {
     @Test
     @DisplayName("조회: 404 NOT_FOUND_PAYMENT면 결제 없음")
     void getPayment_notFound() {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID))
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY))
                 .willThrow(new TossPaymentException(404, "NOT_FOUND_PAYMENT", "존재하지 않는 결제 정보 입니다.", null));
 
-        assertThatThrownBy(() -> adapter.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> adapter.getPayment(PAYMENT_KEY))
                 .isInstanceOf(PgPaymentNotFoundException.class);
     }
 
@@ -179,24 +183,100 @@ class TossTopupGatewayAdapterTest {
     })
     @DisplayName("조회: 결제 없음 외의 오류는 결과 모름 (다음에 다시 확인)")
     void getPayment_unknown(int httpStatus, String code) {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID))
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY))
                 .willThrow(new TossPaymentException(httpStatus, code, "메시지", null));
 
-        assertThatThrownBy(() -> adapter.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> adapter.getPayment(PAYMENT_KEY))
                 .isInstanceOf(PgResultUnknownException.class);
     }
 
     @Test
     @DisplayName("조회: 응답을 받지 못하면 결과 모름")
     void getPayment_timeout() {
-        given(tossPaymentsClient.getPaymentByOrderId(ORDER_ID))
+        given(tossPaymentsClient.getPayment(PAYMENT_KEY))
                 .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
 
-        assertThatThrownBy(() -> adapter.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> adapter.getPayment(PAYMENT_KEY))
                 .isInstanceOf(PgResultUnknownException.class);
     }
 
+    @Test
+    @DisplayName("취소: 결제키·금액·사유·멱등 키를 그대로 넘기고, 취소된 금액 합계를 결과에 담는다")
+    void cancel_success() {
+        TossPaymentResponse canceled = new TossPaymentResponse(PAYMENT_KEY, ORDER_ID, "PARTIAL_CANCELED", AMOUNT, "카드", null,
+                List.of(new TossPaymentResponse.Cancel(15_000, "DONE")));
+        given(tossPaymentsClient.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY)).willReturn(canceled);
+
+        PgPaymentResult result = adapter.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY);
+
+        assertThat(result.status()).isEqualTo(PgPaymentStatus.PARTIALLY_CANCELED);
+        assertThat(result.canceledAmount()).isEqualTo(15_000);
+        assertThat(result.totalAmount()).isEqualTo(AMOUNT);
+    }
+
+    @Test
+    @DisplayName("취소: 응답을 받지 못하면 결과 모름")
+    void cancel_timeout() {
+        given(tossPaymentsClient.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+
+        assertThatThrownBy(() -> adapter.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .isInstanceOf(PgResultUnknownException.class);
+    }
+
+    @ParameterizedTest(name = "HTTP {0} {1} → 결과 모름")
+    @CsvSource({
+            "500, FAILED_INTERNAL_SYSTEM_PROCESSING",
+            "500, FAILED_REFUND_PROCESS",
+            "400, ALREADY_CANCELED_PAYMENT",
+            "409, IDEMPOTENT_REQUEST_PROCESSING",
+            "400, ALREADY_PROCESSING_REQUEST",
+            "403, FORBIDDEN_CONSECUTIVE_REQUEST",
+            "400, PROVIDER_ERROR",
+    })
+    @DisplayName("취소: 5xx·이미 취소됨·앞선 요청 처리 중·결제사 일시 오류는 결과 모름 (조회로 확정)")
+    void cancel_unknown(int httpStatus, String code) {
+        given(tossPaymentsClient.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .willThrow(new TossPaymentException(httpStatus, code, "메시지", null));
+
+        assertThatThrownBy(() -> adapter.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .isInstanceOf(PgResultUnknownException.class);
+    }
+
+    @ParameterizedTest(name = "HTTP {0} {1} → 설정 오류")
+    @CsvSource({
+            "401, UNAUTHORIZED_KEY",
+            "400, INVALID_API_KEY",
+    })
+    @DisplayName("취소: 401·API 키 오류 코드는 설정 오류")
+    void cancel_configuration(int httpStatus, String code) {
+        given(tossPaymentsClient.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .willThrow(new TossPaymentException(httpStatus, code, "메시지", null));
+
+        assertThatThrownBy(() -> adapter.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .isInstanceOfSatisfying(PgConfigurationException.class, e -> assertThat(e.getCode()).isEqualTo(code));
+    }
+
+    @ParameterizedTest(name = "HTTP {0} {1} → 거절")
+    @CsvSource({
+            "403, EXCEED_MAX_REFUND_DUE",
+            "403, NOT_ALLOWED_PARTIAL_REFUND",
+            "403, NOT_CANCELABLE_PAYMENT",
+            "404, NOT_FOUND_PAYMENT",
+    })
+    @DisplayName("취소: 그 외 4xx(환불 기간 지남·부분 취소 불가 등)는 거절, 토스 코드·메시지를 담는다")
+    void cancel_declined(int httpStatus, String code) {
+        given(tossPaymentsClient.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .willThrow(new TossPaymentException(httpStatus, code, "취소할 수 없습니다.", null));
+
+        assertThatThrownBy(() -> adapter.cancel(PAYMENT_KEY, 15_000, REASON, CANCEL_KEY))
+                .isInstanceOfSatisfying(PgDeclinedException.class, e -> {
+                    assertThat(e.getCode()).isEqualTo(code);
+                    assertThat(e.getPgMessage()).isEqualTo("취소할 수 없습니다.");
+                });
+    }
+
     private static TossPaymentResponse toss(String status, String method, OffsetDateTime approvedAt) {
-        return new TossPaymentResponse(PAYMENT_KEY, ORDER_ID, status, AMOUNT, method, approvedAt);
+        return new TossPaymentResponse(PAYMENT_KEY, ORDER_ID, status, AMOUNT, method, approvedAt, null);
     }
 }
