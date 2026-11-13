@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import com.backend.boundedContext.payment.domain.Payment;
 import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.domain.PaymentPolicy;
 import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.domain.WalletTransactionType;
@@ -27,6 +28,7 @@ public class PaymentCancelPaymentUseCase {
     private final WalletHoldingRepository walletHoldingRepository;
     private final WalletTransactionRepository walletTransactionRepository;
     private final TopupUsageRepository topupUsageRepository;
+    private final PaymentPolicy paymentPolicy;
 
     /**
      * 결제 취소: 결제는 됐는데 주문 쪽 처리가 실패했을 때 홀딩 → 구매자 지갑으로 되돌린다 (주문 쪽 보상)
@@ -50,6 +52,7 @@ public class PaymentCancelPaymentUseCase {
         LocalDateTime now = LocalDateTime.now();
         payment.cancel(now);
         refundToWallet(wallet, payment);
+        takeBackShippingFee(payment);
         restoreTopups(payment);
         releaseHolding(payment, now);
     }
@@ -70,6 +73,14 @@ public class PaymentCancelPaymentUseCase {
                         payment.cancelIdempotencyKey()
                 )
         );
+    }
+
+    // 결제 때 플랫폼(관리자) 지갑으로 옮긴 배송비를 되가져온다 (구매자에게는 refundToWallet에서 결제 금액 전체를 돌려줌)
+    private void takeBackShippingFee(Payment payment) {
+        if (payment.getShippingFee() == 0) return;
+        Wallet platformWallet = lockWallet(paymentPolicy.adminMemberId());
+        walletTransactionRepository.save(WalletTransaction.record(platformWallet, WalletTransactionType.SHIPPING_FEE_CANCEL,
+                payment.getShippingFee(), payment.getId(), payment.shippingFeeCancelIdempotencyKey()));
     }
 
     // 결제에 쓴 충전 건의 남은 금액을 되돌린다 (차감 내역은 이력으로 남김)
