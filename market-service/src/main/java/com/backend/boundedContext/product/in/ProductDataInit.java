@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.in;
 import com.backend.boundedContext.product.app.ProductFacade;
 import com.backend.boundedContext.product.app.dto.ProductImageFile;
 import com.backend.boundedContext.product.app.dto.ProductSampleDto;
+import com.backend.global.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
@@ -73,8 +74,13 @@ public class ProductDataInit {
     @Order(2)   // 회원 시드(@Order(1)) 다음에 실행해야 시드 판매자가 있다
     public ApplicationRunner productDataInitApplicationRunner() {
         return args -> {
-            int created = productFacade.createSampleProducts(SEED_SELLER_MEMBER_ID, SAMPLE_PRODUCTS, sampleThumbnail());
-            if (created > 0) log.info("샘플 상품 {}개 등록 (판매자 회원 ID {})", created, SEED_SELLER_MEMBER_ID);
+            // 시드 판매자 확인에 member-service가 필요하다. 꺼져 있으면 샘플 없이 뜨고, 다음 기동에 다시 넣는다
+            try {
+                int created = productFacade.createSampleProducts(SEED_SELLER_MEMBER_ID, SAMPLE_PRODUCTS, sampleThumbnail());
+                if (created > 0) log.info("샘플 상품 {}개 등록 (판매자 회원 ID {})", created, SEED_SELLER_MEMBER_ID);
+            } catch (DomainException e) {
+                log.warn("샘플 상품을 넣지 못했습니다. member-service를 띄운 뒤 다시 시작하면 넣습니다: {}", e.getMessage());
+            }
         };
     }
 
