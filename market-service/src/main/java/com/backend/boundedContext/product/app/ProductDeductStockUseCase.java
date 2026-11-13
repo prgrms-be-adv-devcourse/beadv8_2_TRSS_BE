@@ -8,6 +8,7 @@ import com.backend.shared.product.dto.StockChangeDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,22 +22,29 @@ public class ProductDeductStockUseCase {
     /**
      * 주문 생성 시 재고를 차감한다. 하나라도 실패하면 예외가 나서 호출한 쪽 트랜잭션 전체가 롤백된다.
      * 이미 차감한 주문 항목은 건너뛴다. 잠근 뒤에 확인해야 같은 요청이 동시에 와도 한 번만 처리된다.
+     * 옵션이 품절로 바뀐 상품 ID를 돌려준다 (검색 색인의 품절 여부를 다시 맞출 상품).
      */
-    public void deductStock(List<StockChangeDto> items) {
-        if (items.isEmpty()) return;
+    public Set<Long> deductStock(List<StockChangeDto> items) {
+        if (items.isEmpty()) return Set.of();
 
         Map<Long, OptionStock> stocks = productSupport.lockStocks(
                 items.stream().map(StockChangeDto::optionId).toList());
         Set<Long> deducted = productSupport.findProcessedOrderItemIds(
                 items.stream().map(StockChangeDto::orderItemId).toList(), StockChangeType.ORDER_DEDUCT);
 
+        Set<Long> soldOutChanged = new HashSet<>();
         for (StockChangeDto item : items) {
             if (deducted.contains(item.orderItemId())) continue;
 
             OptionStock stock = stocks.get(item.optionId());
+            boolean wasSoldOut = stock.isSoldOut();
             stock.deductStock(item.quantity());   // 판매 불가 409, 재고 부족 400
             stockHistoryRepository.save(StockHistory.ofOrder(
                     stock, StockChangeType.ORDER_DEDUCT, -item.quantity(), item.orderId(), item.orderItemId()));
+            if (wasSoldOut != stock.isSoldOut()) {
+                soldOutChanged.add(stock.getOption().getProduct().getId());
+            }
         }
+        return soldOutChanged;
     }
 }
