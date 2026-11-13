@@ -22,6 +22,14 @@ public interface ProductDiscountRepository extends JpaRepository<ProductDiscount
     /** 이 시각에 진행 중이거나 예약된(아직 끝나지 않은) 할인이 있는지 */
     boolean existsByProductIdAndDeletedAtIsNullAndEndsAtAfter(Long productId, LocalDateTime now);
 
+    /**
+     * 삭제되지 않은 할인 중 (from, to] 사이에 시작했거나 끝난 할인의 상품 ID (할인 경계 재색인용).
+     * 시작·종료 시각 부분 인덱스(V13)로 읽는다
+     */
+    @Query("select distinct d.product.id from ProductDiscount d where d.deletedAt is null "
+            + "and ((d.startsAt > :from and d.startsAt <= :to) or (d.endsAt > :from and d.endsAt <= :to))")
+    List<Long> findProductIdsByBoundaryBetween(LocalDateTime from, LocalDateTime to);
+
     /** 상품의 삭제되지 않은 할인 하나 */
     Optional<ProductDiscount> findByIdAndProductIdAndDeletedAtIsNull(Long id, Long productId);
 }
