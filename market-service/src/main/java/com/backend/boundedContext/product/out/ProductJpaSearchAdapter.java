@@ -18,6 +18,7 @@ import static com.backend.boundedContext.product.out.ProductSpecifications.statu
 
 /**
  * DB로 상품을 검색한다. 상품명은 LIKE '%keyword%'(대소문자 무시)로 찾는다.
+ * 테스트(engine=jpa)에서 쓰고, ES 검색이 실패하면 대신 쓴다. 관련도순은 최신순, 가격순은 정가 기준이다.
  */
 @Repository
 @RequiredArgsConstructor
@@ -41,7 +42,7 @@ public class ProductJpaSearchAdapter implements ProductSearchPort {
     private static Sort toSort(ProductSort sort) {
         Sort.Order byId = Sort.Order.desc("id");
         return switch (sort) {
-            case LATEST -> Sort.by(Sort.Order.desc("createdAt"), byId);
+            case RELEVANCE, LATEST -> Sort.by(Sort.Order.desc("createdAt"), byId);
             case PRICE_ASC -> Sort.by(Sort.Order.asc("price"), byId);
             case PRICE_DESC -> Sort.by(Sort.Order.desc("price"), byId);
         };
