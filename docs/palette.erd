@@ -474,7 +474,7 @@
           "color": ""
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1794470503193,
           "createAt": 1791793118726
         }
       },
@@ -552,6 +552,9 @@
           "DVAIeL2Vw6TkMS8vcJfl_",
           "SXSDLTN9napMHLvxAmARW",
           "XXy1QXYB-B9_aZ7fMyL6b",
+          "WkX-Jwc1bfoYO8T2dLtoR",
+          "YirPgdIRbGT_Rj6NYkHcI",
+          "clI21K1YoTkIb67Wiwam9",
           "3XyfyWL2RfIGBOb4mGnRH",
           "ribljhU7yA5-lVRSEq4jy",
           "q5a4Yp39Ga0FlplOFWwBe",
@@ -569,7 +572,7 @@
           "color": ""
         },
         "meta": {
-          "updateAt": 1794385130104,
+          "updateAt": 1794470503193,
           "createAt": 1791793118726
         }
       },
@@ -3131,7 +3134,7 @@
         "tableId": "Rmavw4sNQsrRz4M7jkWq2",
         "name": "type",
         "comment": "유형",
-        "dataType": "VARCHAR(20)",
+        "dataType": "VARCHAR(30)",
         "default": "",
         "options": 8,
         "ui": {
@@ -3142,7 +3145,7 @@
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1794470503193,
           "createAt": 1791793118726
         }
       },
@@ -3690,7 +3693,7 @@
         "id": "EujCUd9llsl7iJt1WRLc7",
         "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
         "name": "canceled_at",
-        "comment": "취소 일시",
+        "comment": "취소 일시 - 마지막으로 PG 취소가 확정된 일시",
         "dataType": "TIMESTAMP",
         "default": "",
         "options": 0,
@@ -3702,7 +3705,7 @@
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1794470503193,
           "createAt": 1791793118726
         }
       },
@@ -3790,7 +3793,7 @@
         "id": "XXy1QXYB-B9_aZ7fMyL6b",
         "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
         "name": "remaining_amount",
-        "comment": "남은 금액 - 남은 금액(= amount일 때만 토스 취소 가능)",
+        "comment": "남은 금액 - 결제에 쓰이고 남은 금액. DONE이면 전부 PG 취소 가능",
         "dataType": "BIGINT",
         "default": "",
         "options": 8,
@@ -3802,7 +3805,7 @@
           "widthDefault": 60
         },
         "meta": {
-          "updateAt": 1791793118726,
+          "updateAt": 1794470503193,
           "createAt": 1791793118726
         }
       },
@@ -6604,6 +6607,66 @@
         "meta": {
           "updateAt": 1794385130104,
           "createAt": 1794385130104
+        }
+      },
+      "WkX-Jwc1bfoYO8T2dLtoR": {
+        "id": "WkX-Jwc1bfoYO8T2dLtoR",
+        "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
+        "name": "canceled_amount",
+        "comment": "취소된 금액 - PG 취소가 확정된 금액 합계. 충전 금액 전부면 CANCELED",
+        "dataType": "BIGINT",
+        "default": "0",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 107,
+          "widthComment": 274,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1794470503193,
+          "createAt": 1794470503193
+        }
+      },
+      "YirPgdIRbGT_Rj6NYkHcI": {
+        "id": "YirPgdIRbGT_Rj6NYkHcI",
+        "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
+        "name": "canceling_amount",
+        "comment": "취소 중 금액 - PG에 취소를 요청 중인 금액 (CANCELING 동안만 0보다 큼)",
+        "dataType": "BIGINT",
+        "default": "0",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 107,
+          "widthComment": 274,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1794470503193,
+          "createAt": 1794470503193
+        }
+      },
+      "clI21K1YoTkIb67Wiwam9": {
+        "id": "clI21K1YoTkIb67Wiwam9",
+        "tableId": "Sp7yQwzWyiW9dDjvQZRTW",
+        "name": "cancel_attempts",
+        "comment": "취소 회차 - 취소를 시작할 때마다 1씩 늘어남. 회차마다 다른 멱등 키(TOPUP-{id}-CANCEL-{회차})",
+        "dataType": "INT",
+        "default": "0",
+        "options": 8,
+        "ui": {
+          "keys": 0,
+          "widthName": 107,
+          "widthComment": 274,
+          "widthDataType": 60,
+          "widthDefault": 60
+        },
+        "meta": {
+          "updateAt": 1794470503193,
+          "createAt": 1794470503193
         }
       }
     },

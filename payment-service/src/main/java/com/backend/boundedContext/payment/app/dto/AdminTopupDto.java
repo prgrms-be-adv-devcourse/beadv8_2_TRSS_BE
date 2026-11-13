@@ -28,17 +28,21 @@ public record AdminTopupDto(
         @Schema(description = "결제에 쓰이고 남은 금액. 승인 완료 건만 의미가 있음", example = "20000")
         long remainingAmount,
 
+        @Schema(description = "PG 취소가 확정된 금액 합계", example = "0")
+        long canceledAmount,
+
         @Schema(description = """
                 충전 상태
                 - READY: 충전 준비, 결제창 진행 전 (15분 지나면 만료)
                 - PROCESSING: 토스 승인 중 또는 결과 확인 대기
-                - DONE: 충전 완료
+                - DONE: 충전 완료 (일부만 취소된 건 포함)
+                - CANCELING: 충전 취소 중 또는 결과 확인 대기
                 - FAILED_USER_CANCEL: 사용자가 결제창을 닫음
                 - FAILED_PG_DECLINED: 카드사·토스 승인 거절
                 - FAILED_AMOUNT_MISMATCH: 준비 금액과 승인 요청 금액이 다름
                 - FAILED_EXPIRED: 결제창 진행 시간 초과
                 - FAILED_SYSTEM_ERROR: 그 외 오류
-                - CANCELED: 미사용 충전 취소 (현재 미사용)""", example = "DONE")
+                - CANCELED: 충전 금액 전부 취소""", example = "DONE")
         TopupStatus status,
 
         @Schema(description = "실패 사유. 실패한 충전 건만 값이 있음")
@@ -52,7 +56,7 @@ public record AdminTopupDto(
 ) {
     public static AdminTopupDto of(Topup topup, String memberEmail) {
         return new AdminTopupDto(topup.getId(), topup.getTossOrderId(), topup.getMemberId(), memberEmail,
-                topup.getAmount(), topup.getRemainingAmount(), topup.getStatus(), topup.getFailReason(),
+                topup.getAmount(), topup.getRemainingAmount(), topup.getCanceledAmount(), topup.getStatus(), topup.getFailReason(),
                 topup.getApprovedAt(), topup.getCreatedAt());
     }
 }

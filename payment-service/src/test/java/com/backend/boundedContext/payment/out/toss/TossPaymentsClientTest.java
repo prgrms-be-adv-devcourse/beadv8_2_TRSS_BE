@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +61,22 @@ class TossPaymentsClientTest {
             }
             """.formatted(ORDER_ID);
 
+    private static final String CANCELED_JSON = """
+            {
+              "paymentKey": "pk_1",
+              "orderId": "%s",
+              "status": "PARTIAL_CANCELED",
+              "totalAmount": 20000,
+              "balanceAmount": 5000,
+              "method": "카드",
+              "approvedAt": "2026-10-12T15:00:00+09:00",
+              "cancels": [
+                {"cancelAmount": 15000, "cancelReason": "충전 취소", "canceledAt": "2026-10-13T10:00:00+09:00",
+                 "transactionKey": "tx_1", "cancelStatus": "DONE"}
+              ]
+            }
+            """.formatted(ORDER_ID);
+
     private MockRestServiceServer server;
     private TossPaymentsClient client;
 
@@ -92,6 +109,36 @@ class TossPaymentsClientTest {
         assertThat(response.totalAmount()).isEqualTo(20_000);
         assertThat(response.method()).isEqualTo("카드");
         assertThat(response.approvedAtKst()).isEqualTo(LocalDateTime.of(2026, 10, 12, 15, 0));
+    }
+
+    @Test
+    @DisplayName("취소: 결제키 경로로 취소 사유·금액과 Idempotency-Key 헤더를 보내고, 취소 내역을 받는다")
+    void cancel_success() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/pk_1/cancel"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Idempotency-Key", "TOPUP-7-CANCEL-0"))
+                .andExpect(jsonPath("$.cancelReason").value("충전 취소"))
+                .andExpect(jsonPath("$.cancelAmount").value(15000))
+                .andRespond(withSuccess(CANCELED_JSON, MediaType.APPLICATION_JSON));
+
+        TossPaymentResponse response = client.cancel("pk_1", 15_000, "충전 취소", "TOPUP-7-CANCEL-0");
+
+        server.verify();
+        assertThat(response.status()).isEqualTo("PARTIAL_CANCELED");
+        assertThat(response.canceledAmount()).isEqualTo(15_000);
+    }
+
+    @Test
+    @DisplayName("취소 내역: 성공(DONE)한 취소 금액만 더하고, 취소 내역이 없으면 0")
+    void canceledAmount() {
+        TossPaymentResponse canceled = new TossPaymentResponse("pk_1", ORDER_ID, "PARTIAL_CANCELED", 20_000, "카드", null,
+                List.of(new TossPaymentResponse.Cancel(5_000, "DONE"),
+                        new TossPaymentResponse.Cancel(3_000, "DONE"),
+                        new TossPaymentResponse.Cancel(2_000, "FAILED")));
+        TossPaymentResponse notCanceled = new TossPaymentResponse("pk_1", ORDER_ID, "DONE", 20_000, "카드", null, null);
+
+        assertThat(canceled.canceledAmount()).isEqualTo(8_000);
+        assertThat(notCanceled.canceledAmount()).isZero();
     }
 
     @Test
@@ -145,27 +192,28 @@ class TossPaymentsClientTest {
     }
 
     @Test
-    @DisplayName("주문번호 조회: 주문번호로 결제 결과를 받는다")
-    void getPaymentByOrderId_success() {
-        server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_ID))
+    @DisplayName("결제 조회: 결제키 경로로 결제 결과를 받는다 (주문번호 조회는 결제위젯 시크릿 키로 호출할 수 없음)")
+    void getPayment_success() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/pk_1"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(PAYMENT_JSON, MediaType.APPLICATION_JSON));
 
-        TossPaymentResponse response = client.getPaymentByOrderId(ORDER_ID);
+        TossPaymentResponse response = client.getPayment("pk_1");
 
         server.verify();
+        assertThat(response.paymentKey()).isEqualTo("pk_1");
         assertThat(response.orderId()).isEqualTo(ORDER_ID);
         assertThat(response.status()).isEqualTo("DONE");
     }
 
     @Test
-    @DisplayName("주문번호 조회: 결제가 없으면 TossPaymentException (404)")
-    void getPaymentByOrderId_notFound() {
-        server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_ID))
+    @DisplayName("결제 조회: 결제가 없으면 TossPaymentException (404)")
+    void getPayment_notFound() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/pk_1"))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"code\":\"NOT_FOUND_PAYMENT\",\"message\":\"존재하지 않는 결제 정보 입니다.\"}"));
 
-        assertThatThrownBy(() -> client.getPaymentByOrderId(ORDER_ID))
+        assertThatThrownBy(() -> client.getPayment("pk_1"))
                 .isInstanceOfSatisfying(TossPaymentException.class, e -> {
                     assertThat(e.getHttpStatus()).isEqualTo(404);
                     assertThat(e.getCode()).isEqualTo("NOT_FOUND_PAYMENT");

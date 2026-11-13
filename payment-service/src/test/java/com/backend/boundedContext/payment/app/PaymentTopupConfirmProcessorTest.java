@@ -141,7 +141,7 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     @Test
-    @DisplayName("승인 반영: 허용하지 않은 결제 수단(카드·간편결제 외)이어도 승인된 금액이므로 반영한다")
+    @DisplayName("승인 반영: 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이어도 승인된 금액이므로 반영한다")
     void complete_notAllowedMethod() {
         Wallet wallet = Wallet.create(MEMBER_ID);
         Topup topup = processingTopup(wallet, 10_000);
@@ -172,7 +172,7 @@ class PaymentTopupConfirmProcessorTest {
     @DisplayName("승인 반영: PG 결제가 승인(APPROVED)이 아니면 반영할 수 없다")
     void complete_notApproved() {
         Topup topup = processingTopup(Wallet.create(MEMBER_ID), 20_000);
-        PgPaymentResult aborted = new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.NOT_APPROVED, "ABORTED", 20_000, PgPaymentMethod.CARD, null);
+        PgPaymentResult aborted = new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.NOT_APPROVED, "ABORTED", 20_000, 0, PgPaymentMethod.CARD, null);
 
         assertThatThrownBy(() -> processor.complete(TOPUP_ID, aborted))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -213,7 +213,7 @@ class PaymentTopupConfirmProcessorTest {
     }
 
     private PgPaymentResult approved(Topup topup, long amount, PgPaymentMethod method) {
-        return new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.APPROVED, "DONE", amount, method, APPROVED_AT);
+        return new PgPaymentResult("pk_1", topup.getTossOrderId(), PgPaymentStatus.APPROVED, "DONE", amount, 0, method, APPROVED_AT);
     }
 
     // 잠금 조회로 돌려줄 READY 충전 건
