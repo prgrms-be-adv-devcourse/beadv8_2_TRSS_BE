@@ -184,7 +184,7 @@ Order order = orderRepository.findByIdAndBuyerId(orderId, memberId)
 
 예외가 나면 트랜잭션이 롤백되므로, 같은 트랜잭션 안에서 저장한 실패 기록도 사라진다. 실패 상태를 남겨야 하면(예: 결제 `FAILED_INSUFFICIENT_BALANCE`) **별도 빈의 `@Transactional(propagation = REQUIRES_NEW)` 메서드**로 기록한다.
 
-결제는 잔액 부족을 예외가 아니라 결과로 돌려준다. 결제 모듈이 실패를 별도 트랜잭션으로 기록하고 FAILED 결과를 반환하면, 주문 모듈이 `402-INSUFFICIENT_BALANCE`를 던져 자기 트랜잭션(주문 PAID 변경)을 롤백한다. 실패 기록은 이미 커밋돼 남는다.
+결제는 잔액 부족을 예외가 아니라 결과로 돌려준다. 결제 모듈이 실패를 별도 트랜잭션으로 기록하고 FAILED 결과를 반환하면, 주문 모듈은 결과 반영 트랜잭션에서 주문을 PAYMENT_FAILED로 바꿔 커밋한 뒤 `402-INSUFFICIENT_BALANCE`를 던진다. 결제는 HTTP라 주문 트랜잭션에 참여하지 않는다(주문 PAYING 커밋 → 결제 요청 → 결과 반영, `palette_shared_contract.md` 9.1).
 
 ```java
 // PaymentPayUseCase (결제 모듈)
@@ -268,7 +268,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 409-BUSINESS_NUMBER_DUPLICATED | 다른 판매자가 이 사업자등록번호로 심사 중·판매 중·철회 심사 중이거나 제재됨 |
 | | 409-SELLER_STATE_INVALID | 입점 승인·반려, 철회 요청·승인·거절, 제재를 할 수 없는 상태 |
 | | 409-UNSETTLED_AMOUNT_EXISTS | 미정산 금액이 있어 철회 요청·철회 승인 불가 |
-| | 409-ACTIVE_SALES_EXIST | 철회 승인 시 판매자 상품이 들어간 진행 중 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있음 |
+| | 409-ACTIVE_SALES_EXIST | 철회 승인 시 판매자 상품이 들어간 진행 중 주문(CREATED·PAYING·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있음 |
 | product (유진) | 404-PRODUCT_NOT_FOUND | 없거나 다른 판매자의 상품, 구매자에게 보이지 않는 상품(판매 중지·삭제·카테고리 사용 중지) |
 | | 409-PRODUCT_NOT_ON_SALE | 판매 중이 아닌 상품 차감(주문), 관리자 즉시 중지 시 이미 중지·삭제된 상품 |
 | | 409-PRODUCT_NOT_EDITABLE | 판매 중지·삭제된 상품의 수정·삭제·재고 조정·중지 요청 |
@@ -292,12 +292,13 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | order (은정) | 400-SELF_PURCHASE_NOT_ALLOWED | 본인 상품 담기·주문 |
 | | 400-STOCK_EXCEEDED | 장바구니 수량 > 재고 |
 | | 409-PRICE_CHANGED | 예상 결제 금액(쿠폰 할인 후) ≠ 실제 결제 금액 (`data.currentAmount`) |
-| | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기 주문에 포함된 장바구니 항목 (`data.pendingOrderIds`: 그 결제 대기 주문 ID, 오름차순) |
+| | 409-CART_ITEM_IN_PENDING_ORDER | 결제 대기·결제 중(PAYING) 주문에 포함된 장바구니 항목 (`data.pendingOrderIds`: 그 주문 ID, 오름차순) |
 | | 400-IDEMPOTENCY_KEY_INVALID | 주문 생성 `Idempotency-Key`가 비어 있거나 64자 초과 |
 | | 409-IDEMPOTENCY_KEY_EXPIRED | 같은 `Idempotency-Key`로 만든 주문이 이미 취소(만료 포함)됨. 새 키로 다시 주문 |
 | | 404-ORDER_NOT_FOUND | |
 | | 409-ORDER_STATE_INVALID | 상태 전이 불가(취소·확정·반품 등) |
 | | 409-ORDER_EXPIRED | 결제 시점에 15분 경과 |
+| | 409-PAYMENT_IN_PROGRESS | 결제 확인 중(PAYING)인 주문에 다시 결제·취소 요청. 결제 결과를 서버가 확인하는 중이므로 잠시 뒤 주문 상태를 다시 조회한다 |
 | | 409-RETURN_ALREADY_REQUESTED | 반품 1회 사용 |
 | | 409-ORDER_NOT_DELIVERED | 배송지가 있는 주문을 배송 완료(`deliveredAt`) 전에 구매 확정 |
 | | 409-ORDER_COUPON_NOT_AVAILABLE | 주문에 쿠폰 반영이 꺼져 있을 때(custom.order.couponEnabled = false) 주문 생성에 쿠폰을 보냄 |

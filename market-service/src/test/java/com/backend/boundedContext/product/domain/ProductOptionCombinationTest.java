@@ -49,7 +49,7 @@ class ProductOptionCombinationTest {
         assertThat(option.getValues()).containsExactly("흰색", "M", "면");
         assertThat(option.getDisplayName()).isEqualTo("흰색 / M / 면");
         assertThat(option.getAdditionalPrice()).isEqualTo(3_000);
-        assertThat(option.getUnitPrice()).isEqualTo(23_000);
+        assertThat(option.getListPrice()).isEqualTo(23_000);
     }
 
     @Test
@@ -59,7 +59,7 @@ class ProductOptionCombinationTest {
 
         assertThat(option.getValues()).isEmpty();
         assertThat(option.getDisplayName()).isEqualTo("기본");
-        assertThat(option.getUnitPrice()).isEqualTo(20_000);
+        assertThat(option.getListPrice()).isEqualTo(20_000);
     }
 
     @Test
@@ -91,7 +91,7 @@ class ProductOptionCombinationTest {
         ProductOption option = ProductOption.create(product, List.of("흰색"), 0);
 
         option.changeAdditionalPrice(1_000);
-        assertThat(option.getUnitPrice()).isEqualTo(21_000);
+        assertThat(option.getListPrice()).isEqualTo(21_000);
 
         option.delete();
         assertThatThrownBy(() -> option.changeAdditionalPrice(2_000))

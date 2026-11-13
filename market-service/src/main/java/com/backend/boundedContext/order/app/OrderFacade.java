@@ -34,6 +34,7 @@ public class OrderFacade {
     private final OrderGetOrdersUseCase orderGetOrdersUseCase;
     private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
     private final OrderPayOrderUseCase orderPayOrderUseCase;
+    private final OrderRecheckPayingOrdersUseCase orderRecheckPayingOrdersUseCase;
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
     private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
     private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
@@ -96,8 +97,7 @@ public class OrderFacade {
         return orderGetOrderDetailUseCase.getOrderDetail(buyerId, orderId);
     }
 
-    // 결제요청
-    @Transactional
+    // 결제요청. 결제는 HTTP라 트랜잭션을 여기서 열지 않고 UseCase가 두 개로 나눠 연다 (PAYING 커밋 → 결제 요청 → 결과 반영)
     public OrderPayResponse payOrder(Long buyerId, Long orderId) {
         return orderPayOrderUseCase.pay(buyerId, orderId);
     }
@@ -144,6 +144,17 @@ public class OrderFacade {
         return orderExpireOrdersUseCase.expire(orderId, now);
     }
 
+    // 결제 재확인 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findPayingRecheckTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderRecheckPayingOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 결제 재확인 한 건 (스케줄러). 결제 요청이 HTTP라 트랜잭션은 UseCase가 결과 반영 때만 연다
+    public boolean recheckPayingOrder(Long orderId, LocalDateTime now) {
+        return orderRecheckPayingOrdersUseCase.recheck(orderId, now);
+    }
+
     // 최근 주문 목록 (OrderApi)
     @Transactional(readOnly = true)
     public List<OrderSummaryDto> getRecentOrders(Long buyerId, int limit) {
@@ -176,7 +187,8 @@ public class OrderFacade {
         return orderGetSellerOrderItemsUseCase.getSellerOrderItems(memberId, status, from, to, keyword, pageable);
     }
 
-    // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi)
+    // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi). 결제 중(PAYING) 주문은 취소하지 않는다
+    // (결제 시작 때 판매 가능을 확인했으므로 결제되면 PAID로 둔다)
     @Transactional
     public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
         return orderCancelPendingOrdersUseCase.cancel(productIds, cancelType, LocalDateTime.now());

@@ -96,7 +96,7 @@ public class OrderGetOrdersUseCase {
                 order.getId(),
                 order.getOrderNumber(),
                 order.getStatus(),
-                order.getPayAmount(),   // 쿠폰 할인 후 결제 금액
+                order.getPayAmount(),   // 쿠폰 할인 후, 배송비 포함 결제 금액 (기존 필드 호환, payAmount와 같다)
                 first.getProductName(),
                 thumbnails.get(first.getOptionId()),
                 items.size(),
@@ -104,7 +104,8 @@ public class OrderGetOrdersUseCase {
                 order.getExpiresAt(),
                 order.remainingPaymentSeconds(now),
                 order.getPaidAt(),
-                order.getDeliveredAt()
+                order.getDeliveredAt(),
+                order.getPayAmount()
         );
     }
 }

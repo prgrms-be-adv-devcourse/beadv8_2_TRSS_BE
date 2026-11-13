@@ -13,7 +13,8 @@ import java.util.List;
  * @param totalPrice               상품 금액 합계 (할인 전)
  * @param productDiscountAmount    상품 쿠폰 할인 합계
  * @param cartCouponDiscountAmount 장바구니 쿠폰 할인액
- * @param payAmount                결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인
+ * @param shippingFee              배송비. 상품 쿠폰 할인 후 상품 금액 합계가 30,000원 이상이면 0원, 미만이면 2,500원 (주문당 한 번)
+ * @param payAmount                결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인 + 배송비
  * @param items                    항목별 금액과 상품 쿠폰 할인액
  * @param expiresAt                결제 만료 시각
  */
@@ -23,13 +24,14 @@ public record OrderCreateResponse(
         long totalPrice,
         long productDiscountAmount,
         long cartCouponDiscountAmount,
+        long shippingFee,
         long payAmount,
         List<Item> items,
         LocalDateTime expiresAt
 ) {
     public static OrderCreateResponse from(Order order) {
         return new OrderCreateResponse(order.getId(), order.getOrderNumber(), order.getTotalPrice(),
-                order.getProductDiscountAmount(), order.getCartCouponDiscountAmount(), order.getPayAmount(),
+                order.getProductDiscountAmount(), order.getCartCouponDiscountAmount(), order.getShippingFee(), order.getPayAmount(),
                 order.getItems().stream()
                         .map(item -> new Item(item.getId(), item.getCartItemId(), item.getLineAmount(), item.getDiscountAmount()))
                         .toList(),

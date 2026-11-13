@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.AdminCategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.CategoryTreeDto;
 import com.backend.boundedContext.product.app.dto.ProductOptionSpec;
+import com.backend.boundedContext.product.app.dto.SellerDiscountDto;
 import com.backend.boundedContext.product.app.dto.SellerOptionDto;
 import com.backend.boundedContext.product.app.dto.SellerProductFormDto;
 import com.backend.boundedContext.product.domain.Category;
@@ -10,6 +11,7 @@ import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.Product;
 import com.backend.boundedContext.product.domain.ProductErrorCode;
 import com.backend.boundedContext.product.domain.ProductOption;
+import com.backend.boundedContext.product.domain.ProductPrice;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
 import com.backend.boundedContext.product.domain.ProductStopRequest;
 import com.backend.boundedContext.product.domain.StockChangeType;
@@ -32,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -53,28 +56,34 @@ public class ProductSupport {
     private final ProductStopRequestRepository productStopRequestRepository;
     private final MemberApi memberApi;
     private final ProductImageSupport productImageSupport;
+    private final ProductDiscountSupport productDiscountSupport;
     private final EntityManager entityManager;
 
     /**
      * 옵션 여러 개의 현재 정보. 삭제된 상품·옵션도 포함하고, 없는 ID만 빠진다.
      * 재고 행을 기준으로 옵션·상품을 함께 읽으므로, 재고 행이 없는 옵션도 없는 ID로 보고 뺀다 (재고 잠금의 404와 같은 기준).
      * 대표 이미지는 상품 ID를 모아 한 번에 조회하고, 대표 이미지가 없는 상품이면 null이다.
+     * 가격은 조회 시각에 진행 중인 할인을 적용한 단가이고, 정가 단가와 할인율(기본가 기준)도 함께 준다.
      */
     public List<OptionSnapshotDto> getOptionSnapshots(Collection<Long> optionIds) {
         if (optionIds.isEmpty()) return List.of();
 
         List<OptionStock> stocks = optionStockRepository.findAllWithOptionAndProductByOptionIdIn(optionIds);
+        Set<Product> products = stocks.stream().map(stock -> stock.getOption().getProduct()).collect(Collectors.toSet());
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(
-                stocks.stream().map(stock -> stock.getOption().getProduct().getId()).collect(Collectors.toSet()));
+                products.stream().map(Product::getId).collect(Collectors.toSet()));
+        Map<Long, ProductPrice> prices = productDiscountSupport.getPrices(products);
 
         return stocks.stream()
                 .map(stock -> {
                     ProductOption option = stock.getOption();
                     Product product = option.getProduct();
+                    ProductPrice price = prices.get(product.getId());
                     ProductUnsaleableReason reason = option.getUnsaleableReason();
                     return new OptionSnapshotDto(
                             option.getId(), product.getId(), product.getSellerId(), product.getName(), option.getDisplayName(),
-                            option.getUnitPrice(), stock.getStock(), reason == null, reason, thumbnailUrls.get(product.getId()));
+                            price.unitPrice(option), price.listUnitPrice(option), price.discountRate(), stock.getStock(),
+                            reason == null, reason, thumbnailUrls.get(product.getId()));
                 })
                 .toList();
     }
@@ -285,17 +294,21 @@ public class ProductSupport {
     /**
      * 판매자 상품 수정 폼을 채우는 값. 이미지 ID는 수정할 때 남길 상세 이미지를 고르는 데 쓴다.
      * 옵션은 삭제되지 않은 조합을 옵션 ID 순으로 재고와 함께 준다 (추가금 수정·재고 조정·옵션 삭제에 쓴다).
+     * 할인은 진행 중·예약된 것만 시작 시각 순으로, 지금 상태와 함께 준다 (끝난 할인은 빼고).
      */
     public SellerProductFormDto getSellerProductForm(Long sellerId, Long productId) {
         Product product = getSellerProduct(sellerId, productId);
         Category category = product.getCategory();
         List<OptionStock> stocks = getOptionStocksByProductId(Set.of(productId)).getOrDefault(productId, List.of());
+        LocalDateTime now = LocalDateTime.now();
 
         return new SellerProductFormDto(
                 product.getId(), product.getName(), product.getPrice(), product.getDescription(),
                 category.getParent().getId(), category.getId(),
                 productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId),
-                product.getOptionNames(), stocks.stream().map(SellerOptionDto::from).toList());
+                product.getOptionNames(), stocks.stream().map(SellerOptionDto::from).toList(),
+                productDiscountSupport.getPendingDiscounts(productId, now).stream()
+                        .map(discount -> SellerDiscountDto.from(discount, now)).toList());
     }
 
     /** 옵션 조합 하나를 만들고 초기 재고와 재고 이력 INIT을 남긴다. 값이 옵션 이름과 맞지 않거나 초기 재고가 범위 밖이면 예외. */

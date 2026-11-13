@@ -3,6 +3,9 @@ package com.backend.boundedContext.product.app.dto;
 /**
  * 상품 검색 결과의 한 줄
  *
+ * @param price        정가
+ * @param salePrice    할인가. 할인 중이 아니면 null
+ * @param discountRate 할인율 (%, 소수점 내림). 할인 중이 아니면 null
  * @param businessName 판매자 상호명
  * @param thumbnailUrl 대표 이미지. 이미지 기능 전까지 null
  * @param soldOut        삭제되지 않은 옵션의 재고가 모두 0이면 true
@@ -12,6 +15,8 @@ public record ProductSummaryDto(
         Long productId,
         String name,
         long price,
+        Long salePrice,
+        Integer discountRate,
         Long categoryId,
         Long sellerId,
         String businessName,

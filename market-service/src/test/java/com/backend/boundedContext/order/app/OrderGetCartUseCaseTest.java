@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.CartItem;
+import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.domain.UnorderableReason;
 import com.backend.boundedContext.order.in.dto.CartItemResponse;
 import com.backend.boundedContext.order.in.dto.CartResponse;
@@ -11,10 +12,10 @@ import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import com.backend.shared.product.out.ProductApi;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -36,7 +37,13 @@ class OrderGetCartUseCaseTest {
     @Mock ProductApi productApi;   // 상품 모듈 대역
     @Mock MemberApi memberApi;     // 회원 모듈 대역
 
-    @InjectMocks OrderGetCartUseCase useCase;
+    OrderGetCartUseCase useCase;
+
+    @BeforeEach
+    void setUp() {
+        // 배송비 2,500원, 30,000원 이상 무료 (application.yaml과 같은 값)
+        useCase = new OrderGetCartUseCase(orderSupport, productApi, memberApi, new OrderPolicy(15, 7, 99, 100, 1, 2500, 30000));
+    }
 
     private static final Long BUYER_ID = 3L;
 
@@ -66,6 +73,9 @@ class OrderGetCartUseCaseTest {
 
         assertThat(response.items()).isEmpty();
         assertThat(response.orderable()).isFalse();
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isZero();
+        assertThat(response.remainingForFreeShipping()).isZero();
         verify(productApi, never()).getOptions(any());
     }
 
@@ -200,5 +210,68 @@ class OrderGetCartUseCaseTest {
         assertThat(response.items().get(1).unorderableReason()).isEqualTo(UnorderableReason.IN_PENDING_ORDER);
         assertThat(response.orderable()).isFalse();
         assertThat(response.expectedTotalPrice()).isEqualTo(15000);  // 결제 대기 옵션은 금액에서 제외
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 주문 가능 항목 합 25,000원이면 배송비 2,500원, 예상 결제 27,500원, 무료 배송까지 5,000원")
+    void shippingFee_belowThreshold() {
+        // 100번 10,000원 x 2 + 110번 5,000원 x 1 = 25,000원, 120번은 품절이라 합계에서 빠진다
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 2, 110L, 1, 120L, 1)));
+        given(productApi.getOptions(List.of(100L, 110L, 120L))).willReturn(List.of(
+                onSale(100L, 10000, 5),
+                onSale(110L, 5000, 5),
+                onSale(120L, 50000, 0)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.expectedTotalPrice()).isEqualTo(25_000);   // 의미 유지: 배송비 제외
+        assertThat(response.shippingFee()).isEqualTo(2_500);
+        assertThat(response.expectedPayAmount()).isEqualTo(27_500);
+        assertThat(response.remainingForFreeShipping()).isEqualTo(5_000);
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 주문 가능 항목 합이 30,000원 이상이면 배송비 0원, 남은 금액 0원")
+    void shippingFee_free() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 2)));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 5)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.expectedTotalPrice()).isEqualTo(30_000);
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isEqualTo(30_000);
+        assertThat(response.remainingForFreeShipping()).isZero();
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 항목이 없으면 배송비·예상 결제·남은 금액이 모두 0")
+    void shippingFee_noSelection() {
+        Cart cart = cartWith(100L, 1);
+        cart.selectAll(false);
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cart));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 5)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.selectedCount()).isZero();
+        assertThat(response.expectedTotalPrice()).isZero();
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isZero();
+        assertThat(response.remainingForFreeShipping()).isZero();
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 항목이 모두 주문 불가(품절)면 배송비·예상 결제·남은 금액이 모두 0")
+    void shippingFee_noOrderableSelection() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1)));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 0)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.selectedCount()).isEqualTo(1);
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isZero();
+        assertThat(response.remainingForFreeShipping()).isZero();
     }
 }

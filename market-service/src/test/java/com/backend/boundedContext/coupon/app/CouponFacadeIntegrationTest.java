@@ -202,40 +202,54 @@ class CouponFacadeIntegrationTest {
     }
 
     @Test
-    @DisplayName("예약한 뒤 관리자가 쿠폰을 중지하면 결제 때 사용 처리가 409-COUPON_NOT_ACTIVE로 막힌다")
-    void useAfterStoppedByAdmin() {
+    @DisplayName("예약한 뒤 관리자가 쿠폰을 중지하면 결제 시작 확인이 409-COUPON_NOT_ACTIVE로 막힌다")
+    void validateAfterStoppedByAdmin() {
         LocalDateTime now = LocalDateTime.now();
         Long couponId = couponRepository.save(CouponFixtures.cartCoupon("예약 뒤 중지", now.minusDays(1), now.plusDays(1), null)).getId();
         couponFacade.reserveCartCoupon(MEMBER_ID, couponId, 900_031L, 50_000, now);
 
         couponFacade.stopCouponByAdmin(couponId, "부정 사용");
 
-        assertThatThrownBy(() -> couponFacade.useReservedCoupons(900_031L, LocalDateTime.now()))
+        assertThatThrownBy(() -> couponFacade.validateReservedCouponsUsable(900_031L, LocalDateTime.now()))
                 .extracting("resultCode").isEqualTo("409-COUPON_NOT_ACTIVE");
     }
 
     @Test
-    @DisplayName("예약한 뒤 결제 전에 쿠폰 유효 기간이 끝나면 결제 때 사용 처리가 409-COUPON_NOT_ACTIVE로 막힌다(종료 시각 포함)")
-    void useAfterCouponExpired() {
+    @DisplayName("결제 시작 뒤(결제 요청 중) 쿠폰이 중지돼도 결제 성공 반영 때 사용 처리된다 (예약이 할인을 보장)")
+    void useAfterStoppedDuringPayment() {
+        LocalDateTime now = LocalDateTime.now();
+        Long couponId = couponRepository.save(CouponFixtures.cartCoupon("결제 중 중지", now.minusDays(1), now.plusDays(1), null)).getId();
+        couponFacade.reserveCartCoupon(MEMBER_ID, couponId, 900_032L, 50_000, now);
+        couponFacade.validateReservedCouponsUsable(900_032L, now);
+
+        couponFacade.stopCouponByAdmin(couponId, "부정 사용");
+
+        assertThat(couponFacade.useReservedCoupons(900_032L, LocalDateTime.now())).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("예약한 뒤 결제 전에 쿠폰 유효 기간이 끝나면 결제 시작 확인이 409-COUPON_NOT_ACTIVE로 막힌다(종료 시각 포함)")
+    void validateAfterCouponExpired() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime validUntil = now.plusMinutes(10);
         Long couponId = couponRepository.save(CouponFixtures.cartCoupon("곧 끝나는 쿠폰", now.minusDays(1), validUntil, null)).getId();
         couponFacade.reserveCartCoupon(MEMBER_ID, couponId, 900_041L, 50_000, now);
 
-        // 종료 시각은 포함하지 않으므로(validFrom <= 현재 < validUntil) 종료 시각 정각의 결제도 막힌다
-        assertThatThrownBy(() -> couponFacade.useReservedCoupons(900_041L, validUntil))
+        // 종료 시각은 포함하지 않으므로(validFrom <= 현재 < validUntil) 종료 시각 정각의 결제 시작도 막힌다
+        assertThatThrownBy(() -> couponFacade.validateReservedCouponsUsable(900_041L, validUntil))
                 .extracting("resultCode").isEqualTo("409-COUPON_NOT_ACTIVE");
     }
 
     @Test
-    @DisplayName("예약한 쿠폰이 결제 시각에도 유효 기간 안이면 사용 처리된다(종료 직전)")
-    void useJustBeforeCouponExpires() {
+    @DisplayName("예약한 쿠폰이 결제 시작 시각에 유효 기간 안이면 확인을 통과하고, 기간이 끝난 뒤 반영돼도 사용 처리된다")
+    void validateJustBeforeCouponExpires() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime validUntil = now.plusMinutes(10);
         Long couponId = couponRepository.save(CouponFixtures.cartCoupon("종료 직전 결제", now.minusDays(1), validUntil, null)).getId();
         couponFacade.reserveCartCoupon(MEMBER_ID, couponId, 900_042L, 50_000, now);
 
-        assertThat(couponFacade.useReservedCoupons(900_042L, validUntil.minusSeconds(1))).isEqualTo(1);
+        couponFacade.validateReservedCouponsUsable(900_042L, validUntil.minusSeconds(1));
+        assertThat(couponFacade.useReservedCoupons(900_042L, validUntil.plusSeconds(5))).isEqualTo(1);
     }
 
     @Test

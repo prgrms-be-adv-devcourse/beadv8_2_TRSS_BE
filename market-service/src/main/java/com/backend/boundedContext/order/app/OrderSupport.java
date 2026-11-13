@@ -42,13 +42,13 @@ public class OrderSupport {
                 .orElseGet(() -> cartRepository.save(Cart.create(memberId)));
     }
 
-    // 결제 대기 주문에 들어 있는 옵션 ID
+    // 결제가 끝나지 않은(결제 대기·결제 중) 주문에 들어 있는 옵션 ID
     public Set<Long> findOptionIdsInPendingOrders(Long buyerId, Collection<Long> optionIds) {
         if (optionIds.isEmpty()) {
             return Set.of();   // 빈 IN 절 방지
         }
 
-        return new HashSet<>(orderRepository.findOptionIdsInOrders(buyerId, optionIds, Order.PAYMENT_PENDING_STATUSES));
+        return new HashSet<>(orderRepository.findOptionIdsInOrders(buyerId, optionIds, Order.PAYMENT_UNFINISHED_STATUSES));
     }
 
     // 주문 생성용: 장바구니를 잠가서 조회

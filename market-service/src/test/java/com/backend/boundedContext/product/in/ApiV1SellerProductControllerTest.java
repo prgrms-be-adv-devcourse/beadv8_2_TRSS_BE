@@ -33,6 +33,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -181,7 +182,7 @@ class ApiV1SellerProductControllerTest {
     @DisplayName("상품 수정 폼 조회: 이미지 자리(thumbnail, detailImages)를 포함해 돌려준다")
     void getSellerProductForm() throws Exception {
         given(productFacade.getSellerProductForm(2L, 11L)).willReturn(
-                new SellerProductFormDto(11L, "수분 크림", 25_000, "설명", 1L, 5L, null, List.of(), List.of(), List.of()));
+                new SellerProductFormDto(11L, "수분 크림", 25_000, "설명", 1L, 5L, null, List.of(), List.of(), List.of(), List.of()));
 
         getAsSeller("/api/v1/seller/products/11")
                 .andExpect(status().isOk())
@@ -407,6 +408,67 @@ class ApiV1SellerProductControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
         }
+    }
+
+    @Test
+    @DisplayName("할인 등록: 할인가와 기간을 넘기고 만든 할인 ID를 돌려준다")
+    void createDiscount() throws Exception {
+        LocalDateTime start = LocalDateTime.of(2026, 12, 1, 0, 0);
+        given(productFacade.createDiscount(2L, 11L, 15_000L, start, start.plusDays(7))).willReturn(41L);
+
+        sendAsSeller(post("/api/v1/seller/products/11/discounts"), """
+                {"salePrice":15000,"startsAt":"2026-12-01T00:00:00","endsAt":"2026-12-08T00:00:00"}""")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.discountId").value(41));
+    }
+
+    @Test
+    @DisplayName("할인 등록은 세 값 모두 필수, 수정은 하나 이상. 할인가가 0 이하면 400 VALIDATION_FAILED")
+    void discountValidation() throws Exception {
+        for (String json : List.of(
+                """
+                {"startsAt":"2026-12-01T00:00:00","endsAt":"2026-12-08T00:00:00"}""",
+                """
+                {"salePrice":0,"startsAt":"2026-12-01T00:00:00","endsAt":"2026-12-08T00:00:00"}""",
+                """
+                {"salePrice":15000,"endsAt":"2026-12-08T00:00:00"}""",
+                """
+                {"salePrice":15000,"startsAt":"2026-12-01T00:00:00"}""")) {
+            sendAsSeller(post("/api/v1/seller/products/11/discounts"), json)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        }
+
+        // 수정은 바꿀 값만 보내지만, 하나도 없거나 할인가가 0 이하면 400
+        for (String json : List.of("{}", "{\"salePrice\":0}")) {
+            sendAsSeller(patch("/api/v1/seller/products/11/discounts/41"), json)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        }
+    }
+
+    @Test
+    @DisplayName("할인 수정·삭제·종료: 경로의 상품·할인 ID로 처리한다")
+    void modifyDeleteEndDiscount() throws Exception {
+        LocalDateTime start = LocalDateTime.of(2026, 12, 1, 0, 0);
+        sendAsSeller(patch("/api/v1/seller/products/11/discounts/41"), """
+                {"salePrice":14000,"startsAt":"2026-12-01T00:00:00","endsAt":"2026-12-08T00:00:00"}""")
+                .andExpect(status().isOk());
+        verify(productFacade).modifyDiscount(2L, 11L, 41L, 14_000L, start, start.plusDays(7));
+
+        // 끝 시각만 보내면 나머지는 null로 넘긴다
+        sendAsSeller(patch("/api/v1/seller/products/11/discounts/41"), "{\"endsAt\":\"2026-12-15T00:00:00\"}")
+                .andExpect(status().isOk());
+        verify(productFacade).modifyDiscount(2L, 11L, 41L, null, null, start.plusDays(14));
+
+        String token = jwtTokenProvider.createAccessToken(2L, MemberRole.USER);
+        mockMvc.perform(delete("/api/v1/seller/products/11/discounts/41").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        verify(productFacade).deleteDiscount(2L, 11L, 41L);
+
+        mockMvc.perform(post("/api/v1/seller/products/11/discounts/41/end").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        verify(productFacade).endDiscount(2L, 11L, 41L);
     }
 
     @Test
