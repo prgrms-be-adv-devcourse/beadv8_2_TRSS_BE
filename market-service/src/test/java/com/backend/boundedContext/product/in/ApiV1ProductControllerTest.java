@@ -1,7 +1,6 @@
 package com.backend.boundedContext.product.in;
 
 import com.backend.boundedContext.product.app.ProductFacade;
-import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.global.page.PageResponse;
 import com.backend.global.security.JwtAccessDeniedHandler;
 import com.backend.global.security.JwtAuthenticationEntryPoint;
@@ -48,9 +47,9 @@ class ApiV1ProductControllerTest {
     private ProductFacade productFacade;
 
     @Test
-    @DisplayName("상품 검색: 로그인 없이 호출할 수 있고, 정렬은 최신순·품절 제외가 기본값이다")
+    @DisplayName("상품 검색: 로그인 없이 호출할 수 있고, 정렬을 보내지 않으면 null(검색어에 따라 정함)·품절 제외가 기본값이다")
     void search_defaults() throws Exception {
-        given(productFacade.searchProducts(isNull(), isNull(), eq(ProductSort.LATEST), eq(true), any(Pageable.class)))
+        given(productFacade.searchProducts(isNull(), isNull(), isNull(), eq(true), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(), 0, 20, 0, 0));
 
         mockMvc.perform(get("/api/v1/products"))
