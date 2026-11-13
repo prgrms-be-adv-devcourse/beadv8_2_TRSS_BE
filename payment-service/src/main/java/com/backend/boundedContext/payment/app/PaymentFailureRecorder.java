@@ -37,7 +37,7 @@ public class PaymentFailureRecorder {
                     command.idempotencyKey(),
                     failStatus,
                     reason
-                )
+                ).withShippingFee(command.shippingFee())  // 같은 키로 다시 올 때 배송비까지 비교하기 위해 남긴다
         );
     }
 }

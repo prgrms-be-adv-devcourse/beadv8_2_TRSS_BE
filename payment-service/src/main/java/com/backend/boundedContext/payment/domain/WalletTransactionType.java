@@ -12,6 +12,8 @@ public enum WalletTransactionType {
     CHARGE_CANCEL(false, WalletTransactionReferenceType.TOPUP),     // 미사용 충전 취소 (충전 모듈)
     PAYMENT(false, WalletTransactionReferenceType.PAYMENT),         // 결제, 지갑 → 홀딩 (결제 모듈)
     PAYMENT_CANCEL(true, WalletTransactionReferenceType.PAYMENT),   // 결제 취소, 홀딩 → 구매자 지갑 (결제 모듈)
+    SHIPPING_FEE(true, WalletTransactionReferenceType.PAYMENT),     // 결제 중 배송비, 구매자 → 플랫폼(관리자) 지갑 (결제 모듈)
+    SHIPPING_FEE_CANCEL(false, WalletTransactionReferenceType.PAYMENT), // 결제 취소 시 배송비 반환, 플랫폼 지갑 → 구매자 (결제 모듈)
     REFUND(true, WalletTransactionReferenceType.REFUND),            // 반품 승인 환불, 홀딩 → 구매자 지갑 (결제 모듈)
     SETTLEMENT(true, WalletTransactionReferenceType.SETTLEMENT),    // 정산 지급, 홀딩 → 판매자 지갑 (정산 모듈)
     FEE(true, WalletTransactionReferenceType.SETTLEMENT);           // 정산 수수료, 홀딩 → 관리자 지갑 (정산 모듈)

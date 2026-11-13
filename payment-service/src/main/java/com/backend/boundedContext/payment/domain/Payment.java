@@ -46,6 +46,10 @@ public class Payment extends BaseIdAndTime {
     @Column(nullable = false)
     private long amount;
 
+    // amount 중 배송비. 홀딩에 넣지 않고 플랫폼(관리자) 지갑으로 옮긴다. 홀딩 금액 = amount - shippingFee
+    @Column(nullable = false)
+    private long shippingFee;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
     private PaymentStatus status;
@@ -107,6 +111,29 @@ public class Payment extends BaseIdAndTime {
         payment.idempotencyKey = idempotencyKey;
         payment.status = status;
         return payment;
+    }
+
+    // 결제 금액 중 배송비를 기록한다 (저장 전에 부른다). 배송비만으로 된 결제는 홀딩이 0원이 되므로 막는다
+    public Payment withShippingFee(long shippingFee) {
+        if (shippingFee < 0 || shippingFee >= amount) {
+            throw new IllegalArgumentException("배송비는 0 이상, 결제 금액 미만이어야 합니다: " + shippingFee);
+        }
+        this.shippingFee = shippingFee;
+        return this;
+    }
+
+    // 홀딩에 들어가는 금액 (정산 대상 금액)
+    public long holdingAmount() {
+        return amount - shippingFee;
+    }
+
+    // 배송비 원장(SHIPPING_FEE)·배송비 취소 원장(SHIPPING_FEE_CANCEL)의 멱등 키
+    public String shippingFeeIdempotencyKey() {
+        return "PAYMENT-" + getId() + "-SHIPPING_FEE";
+    }
+
+    public String shippingFeeCancelIdempotencyKey() {
+        return "PAYMENT-" + getId() + "-SHIPPING_FEE-CANCEL";
     }
 
     public boolean isPaid() {

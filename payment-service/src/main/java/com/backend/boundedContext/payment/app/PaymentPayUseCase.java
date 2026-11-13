@@ -50,6 +50,7 @@ public class PaymentPayUseCase {
      * 동시 요청의 최후 안전장치: payment.idempotency_key UNIQUE, wallet_holding 주문당 해제되지 않은 홀딩 1개
      */
     public PayResultDto pay(PayCommand command) {
+        validateShippingFeeAndSubsidy(command);
         Wallet wallet = lockWallet(command.buyerId());
 
         Optional<Payment> processed = paymentRepository.findByIdempotencyKey(command.idempotencyKey());
@@ -69,12 +70,30 @@ public class PaymentPayUseCase {
 
         // 결제 건을 먼저 저장한다 (원장·홀딩이 결제 ID를 가리켜야 하므로)
         Payment payment = paymentRepository.save(Payment.paid(command.orderId(), command.orderNumber(), wallet,
-                command.amount(), command.idempotencyKey(), now));
+                command.amount(), command.idempotencyKey(), now).withShippingFee(command.shippingFee()));
         withdrawFromWallet(wallet, payment);
         useTopups(command.buyerId(), payment);
+        depositShippingFee(payment);
         walletHoldingRepository.save(WalletHolding.hold(payment, now));
 
         return toResult(payment, wallet);
+    }
+
+    // shortcut: 장바구니 쿠폰 지원금(COUPON_SUBSIDY)은 아직 처리하지 않아 0만 받는다. 장바구니 쿠폰을 켜기 전에 지원금 원장·홀딩 반영을 넣어야 한다
+    private static void validateShippingFeeAndSubsidy(PayCommand command) {
+        if (command.shippingFee() < 0 || command.shippingFee() >= command.amount()
+                || command.couponSubsidyAmount() != 0) {
+            throw new DomainException(GlobalErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    // 배송비는 홀딩(정산 대상)에 넣지 않고 플랫폼(관리자) 지갑으로 옮긴다. 구매자 지갑 차감은 PAYMENT 원장에 이미 포함돼 있다
+    // shortcut: 배송비가 있는 결제마다 관리자 지갑 한 행을 잠가 결제끼리 잠깐 줄을 선다. 결제량이 늘면 플랫폼 지갑 반영을 비동기로 바꾼다
+    private void depositShippingFee(Payment payment) {
+        if (payment.getShippingFee() == 0) return;
+        Wallet platformWallet = lockWallet(paymentPolicy.adminMemberId());
+        walletTransactionRepository.save(WalletTransaction.record(platformWallet, WalletTransactionType.SHIPPING_FEE,
+                payment.getShippingFee(), payment.getId(), payment.shippingFeeIdempotencyKey()));
     }
 
     private Wallet lockWallet(Long buyerId) {
@@ -116,7 +135,8 @@ public class PaymentPayUseCase {
     private PayResultDto returnPreviousResult(Payment payment, PayCommand command, Wallet wallet) {
         if (!payment.getOrderId().equals(command.orderId())
                 || !payment.getMemberId().equals(command.buyerId())
-                || payment.getAmount() != command.amount()) {
+                || payment.getAmount() != command.amount()
+                || payment.getShippingFee() != command.shippingFee()) {
             throw new DomainException(GlobalErrorCode.IDEMPOTENCY_KEY_REUSED);
         }
         return toResult(payment, wallet);

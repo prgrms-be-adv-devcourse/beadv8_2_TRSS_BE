@@ -58,14 +58,14 @@ public class WalletHolding extends BaseIdAndTime {
 
     private LocalDateTime settledAt;
 
-    // 결제 성공 건의 금액 전체를 홀딩
+    // 결제 성공 건의 금액 중 배송비를 뺀 금액을 홀딩
     public static WalletHolding hold(Payment payment, LocalDateTime heldAt) {
         if (!payment.isPaid()) throw new IllegalStateException("결제 완료 건만 홀딩할 수 있습니다: " + payment.getStatus());
         WalletHolding holding = new WalletHolding();
         holding.orderId = payment.getOrderId();
         holding.payment = payment;
         holding.wallet = payment.getWallet();
-        holding.amount = payment.getAmount();
+        holding.amount = payment.holdingAmount();
         holding.settledAmount = 0;
         holding.status = WalletHoldingStatus.HELD;
         holding.heldAt = heldAt;
