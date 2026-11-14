@@ -158,4 +158,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
 
     /** 관리자 정산 미리보기: 대상월에 이미 만들어진 정산서(판매자별 상태 표시용) */
     List<Settlement> findBySettlementMonthAndSellerIdIn(String settlementMonth, Collection<Long> sellerIds);
+
+    /** 운영 알림: 이 상태의 정산서 수 (MANUAL_REQUIRED 점검) */
+    long countByStatus(SettlementStatus status);
 }

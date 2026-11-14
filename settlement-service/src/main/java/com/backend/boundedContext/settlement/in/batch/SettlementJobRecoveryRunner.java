@@ -25,7 +25,10 @@ public class SettlementJobRecoveryRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         try {
             int recovered = settlementFacade.recoverInterruptedJobs();
-            if (recovered > 0) log.warn("중단된 월 정산 실행 {}건을 다시 실행할 수 있게 정리함", recovered);
+            // 강제 종료로 멈춘 월 정산은 관리자가 다시 실행해야 끝난다(05:00 완료 정책). 알림을 받도록 ERROR로 남긴다
+            if (recovered > 0) {
+                log.error("중단된 월 정산 실행 {}건을 FAILED로 정리함. 관리자 화면에서 그 달을 다시 실행해 주세요", recovered);
+            }
         } catch (Exception e) {
             log.error("중단된 월 정산 실행 정리 실패", e);
         }

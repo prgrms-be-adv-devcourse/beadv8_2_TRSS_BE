@@ -187,4 +187,9 @@ public class SettlementSupport {
         return (root, query, cb) -> cb.between(root.get("settlementMonth"), from.toString(), to.toString());
     }
 
+
+    /** 운영 알림: 이 상태의 정산서 수 */
+    public long countByStatus(SettlementStatus status) {
+        return settlementRepository.countByStatus(status);
+    }
 }

@@ -59,6 +59,20 @@ class SettlementEventListenerOrderPaidTest {
         verifyNoInteractions(processedEvents, settlementFacade);
     }
 
+    @Test
+    @DisplayName("헤더 없이 온, 이 앱이 아직 모르는 새 주문 이벤트도 역직렬화 실패(DLT) 없이 건너뛴다")
+    void unknownEventWithoutHeader_ignored() {
+        String value = """
+                {"eventId":"%s","eventType":"OrderSomethingNewEvent","occurredAt":"2026-11-14T10:00:00",
+                 "aggregateType":"ORDER","aggregateId":10,"payload":{"anything":1}}
+                """.formatted(java.util.UUID.randomUUID());
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("order.events", 0, 0, "10", value);
+
+        assertThatCode(() -> listener.handle(record)).doesNotThrowAnyException();
+
+        verifyNoInteractions(processedEvents, settlementFacade);
+    }
+
     private static OrderPaidEvent paidEvent() {
         return new OrderPaidEvent(10L, "ORD-1", 3L, LocalDateTime.of(2026, 11, 6, 14, 30),
                 new ShippingAddressDto("홍길동", "010-1234-5678", "06236", "서울", "101동", null),

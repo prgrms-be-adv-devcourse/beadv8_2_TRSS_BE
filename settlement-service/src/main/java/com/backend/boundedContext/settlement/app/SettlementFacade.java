@@ -326,4 +326,10 @@ public class SettlementFacade {
     public int holdSellerBySanctionEvent(Long sellerId, String reason) {
         return settlementHoldSellerUseCase.holdSeller(sellerId, reason, SettlementTrigger.EVENT);
     }
+
+    /** 운영 알림: 사람이 처리해야 하는(MANUAL_REQUIRED) 정산서 수 */
+    @Transactional(readOnly = true)
+    public long countManualRequired() {
+        return settlementSupport.countByStatus(SettlementStatus.MANUAL_REQUIRED);
+    }
 }

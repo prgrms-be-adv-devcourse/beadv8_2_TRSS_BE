@@ -201,7 +201,8 @@ class SettlementOutboxRelayIntegrationTest {
 
         ConsumerRecord<String, String> dead = findDeadLetter(broken);
         assertThat(dead.value()).isEqualTo(broken);
-        verify(eventMessages, times(1)).read(broken);
+        verify(eventMessages, times(1)).eventTypeOf(broken);   // 헤더가 없어 타입을 읽다가 실패(봉투 전체는 읽지 않음)
+        verify(eventMessages, never()).read(broken);
         verify(settlementCreateCandidatesUseCase, never()).createCandidates(eq(orderId), any(), anyList());
     }
 
@@ -230,7 +231,8 @@ class SettlementOutboxRelayIntegrationTest {
 
         ConsumerRecord<String, String> dead = findDeadLetter(noEventType);
         assertThat(header(dead, KafkaHeaders.DLT_EXCEPTION_MESSAGE)).contains("eventType");
-        verify(eventMessages, times(1)).read(noEventType);
+        verify(eventMessages, times(1)).eventTypeOf(noEventType);   // eventType이 없어 타입을 읽는 단계에서 실패
+        verify(eventMessages, never()).read(noEventType);
     }
 
     /** 실제 구매 확정처럼 쓰기 트랜잭션 안에서 발행하고, outbox에 저장된 eventId를 돌려준다 */
@@ -287,7 +289,7 @@ class SettlementOutboxRelayIntegrationTest {
 
     private int processedCount(UUID eventId) {
         Integer count = jdbcTemplate.queryForObject(
-                "select count(*) from processed_event where event_id = ? and consumer = 'settlement'", Integer.class, eventId);
+                "select count(*) from processed_event where event_id = ? and consumer = 'settlement.order-confirmed'", Integer.class, eventId);
         return count == null ? 0 : count;
     }
 
