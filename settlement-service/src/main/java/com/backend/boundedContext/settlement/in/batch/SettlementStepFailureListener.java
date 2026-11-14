@@ -28,12 +28,13 @@ public class SettlementStepFailureListener implements StepExecutionListener {
         return new ExitStatus(COMPLETED_WITH_FAILURES, "실패 " + failures + "건 (상세는 settlement_process_history)");
     }
 
-    /** 판별 BLOCK·실패 + 집계 실패 판매자 + 지급 실패 + 지급 수동 필요 건수 */
+    /** 판별 BLOCK·실패 + 집계 실패 판매자 + 지급 실패 + 지급 수동 필요 + 지급 결과 모름(PROCESSING) 건수 */
     private static long failureCount(ExecutionContext context) {
         return context.getLong(SettlementJobNames.JUDGE_BLOCK_COUNT, 0L)
                 + context.getLong(SettlementJobNames.JUDGE_FAILED_COUNT, 0L)
                 + context.getLong(SettlementJobNames.FAILED_SELLER_COUNT, 0L)
                 + context.getLong(SettlementJobNames.FAILED_COUNT, 0L)
-                + context.getLong(SettlementJobNames.MANUAL_REQUIRED_COUNT, 0L);
+                + context.getLong(SettlementJobNames.MANUAL_REQUIRED_COUNT, 0L)
+                + context.getLong(SettlementJobNames.PROCESSING_COUNT, 0L);
     }
 }

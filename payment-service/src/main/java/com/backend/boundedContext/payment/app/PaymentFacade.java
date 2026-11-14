@@ -162,7 +162,7 @@ public class PaymentFacade {
         return paymentReconcileCancelingTopupsUseCase.reconcileCancelingTopups(LocalDateTime.now());
     }
 
-    // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)
+    // 정산 지급. 이 트랜잭션으로 커밋한 뒤 응답한다(정산과 한 트랜잭션이 아니다. 정산은 PROCESSING 선점 후 호출하고 결과를 모르면 findTransfer로 확정)
     @Transactional
     public TransferResultDto transfer(SettlementTransferCommand command) {
         return paymentTransferUseCase.transfer(command);

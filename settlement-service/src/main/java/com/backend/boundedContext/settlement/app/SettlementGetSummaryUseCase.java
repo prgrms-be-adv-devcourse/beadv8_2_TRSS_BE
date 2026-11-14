@@ -39,7 +39,8 @@ public class SettlementGetSummaryUseCase {
         long manual = countOf(rows, SettlementStatus.MANUAL_REQUIRED);
         long total = rows.stream().mapToLong(row -> zero(row.settlementCount())).sum();
         return new SettlementSummaryResponse(total, countOf(rows, SettlementStatus.PAID),
-                payoutOf(rows, SettlementStatus.PAID), countOf(rows, SettlementStatus.READY), retrying + manual,
+                payoutOf(rows, SettlementStatus.PAID),
+                countOf(rows, SettlementStatus.READY) + countOf(rows, SettlementStatus.PROCESSING), retrying + manual,
                 retrying, manual, countOf(rows, SettlementStatus.HOLD));
     }
 

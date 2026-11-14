@@ -32,6 +32,8 @@ public final class SettlementJobNames {
     public static final String FAILED_SELLER_COUNT = "failedSellerCount";
     public static final String PAID_COUNT = "paidCount";
     public static final String FAILED_COUNT = "failedCount";
+    /** 지급 요청 결과 모름(PROCESSING)으로 남은 정산서 수. 재확인 스케줄러가 확정한다 */
+    public static final String PROCESSING_COUNT = "processingCount";
     public static final String MANUAL_REQUIRED_COUNT = "manualRequiredCount";
     public static final String SKIPPED_COUNT = "skippedCount";
     public static final String PAYOUT_TOTAL = "payoutTotal";

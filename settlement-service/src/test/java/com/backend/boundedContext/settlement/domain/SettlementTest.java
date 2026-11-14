@@ -39,6 +39,34 @@ class SettlementTest {
     }
 
     @Test
+    @DisplayName("PROCESSING: 지급 가능 상태에서만 선점하고, 보류·재시도·후보 추가 대상이 아니며, 결과에 따라 PAID·FAILED·MANUAL_REQUIRED로 끝난다")
+    void markProcessing() {
+        Settlement s = ready();
+        s.markProcessing(NOW);
+
+        assertEquals(SettlementStatus.PROCESSING, s.getStatus());
+        assertEquals(NOW, s.getProcessingStartedAt());
+        assertFalse(s.isPayable(false, NOW));
+        assertFalse(s.isPayable(true, NOW));
+        assertFalse(s.canAcceptCandidates());
+        assertThrows(DomainException.class, () -> s.hold("제재"));
+        assertThrows(DomainException.class, () -> s.markProcessing(NOW));   // 이미 요청 중
+
+        assertFalse(s.isProcessingOverdue(NOW.plusMinutes(4), 5));
+        assertTrue(s.isProcessingOverdue(NOW.plusMinutes(5), 5));
+
+        s.markFailed("결과 확인: 기록 없음", NOW.plusMinutes(5), MAX_ATTEMPTS, RETRY_MINUTES);
+        assertEquals(SettlementStatus.FAILED, s.getStatus());
+        assertNull(s.getProcessingStartedAt());
+
+        ReflectionTestUtils.setField(s, "nextRetryAt", NOW);
+        s.markProcessing(NOW.plusMinutes(30));
+        s.markPaid(501L, NOW.plusMinutes(31));
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+        assertNull(s.getProcessingStartedAt());
+    }
+
+    @Test
     @DisplayName("holdReason이 있으면 처음부터 HOLD로 만들고, HOLD에도 후보를 담을 수 있다")
     void createHold() {
         Settlement s = Settlement.create(7L, "2026-09", "제재");
@@ -179,6 +207,20 @@ class SettlementTest {
         Settlement paid = ready();
         paid.markPaid(1L, NOW);
         assertThrows(DomainException.class, () -> paid.hold("지급 후"));
+    }
+
+    @Test
+    @DisplayName("보류 중 지급 확인은 HOLD에서만 PAID로 바꾸고 보류 사유를 지운다(다른 상태는 409)")
+    void markPaidWhileHeld() {
+        Settlement held = settlementIn(SettlementStatus.HOLD);
+        held.markPaidWhileHeld(501L, NOW);
+        assertEquals(SettlementStatus.PAID, held.getStatus());
+        assertEquals(501L, held.getWalletTxId());
+        assertNull(held.getHoldReason());
+
+        Settlement ready = settlementIn(SettlementStatus.READY);
+        assertThrows(DomainException.class, () -> ready.markPaidWhileHeld(501L, NOW));
+        assertEquals(SettlementStatus.READY, ready.getStatus());
     }
 
     @Test
