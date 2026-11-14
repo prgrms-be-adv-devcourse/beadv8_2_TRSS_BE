@@ -72,7 +72,9 @@ public class SettlementAggregateUseCase {
         List<SettlementCandidate> candidates =
                 settlementCandidateRepository.findWithLockReadyBySellerIdUntilMonth(sellerId, month);
         if (candidates.isEmpty()) return 0;
-        if (judgement == null && blockedByCandidateAmounts(sellerId, month, candidates, batchExecutionId, trigger, now)) {
+        // 판정이 있든 없든, 지금 잠근(실제로 묶을) 후보로 금액을 다시 확인한다.
+        // 판별은 잠금 없이 읽은 후보를 봤으므로 판별 뒤 새로 들어온 후보나 재시작으로 며칠 뒤 확정하는 경우도 여기서 걸러진다
+        if (blockedByCandidateAmounts(sellerId, month, candidates, judgement, batchExecutionId, trigger, now)) {
             return 0;
         }
         String holdReason = holdReasonOf(sellerId, judgement);
@@ -109,11 +111,12 @@ public class SettlementAggregateUseCase {
     }
 
     /**
-     * 판정이 없을 때 후보 금액 스냅샷을 직접 확인한다. 어긋나면 판별 BLOCK과 같은 이력을 남기고 true(확정하지 않음)
-     * 후보는 READY로 남아 다음 실행의 판별 단계에서 다시 본다
+     * 확정 직전, 잠근 후보의 금액 스냅샷을 확인한다(판정 유무와 상관없이). 어긋나면 판별 BLOCK과 같은 이력을 남기고 true(확정하지 않음)
+     * 후보는 READY로 남아 다음 실행의 판별 단계에서 다시 본다. 메모리 계산이라 비용이 거의 없다
      */
     private boolean blockedByCandidateAmounts(Long sellerId, String month, List<SettlementCandidate> candidates,
-                                              Long batchExecutionId, SettlementTrigger trigger, LocalDateTime now) {
+                                              SettlementJudgement judgement, Long batchExecutionId,
+                                              SettlementTrigger trigger, LocalDateTime now) {
         SettlementJudgement amountCheck = candidateAmountIntegrityRule.judge(
                 new SettlementJudgeContext(sellerId, candidates, null, false));
         if (amountCheck.isPass()) return false;
@@ -122,8 +125,9 @@ public class SettlementAggregateUseCase {
                     amountCheck.errorCode(), amountCheck.reason(), trigger, batchExecutionId, now));
         }
         settlementProcessHistoryRepository.save(SettlementProcessHistory.aggregateFailed(trigger,
-                amountCheck.errorCode(), "sellerId=%d month=%s 판정 없이 확정하려다 후보 금액 확인에서 막음: %s".formatted(
-                        sellerId, month, amountCheck.reason()), batchExecutionId, now));
+                amountCheck.errorCode(), "sellerId=%d month=%s 확정 직전 후보 금액 확인에서 막음(판정 %s): %s".formatted(
+                        sellerId, month, judgement == null ? "없음" : judgement.type(), amountCheck.reason()),
+                batchExecutionId, now));
         log.warn("정산 집계 후보 금액 불일치로 확정하지 않음 sellerId={} month={} reason={}", sellerId, month,
                 amountCheck.reason());
         return true;

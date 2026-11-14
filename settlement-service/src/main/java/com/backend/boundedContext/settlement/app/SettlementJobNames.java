@@ -44,6 +44,11 @@ public final class SettlementJobNames {
     public static final String JUDGE_FAILED_COUNT = "judgeFailedCount";
     /** 판매자 ID → SettlementJudgement.encode(). HashMap이라 Job 실행 컨텍스트에 직렬화된다 */
     public static final String JUDGEMENTS = "judgements";
+    /**
+     * 판정을 만든 JobExecution ID. 판정과 함께 Job 실행 컨텍스트로 올린다.
+     * 재시작하면 Spring Batch가 직전 실행의 Job 실행 컨텍스트를 새 실행에 넘기므로, 확정 Step은 이 값이 지금 실행과 같을 때만 판정을 쓴다
+     */
+    public static final String JUDGED_EXECUTION_ID = "judgedExecutionId";
 
     private SettlementJobNames() {
     }
