@@ -143,6 +143,12 @@ public class Seller extends BaseIdAndTime {
         return SellerStatusHistory.record(this, from, reason);
     }
 
+    // 제재 해지: 판매 자격을 돌려준다. 철회 심사 중에 제재됐어도 APPROVED로 돌아간다 (철회는 판매자가 다시 요청)
+    // 제재 때 사업자번호·승인일을 지우지 않았으므로 그대로 쓴다
+    public SellerStatusHistory unsanction(String reason) {
+        return changeStatus(SellerStatus.SANCTIONED, SellerStatus.APPROVED, reason);
+    }
+
     // 판매 중인 판매자의 상호·연락처 수정. null은 그대로 둔다 (상태 변경이 아니라 이력은 남기지 않음)
     public void updateInfo(String businessName, String phoneNumber) {
         checkApproved();

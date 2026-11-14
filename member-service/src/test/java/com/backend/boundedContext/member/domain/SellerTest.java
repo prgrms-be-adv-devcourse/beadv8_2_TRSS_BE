@@ -176,6 +176,34 @@ class SellerTest {
     }
 
     @Test
+    @DisplayName("제재 해지: SANCTIONED → APPROVED, 사유가 이력에 남고 사업자번호·승인일은 그대로다")
+    void unsanction() {
+        Seller seller = approved();
+        LocalDateTime approvedAt = seller.getApprovedAt();
+        seller.sanction("허위 상품");
+
+        SellerStatusHistory history = seller.unsanction("소명 확인");
+
+        assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
+        assertThat(seller.getBusinessNumber()).isEqualTo("1234567890");
+        assertThat(seller.getApprovedAt()).isEqualTo(approvedAt);
+        assertTransition(history, SellerStatus.SANCTIONED, SellerStatus.APPROVED);
+        assertThat(history.getReason()).isEqualTo("소명 확인");
+    }
+
+    @Test
+    @DisplayName("제재 해지: 철회 심사 중에 제재됐어도 APPROVED로 돌아간다")
+    void unsanction_fromWithdrawRequested() {
+        Seller seller = approved();
+        seller.requestWithdrawal("폐업 예정");
+        seller.sanction("허위 상품");
+
+        seller.unsanction("소명 확인");
+
+        assertThat(seller.getStatus()).isEqualTo(SellerStatus.APPROVED);
+    }
+
+    @Test
     @DisplayName("반려 뒤 재신청: 같은 판매자의 신청 정보를 새 값으로 바꾸고 PENDING")
     void reapplyAfterReject() {
         Seller seller = pending();
@@ -225,6 +253,7 @@ class SellerTest {
         assertStateInvalid(() -> approved().approveWithdrawal());
         assertStateInvalid(() -> approved().rejectWithdrawal("사유"));
         assertStateInvalid(() -> pending().sanction("사유"));
+        assertStateInvalid(() -> approved().unsanction("사유"));
     }
 
     @Test

@@ -40,6 +40,7 @@ public class MemberSellerFacade {
     private final MemberApproveWithdrawalUseCase memberApproveWithdrawalUseCase;
     private final MemberRejectWithdrawalUseCase memberRejectWithdrawalUseCase;
     private final MemberSanctionSellerUseCase memberSanctionSellerUseCase;
+    private final MemberUnsanctionSellerUseCase memberUnsanctionSellerUseCase;
 
     // 판매자 입점 신청 (처음이면 생성, 반려·본인 철회 뒤면 같은 판매자로 재신청. 둘 다 PENDING)
     @Transactional
@@ -129,6 +130,12 @@ public class MemberSellerFacade {
     @Transactional
     public AdminSellerDetailDto sanctionSeller(Long sellerId, String reason) {
         return memberSanctionSellerUseCase.sanction(sellerId, reason);
+    }
+
+    // 관리자 제재 해지 (SANCTIONED → APPROVED, 사유 필수, 탈퇴 회원은 불가)
+    @Transactional
+    public AdminSellerDetailDto unsanctionSeller(Long sellerId, String reason) {
+        return memberUnsanctionSellerUseCase.unsanction(sellerId, reason);
     }
 
     // 개발용 시드 판매자 (시드 판매자 회원을 APPROVED 판매자로)

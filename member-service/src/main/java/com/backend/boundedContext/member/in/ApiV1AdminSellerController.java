@@ -89,4 +89,13 @@ public class ApiV1AdminSellerController {
     ) {
         return RsData.of("200-1", "판매자를 제재했습니다.", memberSellerFacade.sanctionSeller(sellerId, request.reason()));
     }
+
+    @Operation(summary = "제재 해지", description = "제재(SANCTIONED)된 판매자를 판매 중(APPROVED)으로 되돌립니다. 사유는 필수입니다. 회원 탈퇴한 판매자는 해지할 수 없습니다(409).")
+    @PostMapping("/{sellerId}/unsanction")
+    public RsData<AdminSellerDetailDto> unsanction(
+            @PathVariable Long sellerId,
+            @Valid @RequestBody SellerReasonRequest request
+    ) {
+        return RsData.of("200-1", "판매자 제재를 해지했습니다.", memberSellerFacade.unsanctionSeller(sellerId, request.reason()));
+    }
 }
