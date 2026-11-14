@@ -326,7 +326,9 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-SETTLEMENT_CANDIDATE_AMOUNT_INVALID | 주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없는 상태 |
 | | 500-SETTLEMENT_JOB_FAILED | JOB에 문제가 생긴 상태 |
 | | 409-SETTLEMENT_CANDIDATE_AMOUNT_TAMPERED | 판별 단계: 정산 후보 금액 스냅샷(판매가·수수료·지급액)이 서로 맞지 않아 확정하지 않음 (처리 이력에만 남음) |
+| | 409-SETTLEMENT_CANDIDATE_FEE_RATE_MISMATCH | 판별 단계: 정산 후보의 수수료율이 후보를 만든 시점의 정책 수수료율과 달라 확정하지 않음 (처리 이력에만 남음) |
 | | 409-SETTLEMENT_LEDGER_MISSING / 409-SETTLEMENT_LEDGER_REPLACED / 409-SETTLEMENT_LEDGER_AMOUNT_CHANGED | 원장 재대조: 지급된 정산서의 원장 기록 없음 / 원장 행 교체 / 금액 변경 (처리 이력에만 남고, 그 판매자의 다음 지급을 보류) |
+| | 409-SETTLEMENT_LEDGER_PAID_NOT_RECORDED | 출력 대사: 결제 원장에는 지급 기록이 있는데 정산서가 PAID가 아님 (처리 이력 RECONCILE에 남고 ERROR 로그로 알림, 정산 데이터는 고치지 않음) |
 | | 400-SETTLEMENT_MONTH_RANGE_INVALID | 정산서 기간 조회·엑셀 다운로드 기간 오류(시작월 > 끝월, 최대 개월 수 초과, 정산월과 기간 동시 사용) |
 | | 400-SETTLEMENT_EXPORT_TOO_LARGE | 정산서 엑셀에 담을 품목 수가 `custom.settlement.exportMaxRows`(기본 200,000)를 넘음(파일을 만들기 전에 거절) 또는 한 시트가 엑셀 최대 행 수를 넘음 |
 | | 500-SETTLEMENT_EXPORT_FAILED | 정산서 엑셀 파일 생성 실패 |

@@ -69,6 +69,7 @@ public class SettlementFacade {
     private final SettlementExportUseCase settlementExportUseCase;
     private final SettlementGetSummaryUseCase settlementGetSummaryUseCase;
     private final SettlementGetRunnableMonthsUseCase settlementGetRunnableMonthsUseCase;
+    private final SettlementOutputReconcileUseCase settlementOutputReconcileUseCase;
 
     // ================= 정산 후보 생성 (구매 확정 이벤트) =================
 
@@ -84,6 +85,17 @@ public class SettlementFacade {
     }
 
     // ================= 원장 재대조 스케줄러 (매일 03:35) =================
+
+    /** 출력 대사 대상(지급을 시도했지만 PAID가 아닌 정산서) */
+    @Transactional(readOnly = true)
+    public List<Long> findOutputReconcileTargetIds(Long afterSettlementId, int limit) {
+        return settlementOutputReconcileUseCase.findTargetIds(afterSettlementId, limit);
+    }
+
+    /** 출력 대사 1건. 결제 원장 조회가 있어 트랜잭션을 길게 잡지 않도록 이력 저장만 리포지토리 트랜잭션으로 한다 */
+    public boolean reconcileOutput(Long settlementId) {
+        return settlementOutputReconcileUseCase.reconcile(settlementId);
+    }
 
     @Transactional(readOnly = true)
     public List<Long> findLedgerRecheckTargetIds(LocalDateTime since, Long afterSettlementId, int limit) {

@@ -170,6 +170,16 @@ public class SettlementPolicy {
         return requireRange(key, value, 1, Integer.MAX_VALUE);
     }
 
+    /**
+     * 그 시각에 적용되던 수수료율 (판별 규칙: 후보 수수료율이 후보를 만든 시점의 정책 값과 같은지)
+     * 지금은 수수료율이 하나라 시각과 상관없이 feeRate를 돌려준다.
+     * 주의: custom.settlement.feeRate를 바꿀 때는 이 메서드를 "적용 시작 시각별 수수료율 이력"으로 바꿔야 한다.
+     * 그러지 않으면 바꾸기 전에 만든 후보가 모두 수수료율 불일치로 막힌다.
+     */
+    public int feeRateAt(LocalDateTime at) {
+        return feeRate;
+    }
+
     // ===== 규칙(정적) — 정책 값에 기대지 않으므로 스프링 없이 어디서든 부른다 =====
 
     /**
