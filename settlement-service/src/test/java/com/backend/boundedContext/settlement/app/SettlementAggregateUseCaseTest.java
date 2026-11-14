@@ -6,6 +6,7 @@ import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryResult;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryStage;
 import com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType;
+import com.backend.boundedContext.settlement.domain.SettlementJudgement;
 import com.backend.boundedContext.settlement.domain.SettlementProcessHistory;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
@@ -33,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 판정 없이 확정할 때(판별 중 오류, 판별 이후 생긴 후보, 확정 단계부터 재시작) 후보 금액 확인을 DB 없이 검증한다.
+ * 확정 직전 후보 금액 확인을 DB 없이 검증한다. 판정이 없을 때(판별 중 오류, 재시작)와
+ * 판정이 있을 때(판별 뒤 들어온 후보) 모두 잠근 후보로 다시 확인한다(코드리뷰 변경 제안 8).
  * Repository·Port는 JDK 동적 프록시로 쓰는 메서드만 흉내 낸다.
  */
 class SettlementAggregateUseCaseTest {
@@ -78,6 +80,52 @@ class SettlementAggregateUseCaseTest {
 
         assertEquals(2, aggregated);
         assertEquals(1, saved.size());
+        assertEquals(SettlementStatus.READY, saved.get(0).getStatus());
+    }
+
+    @Test
+    @DisplayName("PASS 판정을 받은 판매자라도 잠근 후보에 금액이 맞지 않는 후보가 섞여 있으면 묶지 않는다 (판별 뒤 들어온 후보, 재시작)")
+    void passJudgement_tamperedCandidate_blocked() {
+        SettlementCandidate ok = candidate(1L, 10_000L);
+        SettlementCandidate lateTampered = candidate(3L, 20_000L);   // 판별 뒤 들어온 후보라고 가정
+        ReflectionTestUtils.setField(lateTampered, "fee", 0L);
+        readyCandidates = List.of(ok, lateTampered);
+
+        int aggregated = useCase().aggregateSeller(SELLER_ID, YearMonth.of(2026, 9), 9L, SettlementTrigger.MONTHLY_JOB,
+                SettlementJudgement.pass());
+
+        assertEquals(0, aggregated);
+        assertTrue(saved.isEmpty());
+        assertEquals(SettlementCandidateStatus.READY, ok.getStatus());
+        assertEquals(SettlementCandidateStatus.READY, lateTampered.getStatus());
+        assertEquals(3L, histories.get(0).getTargetId());
+        assertEquals("409-SETTLEMENT_CANDIDATE_AMOUNT_TAMPERED", histories.get(0).getErrorCode());
+        assertTrue(histories.get(1).getFailReason().contains("판정 PASS"));
+    }
+
+    @Test
+    @DisplayName("HOLD 판정이어도 금액이 맞지 않는 후보가 있으면 보류 정산서를 만들지 않고 막는다")
+    void holdJudgement_tamperedCandidate_blocked() {
+        SettlementCandidate tampered = candidate(4L, 10_000L);
+        ReflectionTestUtils.setField(tampered, "salePrice", 1_000_000L);
+        readyCandidates = List.of(tampered);
+
+        int aggregated = useCase().aggregateSeller(SELLER_ID, YearMonth.of(2026, 9), 9L, SettlementTrigger.MONTHLY_JOB,
+                SettlementJudgement.hold("판매자 제재"));
+
+        assertEquals(0, aggregated);
+        assertTrue(saved.isEmpty());
+    }
+
+    @Test
+    @DisplayName("PASS 판정이고 후보 금액이 맞으면 정산서를 만든다")
+    void passJudgement_consistentCandidates_aggregated() {
+        readyCandidates = List.of(candidate(1L, 10_000L), candidate(2L, 15_000L));
+
+        int aggregated = useCase().aggregateSeller(SELLER_ID, YearMonth.of(2026, 9), 9L, SettlementTrigger.MONTHLY_JOB,
+                SettlementJudgement.pass());
+
+        assertEquals(2, aggregated);
         assertEquals(SettlementStatus.READY, saved.get(0).getStatus());
     }
 

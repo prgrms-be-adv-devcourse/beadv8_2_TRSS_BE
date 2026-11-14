@@ -20,7 +20,9 @@ import java.util.Map;
 
 /**
  * 월 정산 Job 2단계(확정 = 집계)
- * 판별 Step의 판정(Job 실행 컨텍스트)을 판매자마다 넘긴다. 판정이 없는 판매자는 null(제재 여부만 보고 확정)
+ * 판별 Step의 판정(Job 실행 컨텍스트)을 판매자마다 넘긴다. 판정이 없는 판매자는 null(금액 확인과 제재 여부만 보고 확정)
+ * 재시작한 실행이면 이전 실행의 판정을 쓰지 않는다(SettlementJudgeTasklet.judgementsOf가 null을 돌려준다).
+ * 금액 확인은 판정과 상관없이 잠근 후보로 다시 한다(SettlementAggregateUseCase)
  *
  * 한 번 실행에 판매자 BATCH_CHUNK_SIZE(100)명을 처리하고, 남았으면 CONTINUABLE로 다시 불린다
  * 판매자 ID 커서를 Step 실행 컨텍스트에 남기므로 실패한 판매자를 무한 반복하지 않고, 재시작하면 이어서 처리한다
@@ -44,7 +46,7 @@ public class SettlementAggregateTasklet implements Tasklet {
         ExecutionContext context = contribution.getStepExecution().getExecutionContext();
         long afterSellerId = context.getLong(SettlementJobNames.CURSOR_SELLER_ID, 0L);
         Map<Long, String> judgements = SettlementJudgeTasklet.judgementsOf(
-                contribution.getStepExecution().getJobExecution().getExecutionContext());
+                contribution.getStepExecution().getJobExecution().getExecutionContext(), jobExecutionId);
 
         List<Long> sellerIds = settlementFacade.findAggregatableSellerIds(targetMonth, afterSellerId,
                 settlementPolicy.getBatchChunkSize());

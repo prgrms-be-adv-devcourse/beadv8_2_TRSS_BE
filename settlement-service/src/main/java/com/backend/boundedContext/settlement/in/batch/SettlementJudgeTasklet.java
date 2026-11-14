@@ -26,8 +26,10 @@ import java.util.Set;
  * 확정할 판매자(READY 후보가 있는 판매자)마다 판별 규칙 체인을 돌려 PASS·HOLD·BLOCK을 정한다.
  * 판정은 Step 실행 컨텍스트에 판매자 ID → 판정 문자열로 모으고, Step이 끝나면 ExecutionContextPromotionListener가
  * Job 실행 컨텍스트로 올린다. 확정 Step이 그 판정을 읽어 정산서를 만든다.
- * 판매자 ID 커서로 끊어 처리하므로 재시작하면 이어서 판별한다(이미 판별한 판매자는 맵에 남아 있다).
- * 한 판매자의 판별 실패는 맵에 넣지 않는다 → 확정 Step이 판정 없이(제재 여부만 보고) 처리한다.
+ * 판매자 ID 커서로 끊어 처리한다. 다만 재시작한 실행이면(Step 실행 컨텍스트의 판정이 이전 실행에서 만든 것이면)
+ * 커서와 판정을 비우고 처음부터 다시 판별한다. 며칠 뒤 재시작해도 그 시점의 판매자 상태와 후보로 판정하기 위해서다.
+ * 판별은 이력만 남기는 읽기 작업이라 다시 실행해도 금액에 영향이 없다.
+ * 한 판매자의 판별 실패는 맵에 넣지 않는다 → 확정 Step이 판정 없이(금액 확인과 제재 여부만 보고) 처리한다.
  */
 @Slf4j
 @Component
@@ -44,6 +46,7 @@ public class SettlementJudgeTasklet implements Tasklet {
         Long jobExecutionId = SettlementBatchSupport.jobExecutionId(contribution);
         SettlementTrigger trigger = SettlementBatchSupport.trigger(contribution);
         ExecutionContext context = contribution.getStepExecution().getExecutionContext();
+        resetIfRestarted(context, jobExecutionId);
         long afterSellerId = context.getLong(SettlementJobNames.CURSOR_SELLER_ID, 0L);
 
         HashMap<Long, String> judgements = context.containsKey(SettlementJobNames.JUDGEMENTS)
@@ -79,6 +82,22 @@ public class SettlementJudgeTasklet implements Tasklet {
         return RepeatStatus.CONTINUABLE;
     }
 
+    /**
+     * 이전 실행에서 만든 판정·커서·건수면 버리고 처음부터 판별한다(재시작 시 예전 판정 재사용 방지)
+     * 건수도 0으로 되돌린다. 남겨 두면 다시 판별한 판매자가 두 번 세지고, 이전 실행의 실패 건수 때문에
+     * 이번 판별에 실패가 없어도 Step이 COMPLETED WITH FAILURES로 끝난다(SettlementStepFailureListener)
+     */
+    static void resetIfRestarted(ExecutionContext context, long jobExecutionId) {
+        if (context.getLong(SettlementJobNames.JUDGED_EXECUTION_ID, -1L) == jobExecutionId) return;
+        context.put(SettlementJobNames.JUDGEMENTS, new HashMap<Long, String>());
+        context.putLong(SettlementJobNames.CURSOR_SELLER_ID, 0L);
+        context.putLong(SettlementJobNames.JUDGED_SELLER_COUNT, 0L);
+        context.putLong(SettlementJobNames.JUDGE_HOLD_COUNT, 0L);
+        context.putLong(SettlementJobNames.JUDGE_BLOCK_COUNT, 0L);
+        context.putLong(SettlementJobNames.JUDGE_FAILED_COUNT, 0L);
+        context.putLong(SettlementJobNames.JUDGED_EXECUTION_ID, jobExecutionId);
+    }
+
     private static void count(ExecutionContext context, SettlementJudgement judgement) {
         switch (judgement.type()) {
             case HOLD -> SettlementBatchSupport.add(context, SettlementJobNames.JUDGE_HOLD_COUNT, 1);
@@ -87,11 +106,14 @@ public class SettlementJudgeTasklet implements Tasklet {
         }
     }
 
-    /** 확정 Step이 Job 실행 컨텍스트에서 판정을 읽는다. 판별을 하지 않은 실행이면 null */
+    /**
+     * 확정 Step이 Job 실행 컨텍스트에서 판정을 읽는다.
+     * 판별을 하지 않았거나, 판정이 지금 실행(jobExecutionId)이 아닌 이전 실행에서 만든 것이면 null(모든 판매자를 "판정 없음"으로 처리)
+     */
     @SuppressWarnings("unchecked")
-    static Map<Long, String> judgementsOf(ExecutionContext jobContext) {
-        return jobContext.containsKey(SettlementJobNames.JUDGEMENTS)
-                ? (Map<Long, String>) jobContext.get(SettlementJobNames.JUDGEMENTS)
-                : null;
+    static Map<Long, String> judgementsOf(ExecutionContext jobContext, long jobExecutionId) {
+        if (!jobContext.containsKey(SettlementJobNames.JUDGEMENTS)) return null;
+        if (jobContext.getLong(SettlementJobNames.JUDGED_EXECUTION_ID, -1L) != jobExecutionId) return null;
+        return (Map<Long, String>) jobContext.get(SettlementJobNames.JUDGEMENTS);
     }
 }

@@ -20,7 +20,9 @@ import org.springframework.context.annotation.Configuration;
  *   지급: READY 정산서 지급
  * 원장 재대조(원장 무결성 2단계 ②)는 Job 밖의 매일 03:35 스케줄러(SettlementScheduler.recheckLedgers)가 한다.
  * 앞 단계가 끝나야 다음 단계의 입력이 정해지므로 .start().next() 순서로 둔다.
- * 재시작하면 COMPLETED Step은 건너뛰고, 판정은 Job 실행 컨텍스트에 남아 있어 확정 Step이 그대로 읽는다.
+ * 재시작하면 COMPLETED Step은 건너뛴다. 판정은 만든 실행 ID(judgedExecutionId)와 함께 Job 실행 컨텍스트로 올리고,
+ * 확정 Step은 지금 실행에서 만든 판정만 쓴다. 재시작한 실행이면 예전 판정을 버리고 "판정 없음"(잠근 후보 금액 확인 + 제재 확인)으로 확정한다.
+ * 금액 확인은 판정 유무와 상관없이 확정 직전에 잠근 후보로 다시 한다.
  *
  * Tasklet에 트랜잭션 매니저를 넘기지 않는다(Spring Batch 6 기본값 ResourcelessTransactionManager)
  * 대신 Facade·UseCase가 판매자 1명·정산서 1건 단위로 자기 트랜잭션을 열어, 한 건의 실패가 다른 건을 롤백시키지 않게 한다
@@ -59,7 +61,7 @@ public class SettlementMonthlyJobConfig {
     @Bean
     public ExecutionContextPromotionListener judgementPromotionListener() {
         ExecutionContextPromotionListener listener = new ExecutionContextPromotionListener();
-        listener.setKeys(new String[]{SettlementJobNames.JUDGEMENTS});
+        listener.setKeys(new String[]{SettlementJobNames.JUDGEMENTS, SettlementJobNames.JUDGED_EXECUTION_ID});
         listener.setStatuses(new String[]{ExitStatus.COMPLETED.getExitCode(),
                 SettlementStepFailureListener.COMPLETED_WITH_FAILURES});
         return listener;
