@@ -118,6 +118,36 @@ public class SettlementScheduler {
                 unresolvedChecked, mismatched, released, errors);
     }
 
+    /**
+     * 출력 대사: 매일 03:45, 지급을 시도했지만 PAID가 아닌 정산서에 결제 원장의 지급 기록이 있는지 본다
+     * 찾으면 정산 데이터는 고치지 않고 이력(RECONCILE, MANUAL_REQUIRED)과 ERROR 로그로 알린다
+     * 결제 원장 조회(findTransfer)가 필요해 원장 재대조와 같은 설정(custom.settlement.ledgerRecheck.enabled)으로 켠다
+     */
+    @Scheduled(cron = "0 45 3 * * *", zone = "Asia/Seoul")
+    public void reconcileOutputs() {
+        if (!settlementPolicy.isLedgerRecheckEnabled()) return;
+        long afterId = 0L;
+        int checked = 0;
+        int paidNotRecorded = 0;
+        int errors = 0;
+        while (true) {
+            List<Long> settlementIds = settlementFacade.findOutputReconcileTargetIds(afterId,
+                    settlementPolicy.getBatchChunkSize());
+            if (settlementIds.isEmpty()) break;
+            for (Long settlementId : settlementIds) {
+                try {
+                    if (settlementFacade.reconcileOutput(settlementId)) paidNotRecorded++;
+                    checked++;
+                } catch (Exception e) {
+                    errors++;
+                    log.error("정산 출력 대사 오류 settlementId={}", settlementId, e);
+                }
+            }
+            afterId = settlementIds.get(settlementIds.size() - 1);
+        }
+        log.info("정산 출력 대사 스케줄 checked={} paidNotRecorded={} errors={}", checked, paidNotRecorded, errors);
+    }
+
     /** 정산서 1건 재대조. 불일치면 true, 같으면 false, 오류면 null(다음 회차에 다시 본다) */
     private Boolean recheckLedger(Long settlementId) {
         try {

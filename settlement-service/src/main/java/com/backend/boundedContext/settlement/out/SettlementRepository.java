@@ -65,6 +65,20 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
                                           Pageable pageable);
 
     /**
+     * 출력 대사 대상: 지급을 한 번 이상 시도했지만(retryCount > 0) PAID가 아닌 정산서. afterId 커서로 한 번씩만 본다
+     * 지급 요청 결과를 기다리는 정산서(결과 모름)는 지급 결과 재확인이 따로 보므로 대상 상태에 넣지 않는다
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.status in :statuses
+               and s.retryCount > 0
+               and s.id > :afterId
+             order by s.id
+            """)
+    List<Long> findOutputReconcileTargetIds(@Param("statuses") Collection<SettlementStatus> statuses,
+                                            @Param("afterId") Long afterId, Pageable pageable);
+
+    /**
      * 이 판매자의 정산서 중 원장 재대조 불일치가 아직 풀리지 않은 것이 있는지
      * (정산서별 가장 마지막 VERIFY 이력이 MANUAL_REQUIRED. SettlementProcessHistoryRepository.findUnresolvedLedgerMismatchSettlementIds와 같은 기준)
      * 지급 직전 확인·보류 해제·불일치 해소 후 자동 해제가 쓴다

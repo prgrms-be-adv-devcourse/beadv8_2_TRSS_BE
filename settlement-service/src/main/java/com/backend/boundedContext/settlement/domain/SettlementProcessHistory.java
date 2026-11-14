@@ -175,6 +175,19 @@ public class SettlementProcessHistory extends BaseIdAndTime {
                 null, batchExecutionId, now);
     }
 
+    /**
+     * 출력 대사: 결제 원장에는 지급 기록이 있는데 정산서가 PAID가 아님 (stage RECONCILE, MANUAL_REQUIRED)
+     * 정산 데이터는 고치지 않고 사람이 확인할 이력으로만 남긴다
+     */
+    public static SettlementProcessHistory paidNotRecorded(Long settlementId, SettlementStatus status,
+                                                           Long ledgerWalletTxId, LocalDateTime now) {
+        SettlementErrorCode code = SettlementErrorCode.SETTLEMENT_LEDGER_PAID_NOT_RECORDED;
+        return new SettlementProcessHistory(SettlementHistoryTargetType.SETTLEMENT, settlementId,
+                SettlementHistoryStage.RECONCILE, 1, SettlementTrigger.LEDGER_RECHECK,
+                SettlementHistoryResult.MANUAL_REQUIRED, code.resultCode(),
+                "%s (정산서 %s, 원장 행 %d)".formatted(code.msg(), status, ledgerWalletTxId), null, null, now);
+    }
+
     // ---------- 판별 ----------
 
     /**

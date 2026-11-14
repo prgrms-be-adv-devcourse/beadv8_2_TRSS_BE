@@ -28,10 +28,12 @@ public enum SettlementErrorCode implements ErrorCode {
     SETTLEMENT_AMOUNT_MISMATCH(409, "정산 금액이 일치하지 않습니다."),
     SETTLEMENT_CANDIDATE_AMOUNT_INVALID(400, "주문 항목 금액이 올바르지 않아 정산 후보를 만들 수 없습니다."),
     SETTLEMENT_CANDIDATE_AMOUNT_TAMPERED(409, "정산 후보의 금액 스냅샷(판매가·수수료·지급액)이 서로 맞지 않습니다."),
+    SETTLEMENT_CANDIDATE_FEE_RATE_MISMATCH(409, "정산 후보의 수수료율이 후보를 만든 시점의 정책 수수료율과 다릅니다."),
 
     SETTLEMENT_LEDGER_MISSING(409, "지급된 정산서의 원장 기록을 찾을 수 없습니다."),
     SETTLEMENT_LEDGER_REPLACED(409, "지급된 정산서의 원장 행이 지급 당시와 다릅니다."),
     SETTLEMENT_LEDGER_AMOUNT_CHANGED(409, "지급된 정산서의 원장 금액이 지급 당시와 다릅니다."),
+    SETTLEMENT_LEDGER_PAID_NOT_RECORDED(409, "결제 원장에는 지급 기록이 있는데 정산서가 지급 완료로 기록되지 않았습니다."),
     SETTLEMENT_MONTH_RANGE_INVALID(400, "조회 기간이 올바르지 않습니다. 시작월은 끝월보다 늦을 수 없고, 정해진 개월 수까지만 볼 수 있습니다."),
     SETTLEMENT_EXPORT_TOO_LARGE(400, "내려받을 행이 너무 많습니다. 기간이나 조건을 줄여 주세요."),
     SETTLEMENT_EXPORT_FAILED(500, "엑셀 파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요."),
