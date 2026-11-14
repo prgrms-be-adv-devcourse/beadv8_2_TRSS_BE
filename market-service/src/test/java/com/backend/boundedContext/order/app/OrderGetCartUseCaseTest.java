@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -49,7 +50,7 @@ class OrderGetCartUseCaseTest {
 
     /** 옵션 ID = 상품 ID × 10 으로 두고, 판매자는 2번 */
     private OptionSnapshotDto onSale(Long optionId, long price, int stock) {
-        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, stock,
+        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, price, null, stock,
                 true, null, null);
     }
 
@@ -91,6 +92,28 @@ class OrderGetCartUseCaseTest {
         assertThat(item.productId()).isEqualTo(10L);
         assertThat(item.optionName()).isEqualTo("기본");
         assertThat(item.orderable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("정가·할인율은 현재 스냅샷 값을 그대로 담고, 금액은 단가(할인가) 기준이다. 옵션 추가금이 있어도 할인율을 다시 계산하지 않는다")
+    void listPriceAndDiscountRate() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 2, 110L, 1, 120L, 1)));
+        given(productApi.getOptions(List.of(100L, 110L, 120L))).willReturn(List.of(
+                // 정가 20,000원 25% 할인
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15_000, 20_000, 25, 5, true, null, null),
+                // 상품 10,000원 20% 할인 + 옵션 추가금 5,000원 → (15,000 − 13,000) / 15,000 = 13%가 아니라 20%
+                new OptionSnapshotDto(110L, 11L, 2L, "블러셔", "대용량", 13_000, 15_000, 20, 5, true, null, null),
+                // 할인 없음
+                onSale(120L, 9_000, 5)));
+
+        List<CartItemResponse> items = useCase.getCart(BUYER_ID).items();
+
+        assertThat(items).extracting(CartItemResponse::price, CartItemResponse::listPrice, CartItemResponse::discountRate,
+                        CartItemResponse::lineAmount)
+                .containsExactly(
+                        tuple(15_000L, 20_000L, 25, 30_000L),
+                        tuple(13_000L, 15_000L, 20, 13_000L),
+                        tuple(9_000L, 9_000L, null, 9_000L));
     }
 
     @Test
@@ -146,7 +169,7 @@ class OrderGetCartUseCaseTest {
     void optionDeleted() {
         given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1)));
         given(productApi.getOptions(List.of(100L))).willReturn(List.of(
-                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 5,
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 15000, null, 5,
                         false, ProductUnsaleableReason.OPTION_DELETED, null)));
 
         CartItemResponse item = useCase.getCart(BUYER_ID).items().get(0);

@@ -46,11 +46,11 @@ class OrderAddCartItemUseCaseTest {
     }
 
     private OptionSnapshotDto onSale(int stock) {
-        return new OptionSnapshotDto(OPTION_ID, 10L, 2L, "립스틱", "기본", 15000, stock, true, null, null);
+        return new OptionSnapshotDto(OPTION_ID, 10L, 2L, "립스틱", "기본", 15000, 15000, null, stock, true, null, null);
     }
 
     private OptionSnapshotDto unsaleable(ProductUnsaleableReason reason) {
-        return new OptionSnapshotDto(OPTION_ID, 10L, 2L, "립스틱", "기본", 15000, 10, false, reason, null);
+        return new OptionSnapshotDto(OPTION_ID, 10L, 2L, "립스틱", "기본", 15000, 15000, null, 10, false, reason, null);
     }
 
     @Test

@@ -1,6 +1,9 @@
 package com.backend.boundedContext.order.app;
 
 import com.backend.shared.order.dto.CartLineDto;
+import com.backend.boundedContext.order.domain.ReturnFilter;
+import com.backend.boundedContext.order.domain.ReturnItemDecision;
+import com.backend.boundedContext.order.domain.ReturnReasonCode;
 import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderCancelType;
@@ -37,6 +40,10 @@ public class OrderFacade {
     private final OrderRecheckPayingOrdersUseCase orderRecheckPayingOrdersUseCase;
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
     private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
+    private final OrderRequestReturnUseCase orderRequestReturnUseCase;
+    private final OrderGetAdminReturnsUseCase orderGetAdminReturnsUseCase;
+    private final OrderApproveReturnUseCase orderApproveReturnUseCase;
+    private final OrderRejectReturnUseCase orderRejectReturnUseCase;
     private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
     private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
@@ -112,6 +119,30 @@ public class OrderFacade {
     @Transactional
     public OrderConfirmResponse confirmOrder(Long buyerId, Long orderId) {
         return orderConfirmOrderUseCase.confirm(buyerId, orderId);
+    }
+
+    // 반품 요청 (구매자)
+    @Transactional
+    public ReturnRequestResponse requestReturn(Long buyerId, Long orderId, ReturnReasonCode reasonCode, String reason) {
+        return orderRequestReturnUseCase.request(buyerId, orderId, reasonCode, reason);
+    }
+
+    // 관리자 반품 목록
+    @Transactional(readOnly = true)
+    public PageResponse<AdminReturnSummaryResponse> getAdminReturns(ReturnFilter filter, Pageable pageable) {
+        return orderGetAdminReturnsUseCase.getReturns(filter, pageable);
+    }
+
+    // 관리자 반품 승인: 주문 상태·재고 복원·반품 승인 이벤트를 한 트랜잭션으로
+    @Transactional
+    public ReturnResultResponse approveReturn(Long orderId, List<ReturnItemDecision> decisions) {
+        return orderApproveReturnUseCase.approve(orderId, decisions);
+    }
+
+    // 관리자 반품 거절: 기준일이 지났으면 같은 트랜잭션에서 구매 확정
+    @Transactional
+    public ReturnResultResponse rejectReturn(Long orderId, String reason) {
+        return orderRejectReturnUseCase.reject(orderId, reason);
     }
 
     // 자동 구매확정 대상 주문 id 조회 (스케줄러)

@@ -159,7 +159,7 @@ class OrderGetOrdersUseCaseTest {
         given(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(withImage, sameOption), PAGE, 2));
         given(productApi.getOptions(List.of(100L))).willReturn(List.of(
-                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 10_000, 5, true, null, "https://img/lip.jpg")));
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 10_000, 10_000, null, 5, true, null, "https://img/lip.jpg")));
 
         List<OrderSummaryResponse> items = useCase.getOrders(BUYER_ID, null, null, null, PAGE).items();
 
