@@ -182,6 +182,11 @@ public class SettlementSupport {
         return settlementRepository.findRetryTargetIds(now, PageRequest.of(0, limit));
     }
 
+    /** 지급 결과 재확인 대상: PROCESSING이 된 지 오래된(processingStartedAt <= before) 정산서 */
+    public List<Long> findProcessingOverdueIds(LocalDateTime before, int limit) {
+        return settlementRepository.findProcessingOverdueIds(before, PageRequest.of(0, limit));
+    }
+
     /** 정산월 기간(양 끝 포함). 정산월은 yyyy-MM 문자열이라 문자열 비교로 순서가 맞다 */
     private static Specification<Settlement> monthBetween(YearMonth from, YearMonth to) {
         return (root, query, cb) -> cb.between(root.get("settlementMonth"), from.toString(), to.toString());

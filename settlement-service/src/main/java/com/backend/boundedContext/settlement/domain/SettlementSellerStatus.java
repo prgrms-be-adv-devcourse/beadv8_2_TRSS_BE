@@ -13,7 +13,7 @@ import java.util.List;
 public enum SettlementSellerStatus {
 
     /** 집계 완료, 지급 대기 */
-    SCHEDULED("지급 예정", List.of(SettlementStatus.READY)),
+    SCHEDULED("지급 예정", List.of(SettlementStatus.READY, SettlementStatus.PROCESSING)),
     /** 지급 완료 */
     PAID("지급 완료", List.of(SettlementStatus.PAID)),
     /** 지급 실패 후 재시도 중이거나 관리자 재처리 대기. 내부 사유는 숨긴다 */

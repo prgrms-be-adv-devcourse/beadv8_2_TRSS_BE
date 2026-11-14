@@ -43,7 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 지급(하나의 지급 트랜잭션 + 별도 실패 기록 트랜잭션)을 DB 없이 검증한다.
+ * 지급 3구간(① PROCESSING 선점 → ② 트랜잭션 밖 지급 요청 → ③ 결과 기록)과 결과 재확인을 DB 없이 검증한다.
+ * 결제가 거절한 4xx는 실패로, 5xx·응답 없음 같은 결과 모름은 PROCESSING으로 둔다(3차 코드리뷰 변경 제안 2).
  * Repository·SettlementPaymentPort·SettlementMemberPort는 메모리 가짜이고, 트랜잭션은 ResourcelessTransactionManager로 흉내 낸다.
  * Port 가짜는 동적 프록시로 쓰는 메서드만 흉내 내므로, Port에 메서드가 더 생겨도 이 테스트는 고칠 필요가 없다.
  */
@@ -109,7 +110,7 @@ class SettlementPayoutUseCaseTest {
     @DisplayName("관리자가 수동 실행한 월 정산 Job: 지급 기준은 자동 지급과 같고(READY 지급, 일시 오류는 FAILED) 이력은 ADMIN")
     void payout_adminRunJob() {
         Settlement s = saveReady();
-        paymentApi.transferError = () -> new IllegalStateException("일시 장애");
+        paymentApi.transferError = SettlementPayoutUseCaseTest::lockConflict;
 
         useCase.payout(SETTLEMENT_ID, SettlementTrigger.ADMIN, 900L, null);
         assertEquals(SettlementStatus.FAILED, s.getStatus());   // 관리자 재처리처럼 바로 MANUAL_REQUIRED가 되지 않는다
@@ -124,10 +125,10 @@ class SettlementPayoutUseCaseTest {
     }
 
     @Test
-    @DisplayName("지급 중 일시 오류: 롤백 후 별도 트랜잭션에서 FAILED + 다음 재시도 일시 + 실패 이력")
+    @DisplayName("결제가 거절한 재시도 가능 오류(4xx): 별도 트랜잭션에서 FAILED + 다음 재시도 일시 + 실패 이력")
     void payout_transientFailure() {
         Settlement s = saveReady();
-        paymentApi.transferError = () -> new IllegalStateException("DB 타임아웃");
+        paymentApi.transferError = SettlementPayoutUseCaseTest::lockConflict;
 
         SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
 
@@ -137,8 +138,8 @@ class SettlementPayoutUseCaseTest {
         assertNotNull(s.getNextRetryAt());
         SettlementProcessHistory h = histories.get(0);
         assertEquals(SettlementHistoryResult.FAILED, h.getResult());
-        assertEquals("IllegalStateException", h.getErrorCode());
-        assertFalse(h.getFailReason().contains("DB 타임아웃"));   // 사유에는 내부 메시지를 넣지 않음
+        assertEquals("409-LOCK_CONFLICT", h.getErrorCode());
+        assertEquals("잠시 후 다시 시도해 주세요.", h.getFailReason());
     }
 
     @Test
@@ -188,7 +189,7 @@ class SettlementPayoutUseCaseTest {
     @DisplayName("3번 실패하면 MANUAL_REQUIRED, 재시도 일시 전에는 건너뛰고 실패 횟수에 세지 않는다")
     void payout_failThreeTimes() {
         Settlement s = saveReady();
-        paymentApi.transferError = () -> new IllegalStateException("장애");
+        paymentApi.transferError = SettlementPayoutUseCaseTest::lockConflict;
 
         useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
         assertEquals(SettlementStatus.FAILED, s.getStatus());
@@ -219,7 +220,7 @@ class SettlementPayoutUseCaseTest {
             ReflectionTestUtils.setField(s, "status", SettlementStatus.FAILED);
             ReflectionTestUtils.setField(s, "retryCount", 1);
             ReflectionTestUtils.setField(s, "nextRetryAt", otherRetryAt);
-            return new IllegalStateException("DB 연결 끊김");
+            return lockConflict();
         };
 
         SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
@@ -230,7 +231,7 @@ class SettlementPayoutUseCaseTest {
         assertEquals(otherRetryAt, s.getNextRetryAt());      // 재시도 시각도 그대로
         SettlementProcessHistory h = histories.get(0);
         assertEquals(SettlementHistoryResult.SKIPPED, h.getResult());
-        assertEquals("IllegalStateException", h.getErrorCode());
+        assertEquals("409-LOCK_CONFLICT", h.getErrorCode());
     }
 
     @Test
@@ -240,7 +241,7 @@ class SettlementPayoutUseCaseTest {
         paymentApi.transferError = () -> {
             ReflectionTestUtils.setField(s, "status", SettlementStatus.MANUAL_REQUIRED);
             ReflectionTestUtils.setField(s, "retryCount", 1);
-            return new IllegalStateException("락 경합");
+            return lockConflict();
         };
 
         useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
@@ -289,7 +290,7 @@ class SettlementPayoutUseCaseTest {
         assertEquals("409-SETTLEMENT_STATE_INVALID", notManual.getResultCode());
 
         s.markManualRequired("금액 불일치");
-        paymentApi.transferError = () -> new IllegalStateException("장애");
+        paymentApi.transferError = SettlementPayoutUseCaseTest::lockConflict;
         useCase.retryManually(SETTLEMENT_ID, "지갑 확인 후 재처리");
         assertEquals(SettlementStatus.MANUAL_REQUIRED, s.getStatus());
 
@@ -342,6 +343,224 @@ class SettlementPayoutUseCaseTest {
         assertEquals("404-SETTLEMENT_NOT_FOUND", e.getResultCode());
     }
 
+    @Test
+    @DisplayName("결과 모름(응답 없음 등): PROCESSING으로 남고 결과 모름 이력을 남기며, 보류·재시도 대상에서 빠진다")
+    void payout_resultUnknown_staysProcessing() {
+        Settlement s = saveReady();
+        paymentApi.transferError = () -> new IllegalStateException("응답 시간 초과");
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, 900L, null);
+
+        assertTrue(result.processed());
+        assertEquals(SettlementStatus.PROCESSING, s.getStatus());
+        assertNotNull(s.getProcessingStartedAt());
+        assertEquals(0, s.getRetryCount());                          // 실패로 세지 않는다
+        assertEquals(SettlementHistoryResult.PROCESSING, histories.get(0).getResult());
+        assertThrows(DomainException.class, () -> s.hold("제재"));    // 보류(관리자·제재) 대상이 아니다
+        assertFalse(s.isPayable(false, LocalDateTime.now()));         // 재시도·Job 지급 대상이 아니다
+
+        SettlementPayoutResult again = useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
+        assertFalse(again.processed());
+        assertEquals(1, paymentApi.transferCalls);                   // 결과를 모르는 동안 다시 요청하지 않는다
+    }
+
+    @Test
+    @DisplayName("결제 5xx도 결과 모름으로 PROCESSING에 둔다")
+    void payout_payment5xx_staysProcessing() {
+        Settlement s = saveReady();
+        paymentApi.transferError = () -> new DomainException(errorCode(503, "PAYMENT_UNAVAILABLE", "결제 서비스 응답 없음"));
+
+        useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertEquals(SettlementStatus.PROCESSING, s.getStatus());
+    }
+
+    @Test
+    @DisplayName("연결 전 임시 구현(UnsupportedOperationException)은 요청을 보내지 않으므로 결과 모름이 아니라 실패로 기록한다")
+    void payout_notConnectedStub_failed() {
+        Settlement s = saveReady();
+        paymentApi.transferError = () -> new UnsupportedOperationException("결제 연결 전 임시 구현");
+
+        useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertEquals(SettlementStatus.FAILED, s.getStatus());
+    }
+
+    @Test
+    @DisplayName("결과 재확인: 결제 원장에 같은 금액의 지급 기록이 있으면 PAID")
+    void reconcile_ledgerFound_paid() {
+        Settlement s = saveProcessing();
+        paymentApi.ledger = new TransferResultDto("SETTLEMENT-31", 501L, 18_000L, 2_000L, LocalDateTime.now());
+
+        SettlementPayoutResult result = useCase.reconcileProcessing(SETTLEMENT_ID);
+
+        assertTrue(result.isPaid());
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+        assertEquals(501L, s.getWalletTxId());
+        assertEquals(SettlementHistoryResult.SUCCEEDED, histories.get(0).getResult());
+    }
+
+    @Test
+    @DisplayName("결과 재확인: 지급 기록이 없으면 FAILED(재시도 대상), 다음 재시도는 같은 멱등 키로 요청한다")
+    void reconcile_ledgerMissing_failed() {
+        Settlement s = saveProcessing();
+        paymentApi.ledger = null;
+
+        useCase.reconcileProcessing(SETTLEMENT_ID);
+
+        assertEquals(SettlementStatus.FAILED, s.getStatus());
+        assertEquals(1, s.getRetryCount());
+        assertNotNull(s.getNextRetryAt());
+        assertEquals("SETTLEMENT-31", s.getIdempotencyKey());
+    }
+
+    @Test
+    @DisplayName("결과 재확인: 원장 금액이 정산서와 다르면 MANUAL_REQUIRED")
+    void reconcile_ledgerAmountDiffers_manual() {
+        Settlement s = saveProcessing();
+        paymentApi.ledger = new TransferResultDto("SETTLEMENT-31", 501L, 17_000L, 2_000L, LocalDateTime.now());
+
+        useCase.reconcileProcessing(SETTLEMENT_ID);
+
+        assertEquals(SettlementStatus.MANUAL_REQUIRED, s.getStatus());
+    }
+
+    @Test
+    @DisplayName("결과 재확인: PROCESSING이 아니면(응답이 먼저 와서 확정됨) 아무것도 바꾸지 않는다")
+    void reconcile_notProcessing_skipped() {
+        Settlement s = saveReady();
+
+        SettlementPayoutResult result = useCase.reconcileProcessing(SETTLEMENT_ID);
+
+        assertFalse(result.processed());
+        assertEquals(SettlementStatus.READY, s.getStatus());
+        assertEquals(0, paymentApi.findCalls);
+    }
+
+    @Test
+    @DisplayName("지급 응답을 받기 전에 재확인이 먼저 PAID로 확정했으면, 늦게 온 응답은 SKIPPED 이력만 남긴다")
+    void complete_afterReconcile_skipped() {
+        Settlement s = saveReady();
+        paymentApi.beforeReturn = () -> {
+            // 응답이 늦어지는 사이 재확인 스케줄러가 같은 키의 원장을 찾아 PAID로 확정한 상황
+            s.markPaid(501L, LocalDateTime.now());
+        };
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertFalse(result.processed());
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+        assertEquals(SettlementHistoryResult.SKIPPED, histories.get(0).getResult());
+    }
+
+    @Test
+    @DisplayName("관리자 재처리의 결과를 모른 채 재확인에서 지급 기록이 없으면, 자동 재시도(FAILED)가 아니라 MANUAL_REQUIRED로 둔다")
+    void reconcile_manualRetryLedgerMissing_staysManual() {
+        Settlement s = saveReady();
+        s.markManualRequired("판매자 지갑 없음");                     // 재시도 불가 사유로 1회 만에 MANUAL_REQUIRED
+        paymentApi.transferError = () -> new IllegalStateException("응답 시간 초과");
+        useCase.retryManually(SETTLEMENT_ID, "지갑 생성 확인 후 재처리");
+        assertEquals(SettlementStatus.PROCESSING, s.getStatus());
+        assertTrue(s.isProcessingManual());
+
+        paymentApi.ledger = null;
+        useCase.reconcileProcessing(SETTLEMENT_ID);
+
+        assertEquals(SettlementStatus.MANUAL_REQUIRED, s.getStatus());
+        assertEquals(2, s.getRetryCount());                           // 3회 미만이어도 FAILED로 가지 않는다
+        assertFalse(s.isPayable(false, LocalDateTime.now().plusDays(1)));   // 재시도 스케줄러 대상이 아니다
+        assertFalse(s.isProcessingManual());
+        assertEquals(SettlementHistoryResult.MANUAL_REQUIRED, histories.get(histories.size() - 1).getResult());
+    }
+
+    @Test
+    @DisplayName("자동 지급의 PROCESSING은 관리자 재처리 표시가 없어, 재확인에서 지급 기록이 없으면 FAILED(재시도 대상)")
+    void payout_autoProcessing_notMarkedManual() {
+        Settlement s = saveReady();
+        paymentApi.transferError = () -> new IllegalStateException("응답 시간 초과");
+
+        useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
+
+        assertEquals(SettlementStatus.PROCESSING, s.getStatus());
+        assertFalse(s.isProcessingManual());
+    }
+
+    @Test
+    @DisplayName("지급 응답이 늦어 재확인이 먼저 FAILED로 바꿨어도, 늦게 온 성공 응답으로 PAID로 확정한다")
+    void complete_afterReconcileFailed_paid() {
+        Settlement s = saveReady();
+        paymentApi.beforeReturn = () -> s.markFailed("결과 확인: 결제 원장에 지급 기록 없음", LocalDateTime.now(), 3, 10);
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertTrue(result.isPaid());
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+        assertEquals(500L, s.getWalletTxId());
+        assertEquals(SettlementHistoryResult.SUCCEEDED, histories.get(histories.size() - 1).getResult());
+    }
+
+    @Test
+    @DisplayName("재확인이 먼저 MANUAL_REQUIRED로 바꿨어도(재시도 소진) 늦게 온 성공 응답으로 PAID로 확정한다")
+    void complete_afterReconcileManual_paid() {
+        Settlement s = saveReady();
+        paymentApi.beforeReturn = () -> s.markManualRequired("결과 확인: 결제 원장에 지급 기록 없음");
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertTrue(result.isPaid());
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+    }
+
+    @Test
+    @DisplayName("늦게 온 성공 응답이어도 금액이 정산서와 다르면 PAID로 바꾸지 않고 MANUAL_REQUIRED")
+    void complete_afterReconcileFailed_amountDiffers_manual() {
+        Settlement s = saveReady();
+        paymentApi.beforeReturn = () -> s.markFailed("결과 확인: 결제 원장에 지급 기록 없음", LocalDateTime.now(), 3, 10);
+        paymentApi.overridePayout = 17_000L;
+
+        useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertEquals(SettlementStatus.MANUAL_REQUIRED, s.getStatus());
+    }
+
+    @Test
+    @DisplayName("지급은 됐는데 그사이 관리자가 보류(HOLD)했으면 상태를 바꾸지 않고 확인 필요 이력을 남긴다")
+    void complete_afterHold_keepsHoldAndRecords() {
+        Settlement s = saveReady();
+        paymentApi.beforeReturn = () -> {
+            s.markFailed("결과 확인: 결제 원장에 지급 기록 없음", LocalDateTime.now(), 3, 10);
+            s.hold("관리자 보류");
+        };
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertFalse(result.processed());
+        assertEquals(SettlementStatus.HOLD, s.getStatus());
+        SettlementProcessHistory last = histories.get(histories.size() - 1);
+        assertEquals(SettlementHistoryResult.SKIPPED, last.getResult());
+        assertTrue(last.getFailReason().contains("확인 필요"));
+    }
+
+    /** 재시도할 수 있는 4xx 거절(결제가 판단을 마쳐 돈이 움직이지 않음) */
+    private static DomainException lockConflict() {
+        return new DomainException(errorCode(409, "LOCK_CONFLICT", "잠시 후 다시 시도해 주세요."));
+    }
+
+    private static com.backend.global.exception.ErrorCode errorCode(int status, String name, String msg) {
+        return new com.backend.global.exception.ErrorCode() {
+            public int status() { return status; }
+            public String name() { return name; }
+            public String msg() { return msg; }
+        };
+    }
+
+    /** 지급을 요청했는데 결과를 모르는 PROCESSING 정산서 (5분 넘게 지남) */
+    private Settlement saveProcessing() {
+        Settlement s = saveReady();
+        s.markProcessing(LocalDateTime.now().minusMinutes(10));
+        return s;
+    }
+
     /** 주문 2건(10,000 + 10,000)이 묶인 READY 정산서: 지급 18,000 / 수수료 2,000 */
     private Settlement saveReady() {
         Settlement s = Settlement.create(SELLER_ID, "2026-09", null);
@@ -382,14 +601,18 @@ class SettlementPayoutUseCaseTest {
     /** 결제 컨텍스트 가짜의 상태. 호출 횟수와 마지막 명령을 기록한다 */
     private static class FakePayment {
         Supplier<RuntimeException> transferError;
+        Runnable beforeReturn;
         Long overridePayout;
+        TransferResultDto ledger;
         SettlementTransferCommand lastCommand;
         int transferCalls;
+        int findCalls;
 
         TransferResultDto transfer(SettlementTransferCommand command) {
             transferCalls++;
             lastCommand = command;
             if (transferError != null) throw transferError.get();
+            if (beforeReturn != null) beforeReturn.run();
             long payout = overridePayout != null ? overridePayout : command.payoutAmount();
             return new TransferResultDto(command.idempotencyKey(), 500L, payout, command.feeAmount(),
                     LocalDateTime.now());
@@ -399,6 +622,10 @@ class SettlementPayoutUseCaseTest {
     /** SettlementPaymentPort를 프록시로 만들어 transfer를 FakePayment로 넘긴다 */
     private SettlementPaymentPort fakePaymentPort() {
         return fake(SettlementPaymentPort.class, Map.of(
-                "transfer", args -> paymentApi.transfer((SettlementTransferCommand) args[0])));
+                "transfer", args -> paymentApi.transfer((SettlementTransferCommand) args[0]),
+                "findTransfer", args -> {
+                    paymentApi.findCalls++;
+                    return Optional.ofNullable(paymentApi.ledger);
+                }));
     }
 }

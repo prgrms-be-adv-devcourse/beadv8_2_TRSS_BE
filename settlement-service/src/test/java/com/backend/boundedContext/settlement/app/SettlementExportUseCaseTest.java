@@ -183,7 +183,7 @@ class SettlementExportUseCaseTest {
     }
 
     private static SettlementPolicy policy(int batchChunkSize, int exportMaxRows) {
-        return new SettlementPolicy(10, 10, 3, 10, batchChunkSize, 50, false, 2, 12, exportMaxRows);
+        return new SettlementPolicy(10, 10, 3, 10, batchChunkSize, 50, false, 2, 12, exportMaxRows, 5);
     }
 
     private SettlementExportUseCase useCase(SettlementPolicy policy) {

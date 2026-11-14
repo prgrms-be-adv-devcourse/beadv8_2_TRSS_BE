@@ -18,7 +18,8 @@ import java.util.Arrays;
  * 정산서
  *
  * 판매자 1명 × 정산월 1개 = 1건이며, 지급 처리 단위(판매자 1명 = 정산서 1건 = 처리 단위 1개)
- * 지급은 하나의 트랜잭션으로 끝나므로 처리 중(PROCESSING) 상태가 없다
+ * 지급은 ① 짧은 트랜잭션에서 PROCESSING 선점 → ② 트랜잭션 밖에서 결제 지급 요청 → ③ 짧은 트랜잭션에서 결과 기록으로 나뉜다.
+ * 결제가 다른 서비스(HTTP)라 결과를 모르는 경우(응답 없음, 5xx)가 생기므로, 그동안은 PROCESSING으로 둔다
  * 상태는 엔티티 메서드로만 바꾸고, 잘못된 전이는 409 SETTLEMENT_STATE_INVALID로 막는다
  */
 @Entity
@@ -81,6 +82,14 @@ public class Settlement extends BaseIdAndTime {
     private String holdReason;
 
     private LocalDateTime paidAt;
+
+    /** 지급 요청을 시작한 시각(PROCESSING으로 바꾼 시각). 재확인 스케줄러가 이 시각 + processingRecheckMinutes가 지난 건을 확정한다 */
+    private LocalDateTime processingStartedAt;
+
+    /** 지금 PROCESSING이 관리자 재처리(MANUAL_REQUIRED에서 시작)인지. 재확인에서 지급 기록이 없으면
+     * 자동 재시도(FAILED)로 되돌리지 않고 MANUAL_REQUIRED로 둔다. PROCESSING이 끝나면 false */
+    @Column(nullable = false)
+    private boolean processingManual;
 
     /** 지급 원장(wallet_transaction) ID
      * 결제 컨텍스트 테이블이라 연관관계 없이 ID만 둔다 */
@@ -183,9 +192,38 @@ public class Settlement extends BaseIdAndTime {
         throw new IllegalStateException("정산서는 삭제할 수 없습니다. 보류·조정으로 정정하세요.");
     }
 
-    /** ① 지급 성공 */
-    public void markPaid(Long walletTxId, LocalDateTime paidAt) {
+    /**
+     * ① 지급 요청 선점: 결제를 호출하기 전에 커밋한다
+     * 지급 가능한 상태(READY·FAILED·MANUAL_REQUIRED)에서만 가능하다
+     */
+    public void markProcessing(LocalDateTime now) {
+        markProcessing(now, false);
+    }
+
+    /** manual: 관리자 재처리로 시작한 지급 요청인지(재확인에서 지급 기록이 없을 때 MANUAL_REQUIRED로 되돌리기 위해 남긴다) */
+    public void markProcessing(LocalDateTime now, boolean manual) {
         requirePayableStatus();
+        this.status = SettlementStatus.PROCESSING;
+        this.processingStartedAt = now;
+        this.processingManual = manual;
+        this.nextRetryAt = null;
+    }
+
+    /** PROCESSING이 된 지 recheckMinutes가 지났는지 (재확인 스케줄러 대상) */
+    public boolean isProcessingOverdue(LocalDateTime now, int recheckMinutes) {
+        return status == SettlementStatus.PROCESSING && processingStartedAt != null
+                && !processingStartedAt.plusMinutes(recheckMinutes).isAfter(now);
+    }
+
+    /**
+     * ③ 지급 성공
+     * 지급 경로는 PROCESSING에서 부른다. 테스트·데이터 준비를 위해 지급 가능 상태에서도 허용한다
+     */
+    public void markPaid(Long walletTxId, LocalDateTime paidAt) {
+        requireStatus(SettlementStatus.PROCESSING, SettlementStatus.READY, SettlementStatus.FAILED,
+                SettlementStatus.MANUAL_REQUIRED);
+        this.processingStartedAt = null;
+        this.processingManual = false;
         this.status = SettlementStatus.PAID;
         this.walletTxId = walletTxId;
         this.paidAt = paidAt;
@@ -201,7 +239,10 @@ public class Settlement extends BaseIdAndTime {
      */
     public void markFailed(String reason, LocalDateTime now, int maxAttempts, int retryIntervalMinutes) {
         // MANUAL_REQUIRED는 자동 재시도로 되돌리지 않는다(3회 실패하면 자동 재시도를 멈춘다)
-        requireStatus(SettlementStatus.READY, SettlementStatus.FAILED);
+        // PROCESSING: 결제가 확실히 거절했거나(4xx) 재확인에서 지급 기록이 없을 때
+        requireStatus(SettlementStatus.READY, SettlementStatus.FAILED, SettlementStatus.PROCESSING);
+        this.processingStartedAt = null;
+        this.processingManual = false;
         this.retryCount += 1;
         this.lastFailReason = truncate(reason);
         if (retryCount >= maxAttempts) {
@@ -218,7 +259,10 @@ public class Settlement extends BaseIdAndTime {
      * 바로 MANUAL_REQUIRED
      */
     public void markManualRequired(String reason) {
-        requirePayableStatus();
+        requireStatus(SettlementStatus.READY, SettlementStatus.FAILED, SettlementStatus.MANUAL_REQUIRED,
+                SettlementStatus.PROCESSING);
+        this.processingStartedAt = null;
+        this.processingManual = false;
         this.retryCount += 1;
         this.lastFailReason = truncate(reason);
         this.status = SettlementStatus.MANUAL_REQUIRED;

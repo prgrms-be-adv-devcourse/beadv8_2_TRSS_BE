@@ -41,6 +41,18 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long>, J
     List<Long> findMonthlyPayoutTargetIds(@Param("month") String month, @Param("afterId") Long afterId,
                                           Pageable pageable);
 
+    /**
+     * 지급 결과 재확인 대상: PROCESSING(결과 모름)이 된 지 오래된 정산서. 오래된 순
+     * @param before processingStartedAt이 이 시각 이전(포함)인 건만
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PROCESSING
+               and s.processingStartedAt <= :before
+             order by s.processingStartedAt, s.id
+            """)
+    List<Long> findProcessingOverdueIds(@Param("before") LocalDateTime before, Pageable pageable);
+
     /** 재시도 스케줄러 대상: 다음 재시도 일시가 지난 FAILED + READY(보류 해제·집계 후 지급 전에 멈춘 건) */
     @Query("""
             select s.id from Settlement s

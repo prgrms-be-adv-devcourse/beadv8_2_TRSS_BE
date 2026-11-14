@@ -76,7 +76,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 반품 환불 | payment | `OrderReturnedEvent` 수신(Kafka `order.events`) → 홀딩 → 구매자 지갑(REFUND), 플랫폼 지갑 → 구매자 지갑(배송비, SHIPPING_FEE_REFUND), 홀딩 → 플랫폼 지갑(장바구니 쿠폰 지원금, COUPON_SUBSIDY_CANCEL) → 결제 REFUNDED, 홀딩 RELEASED (결제 담당 구현 예정, 지금은 받는 코드 없음) | 이벤트, 별도 Tx |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시, 배송지 있는 주문은 배송 완료 뒤) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
-| 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
+| 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)`(잠금 밖) → ① 정산서 잠금·확인 후 PROCESSING 커밋 → ② `PaymentApi.transfer(command)`(트랜잭션 밖) → ③ 결과 기록(PAID / 4xx면 FAILED·MANUAL_REQUIRED / 결과 모름이면 PROCESSING 유지, 재확인 스케줄러가 `findTransfer`로 확정) | 동기(HTTP), 트랜잭션 세 개 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `SellerWithdrawalRequestedEvent` → (market) 판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원 | 이벤트 (미정산 확인은 동기 조회, 조회 실패 시 503) |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기 조회 (조회 실패 시 503) |
@@ -586,7 +586,8 @@ public interface PaymentApi {
      * 정산 지급: 홀딩 → 판매자 지갑(SETTLEMENT), 홀딩 → 관리자 지갑(FEE).
      * 주문별 홀딩의 settled_amount를 늘리고, 다 차면 SETTLED로 바꾼다.
      * idempotencyKey(SETTLEMENT-{settlementId})가 이미 처리됐으면 기존 결과를 반환한다.
-     * 호출한 쪽 트랜잭션에 참여(REQUIRED)한다.
+     * HTTP라 호출한 쪽 트랜잭션에 참여하지 않는다. 4xx는 "돈이 움직이지 않은 거절", 5xx·응답 없음은 "결과 모름"이다.
+     * 같은 키 요청이 겹쳐도 두 번째 요청이 오류 대신 기존 결과를 받도록, 결제 쪽은 홀딩을 잠근 뒤 지급 내역을 한 번 더 찾는다(결제 담당).
      * 오류: 404 WALLET_NOT_FOUND, 404 HOLDING_NOT_FOUND, 409 HOLDING_INSUFFICIENT, 409 TRANSFER_AMOUNT_MISMATCH
      */
     TransferResultDto transfer(SettlementTransferCommand command);

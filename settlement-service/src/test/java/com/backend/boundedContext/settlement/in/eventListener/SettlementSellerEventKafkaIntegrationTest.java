@@ -135,12 +135,13 @@ class SettlementSellerEventKafkaIntegrationTest {
     }
 
     @Test
-    @DisplayName("제재 이벤트는 READY·FAILED·MANUAL_REQUIRED 정산서를 모두 HOLD로 바꾸고 PAID는 그대로 둔다. 같은 메시지가 다시 와도 이력이 늘지 않는다")
+    @DisplayName("제재 이벤트는 READY·FAILED·MANUAL_REQUIRED 정산서를 모두 HOLD로 바꾸고 PAID·PROCESSING(지급 결과 확인 중)은 그대로 둔다. 같은 메시지가 다시 와도 이력이 늘지 않는다")
     void sanctionedEvent_holdsPayableSettlements_andIgnoresRedelivery() {
         Long ready = saveSettlement("2026-07", s -> { });
         Long failed = saveSettlement("2026-08", s -> s.markFailed("일시 오류", LocalDateTime.now(), 3, 10));
         Long manual = saveSettlement("2026-09", s -> s.markManualRequired("금액 불일치"));
         Long paid = saveSettlement("2026-06", s -> s.markPaid(1L, LocalDateTime.now()));
+        Long processing = saveSettlement("2026-05", s -> s.markProcessing(LocalDateTime.now()));
 
         UUID eventId = publish(new SellerSanctionedEvent(sellerId, "위조 상품 판매"));
         relayUntilPublished(eventId);
@@ -150,6 +151,7 @@ class SettlementSellerEventKafkaIntegrationTest {
         assertThat(statusOf(failed)).isEqualTo(SettlementStatus.HOLD);
         assertThat(statusOf(manual)).isEqualTo(SettlementStatus.HOLD);
         assertThat(statusOf(paid)).isEqualTo(SettlementStatus.PAID);
+        assertThat(statusOf(processing)).isEqualTo(SettlementStatus.PROCESSING);   // 결과 확인 전이라 보류하지 않는다
         assertThat(historyCount()).isEqualTo(3);
 
         // 같은 메시지를 다시 보낸다(Kafka 재전달 흉내). 뒤에 다른 제재 이벤트를 보내, 그것이 처리됐을 때

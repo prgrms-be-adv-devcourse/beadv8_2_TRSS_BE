@@ -18,11 +18,12 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 정산 스케줄러 3개
+ * 정산 스케줄러 4개
  *   매일 03:35 KST: 원장 재대조(지난 lookbackDays(2)일 동안 지급된 정산서 = T+1 + 풀리지 않은 불일치 정산서) 후 원장 불일치 보류 정리.
  *                   custom.settlement.ledgerRecheck.enabled일 때만
  *   매월 payDayOfMonth(10)일 00:00 KST: 지난달 월 정산 Job 실행
  *   10분마다: 다음 재시도 일시가 지난 FAILED + READY(보류 해제·지급 전에 멈춘 건) 정산서를 최대 retryBatchSize(50)건 지급
+ *   5분마다: PROCESSING(지급 요청 결과 모름)이 된 지 processingRecheckMinutes(5)분이 지난 정산서를 결제 원장으로 확정
  *
  * 재시도 간격(운영 2시간, 테스트 10분)은 실패 기록 때 다음 재시도 일시로 정해지고, 스케줄러는 10분마다 그 시각이 지났는지만 본다.
  * 스케줄러 스레드가 여러 개(spring.task.scheduling.pool.size)라 두 작업이 동시에 돌 수 있다.
@@ -125,6 +126,31 @@ public class SettlementScheduler {
         } catch (Exception e) {
             log.error("원장 재대조 스케줄 오류 settlementId={}", settlementId, e);
             return null;
+        }
+    }
+
+    /**
+     * 지급 결과 재확인: 5분마다 PROCESSING(결과 모름)이 된 지 processingRecheckMinutes가 지난 정산서를
+     * 결제 원장(findTransfer)으로 확정한다(PAID, FAILED, MANUAL_REQUIRED).
+     * PROCESSING은 Job·재시도 스케줄러의 지급 대상이 아니므로 월 정산 Job이 실행 중이어도 겹치지 않는다
+     * 원장 조회가 실패한 건은 PROCESSING으로 남고 ERROR 로그로 알린 뒤 다음 회차에 다시 본다
+     */
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Seoul")
+    public void reconcileProcessingPayouts() {
+        List<Long> settlementIds = settlementFacade.findProcessingOverdueIds(settlementPolicy.getRetryBatchSize());
+        int confirmed = 0;
+        int failed = 0;
+        for (Long settlementId : settlementIds) {
+            try {
+                settlementFacade.reconcileProcessing(settlementId);
+                confirmed++;
+            } catch (Exception e) {
+                failed++;
+                log.error("정산 지급 결과 재확인 실패, PROCESSING으로 남김 settlementId={}", settlementId, e);
+            }
+        }
+        if (!settlementIds.isEmpty()) {
+            log.info("정산 지급 결과 재확인 targets={} confirmed={} failed={}", settlementIds.size(), confirmed, failed);
         }
     }
 

@@ -55,7 +55,9 @@ public interface PaymentApi {
     /**
      * 정산 지급: 홀딩 → 판매자 지갑(SETTLEMENT), 홀딩 → 관리자 지갑(FEE).
      * 주문별 홀딩의 settled_amount를 늘리고, 다 차면 SETTLED로 바꾼다.
-     * 호출한 쪽 트랜잭션에 참여(REQUIRED)하고, 실패하면 DomainException을 던진다.
+     * HTTP(POST /internal/v1/payments/transfers)라 호출한 쪽 트랜잭션에 참여하지 않는다. 결제가 자기 트랜잭션으로 커밋한 뒤 응답한다.
+     * 정산은 호출 전에 정산서를 PROCESSING으로 커밋하고, 응답이 없거나 5xx면 PROCESSING으로 둔 채 findTransfer로 확정한다.
+     * 결제가 판단을 마친 거절은 4xx DomainException으로 돌려준다(돈이 움직이지 않았다는 뜻).
      * 재시도해도 같은 실패: 404-WALLET_NOT_FOUND, 404-HOLDING_NOT_FOUND, 409-HOLDING_INSUFFICIENT, 409-TRANSFER_AMOUNT_MISMATCH
      * idempotencyKey(SETTLEMENT-{settlementId})가 이미 처리됐으면 기존 결과를 반환한다.
      */
