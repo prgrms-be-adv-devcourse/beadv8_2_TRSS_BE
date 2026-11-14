@@ -37,6 +37,7 @@ class OrderListPriceMigrationQaTest {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("discount_rate", "integer", "YES"),
                         org.assertj.core.groups.Tuple.tuple("list_unit_price", "bigint", "NO"));
+        // V14가 마지막 마이그레이션인지는 보지 않는다. 뒤에 마이그레이션이 추가되면 깨지기 때문이다
         assertThat(jdbcTemplate.queryForObject(
                 "select success from flyway_schema_history where version = '14'", Boolean.class)).isTrue();
     }

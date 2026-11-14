@@ -1,0 +1,39 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "tokenizer": {
+        "korean_mixed": {
+          "type": "nori_tokenizer",
+          "decompound_mode": "mixed"
+        }
+      },
+      "analyzer": {
+        "korean": {
+          "type": "custom",
+          "tokenizer": "korean_mixed",
+          "filter": ["lowercase", "nori_readingform", "nori_part_of_speech"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "productId": { "type": "long" },
+      "name": {
+        "type": "text",
+        "analyzer": "korean",
+        "fields": {
+          "keyword": { "type": "keyword", "ignore_above": 256 }
+        }
+      },
+      "categoryId": { "type": "long" },
+      "status": { "type": "keyword" },
+      "soldOut": { "type": "boolean" },
+      "effectivePrice": { "type": "long" },
+      "createdAt": { "type": "date", "format": "epoch_millis" }
+    }
+  }
+}

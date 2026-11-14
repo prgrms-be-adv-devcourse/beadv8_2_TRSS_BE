@@ -9,6 +9,7 @@ import com.backend.shared.product.dto.StockRestoreReason;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,9 +23,10 @@ public class ProductRestoreStockUseCase {
     /**
      * 주문 취소·만료·반품으로 재고를 되돌린다.
      * 같은 주문 항목·사유로 이미 복원했으면 건너뛰고, 차감한 적 없는 항목이면 호출 순서 오류다.
+     * 옵션이 품절에서 풀린 상품 ID를 돌려준다 (검색 색인의 품절 여부를 다시 맞출 상품).
      */
-    public void restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
-        if (items.isEmpty()) return;
+    public Set<Long> restoreStock(List<StockChangeDto> items, StockRestoreReason reason) {
+        if (items.isEmpty()) return Set.of();
 
         StockChangeType changeType = toChangeType(reason);
         List<Long> orderItemIds = items.stream().map(StockChangeDto::orderItemId).toList();
@@ -34,6 +36,7 @@ public class ProductRestoreStockUseCase {
         Set<Long> restored = productSupport.findProcessedOrderItemIds(orderItemIds, changeType);
         Set<Long> deducted = productSupport.findProcessedOrderItemIds(orderItemIds, StockChangeType.ORDER_DEDUCT);
 
+        Set<Long> soldOutChanged = new HashSet<>();
         for (StockChangeDto item : items) {
             if (restored.contains(item.orderItemId())) continue;
             if (!deducted.contains(item.orderItemId())) {
@@ -41,10 +44,15 @@ public class ProductRestoreStockUseCase {
             }
 
             OptionStock stock = stocks.get(item.optionId());
+            boolean wasSoldOut = stock.isSoldOut();
             stock.restoreStock(item.quantity(), changeType);   // 반품 복원인데 삭제된 상품·옵션이면 409
             stockHistoryRepository.save(StockHistory.ofOrder(
                     stock, changeType, item.quantity(), item.orderId(), item.orderItemId()));
+            if (wasSoldOut != stock.isSoldOut()) {
+                soldOutChanged.add(stock.getOption().getProduct().getId());
+            }
         }
+        return soldOutChanged;
     }
 
     private StockChangeType toChangeType(StockRestoreReason reason) {

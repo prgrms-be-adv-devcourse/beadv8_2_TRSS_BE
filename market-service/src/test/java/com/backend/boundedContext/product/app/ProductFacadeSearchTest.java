@@ -14,6 +14,7 @@ import com.backend.boundedContext.product.out.CategoryRepository;
 import com.backend.boundedContext.product.out.OptionStockRepository;
 import com.backend.boundedContext.product.out.ProductOptionRepository;
 import com.backend.boundedContext.product.out.ProductRepository;
+import com.backend.boundedContext.product.out.ProductSearchPort;
 import com.backend.global.exception.DomainException;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.member.dto.SellerDto;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -64,6 +66,15 @@ class ProductFacadeSearchTest {
 
     @Autowired
     private OptionStockRepository optionStockRepository;
+
+    @Autowired
+    private ProductSupport productSupport;
+
+    @Autowired
+    private ProductImageSupport productImageSupport;
+
+    @Autowired
+    private ProductDiscountSupport productDiscountSupport;
 
     @MockitoBean
     private MemberApi memberApi;
@@ -256,6 +267,29 @@ class ProductFacadeSearchTest {
                     .isInstanceOf(DomainException.class)
                     .extracting("resultCode").isEqualTo("404-PRODUCT_NOT_FOUND");
         }
+    }
+
+    @Test
+    @DisplayName("검색 색인이 늦어 판매 중지·삭제·카테고리 사용 중지·없는 상품의 ID가 와도 DB의 현재 상태로 걸러 판매 중 상품만 돌려준다")
+    void searchFiltersStaleIndexResults() {
+        Product onSale = create(skincare, KEY + " 판매 중", 10_000, 10);
+        Product stopped = create(skincare, KEY + " 중지", 10_000, 10);
+        setStatus(stopped, ProductSaleStatus.STOPPED);
+        Product deleted = create(skincare, KEY + " 삭제", 10_000, 10);
+        setStatus(deleted, ProductSaleStatus.DELETED);
+        Product inactiveCategory = create(makeup, KEY + " 사용 중지 카테고리", 10_000, 10);
+        makeup.modify(null, false);
+
+        // 색인에는 아직 예전 상태(모두 판매 중)가 남아 있는 상황: 검색 구현이 다섯 개 ID를 정렬 순서대로 돌려준다
+        List<Long> staleIds = List.of(stopped.getId(), onSale.getId(), deleted.getId(), inactiveCategory.getId(), Long.MAX_VALUE);
+        ProductSearchPort staleIndex = (query, pageable) -> new PageImpl<>(staleIds, pageable, staleIds.size());
+        ProductSearchProductsUseCase useCase = new ProductSearchProductsUseCase(
+                productSupport, productImageSupport, productDiscountSupport, staleIndex, productRepository);
+
+        PageResponse<ProductSummaryDto> result = useCase.searchProducts(KEY, null, ProductSort.LATEST, true, PageRequest.of(0, 20));
+
+        assertThat(ids(result)).containsExactly(onSale.getId());
+        assertThat(result.totalElements()).isEqualTo(staleIds.size());   // 개수는 검색 구현의 값 그대로
     }
 
     @Test
