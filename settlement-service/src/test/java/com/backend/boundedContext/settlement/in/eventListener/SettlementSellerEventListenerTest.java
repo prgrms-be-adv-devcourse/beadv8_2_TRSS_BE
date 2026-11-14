@@ -75,15 +75,41 @@ class SettlementSellerEventListenerTest {
     }
 
     @Test
-    @DisplayName("헤더 없이 온 다른 판매자 이벤트(콘솔로 다시 보낸 DLT 메시지 등)는 봉투를 읽어 거르고 처리 기록도 남기지 않는다")
+    @DisplayName("헤더 없이 온 다른 판매자 이벤트(콘솔로 다시 보낸 DLT 메시지 등)는 봉투의 eventType만 읽어 거르고 payload는 읽지 않는다")
     void otherSellerEventWithoutHeader_ignored() {
-        EventEnvelope<DomainEvent> envelope = EventEnvelope.wrap(new SellerWithdrawalRequestedEvent(SELLER_ID, "폐업 예정"));
         ConsumerRecord<String, String> record = new ConsumerRecord<>("seller.events", 0, 0, "7", "json");
-        given(eventMessages.read("json")).willReturn(envelope);
+        given(eventMessages.eventTypeOf("json")).willReturn(SellerWithdrawalRequestedEvent.class.getSimpleName());
 
         listener.handle(record);
 
+        verify(eventMessages, never()).read(anyString());
         verifyNoInteractions(processedEvents, settlementFacade);
+    }
+
+    @Test
+    @DisplayName("헤더 없이 온, 이 앱이 아직 모르는 새 판매자 이벤트도 역직렬화하지 않고 건너뛴다(DLT로 보내지 않음)")
+    void unknownSellerEventWithoutHeader_ignored() {
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("seller.events", 0, 0, "7", "json");
+        given(eventMessages.eventTypeOf("json")).willReturn("SellerSomethingNewEvent");
+
+        listener.handle(record);
+
+        verify(eventMessages, never()).read(anyString());
+        verifyNoInteractions(processedEvents, settlementFacade);
+    }
+
+    @Test
+    @DisplayName("헤더 없이 온 제재 이벤트는 봉투를 읽어 처리한다")
+    void sanctionedWithoutHeader_processed() {
+        EventEnvelope<DomainEvent> envelope = EventEnvelope.wrap(new SellerSanctionedEvent(SELLER_ID, "위조 상품 판매"));
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("seller.events", 0, 0, "7", "json");
+        given(eventMessages.eventTypeOf("json")).willReturn(SellerSanctionedEvent.class.getSimpleName());
+        given(eventMessages.read("json")).willReturn(envelope);
+        given(processedEvents.markProcessed(envelope.eventId(), SettlementSellerEventListener.CONSUMER)).willReturn(true);
+
+        listener.handle(record);
+
+        verify(settlementFacade).holdSellerBySanctionEvent(SELLER_ID, "위조 상품 판매");
     }
 
     private void receive(DomainEvent event, boolean firstTime) {

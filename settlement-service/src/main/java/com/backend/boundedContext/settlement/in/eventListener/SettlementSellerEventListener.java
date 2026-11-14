@@ -24,7 +24,8 @@ import lombok.RequiredArgsConstructor;
  * 메시지 키가 sellerId라 같은 판매자 이벤트는 보낸 순서대로 받는다.
  * 한 메시지를 하나의 트랜잭션에서 처리한다(@Transactional).
  *   1. seller.events에 함께 오는 다른 판매자 이벤트(철회 요청·철회 거절 등)는 정산이 할 일이 없으므로 무시한다.
- *      eventType 헤더로 먼저 거르고(payload를 읽지 않음), 헤더가 없는 메시지(콘솔로 다시 보낸 DLT 메시지 등)는 봉투를 읽어 거른다
+ *      eventType 헤더로 먼저 거르고(payload를 읽지 않음), 헤더가 없는 메시지(콘솔로 다시 보낸 DLT 메시지 등)는 봉투의 eventType만 읽어 거른다.
+ *      그래서 이 앱이 아직 모르는 새 판매자 이벤트가 헤더 없이 와도 역직렬화 실패로 DLT에 쌓이지 않는다
  *   2. 같은 트랜잭션 안에서 eventId를 processed_event에 기록한다. 이미 있으면(재전달) 아무것도 하지 않는다
  *   3. 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾸고 처리 이력을 EVENT로 남긴다
  * 3이 실패하면 2의 기록도 함께 롤백되므로, 같은 메시지를 다시 받으면 처음부터 다시 처리한다.
@@ -39,7 +40,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SettlementSellerEventListener {
 
-    /** processed_event.consumer 값이자 Kafka groupId. 같은 이벤트를 다른 서비스(상품 = market)와 따로 처리한다 */
+    /** Kafka groupId. 정산의 모든 리스너가 같은 그룹을 쓴다(바꾸면 오프셋이 처음부터 다시 잡히므로 그대로 둔다) */
+    static final String GROUP_ID = "settlement";
+
+    /**
+     * processed_event.consumer 값. 예전 이름("settlement")을 그대로 쓴다.
+     * 바꾸면 이미 처리한 제재 이벤트의 기록이 무시되어, 그 이벤트가 다시 오면(콘솔 재전송, 배포 중 오프셋 커밋 전 종료)
+     * 제재가 풀려 보류를 해제한 정산서를 다시 HOLD로 바꾼다. 주문 리스너(settlement.order-confirmed)와는 토픽과 eventId가 달라 기록이 겹치지 않는다
+     */
     static final String CONSUMER = "settlement";
 
     /** OutboxKafkaSender가 붙이는 이벤트 타입 헤더 */
@@ -51,15 +59,18 @@ public class SettlementSellerEventListener {
     private final EventMessages eventMessages;
     private final ProcessedEvents processedEvents;
 
-    @KafkaListener(topics = "seller.events", groupId = CONSUMER)
+    @KafkaListener(topics = "seller.events", groupId = GROUP_ID)
     @Transactional
     public void handle(ConsumerRecord<String, String> record) {
         // 다루지 않는 이벤트는 payload를 읽기 전에 거른다. 이 앱이 모르는 새 이벤트 타입이어도 DLT로 보내지 않는다
         Header eventType = record.headers().lastHeader(EVENT_TYPE_HEADER);
-        if (eventType != null && !HANDLED_EVENT_TYPE.equals(new String(eventType.value(), StandardCharsets.UTF_8))) return;
+        String type = eventType != null
+                ? new String(eventType.value(), StandardCharsets.UTF_8)
+                : eventMessages.eventTypeOf(record.value());   // 헤더가 없으면 봉투의 eventType만 읽는다
+        if (!HANDLED_EVENT_TYPE.equals(type)) return;
 
         EventEnvelope<DomainEvent> envelope = eventMessages.read(record.value());
-        if (!(envelope.payload() instanceof SellerSanctionedEvent event)) return;       // 헤더 없이 온 다른 판매자 이벤트는 무시
+        if (!(envelope.payload() instanceof SellerSanctionedEvent event)) return;       // 타입 이름과 payload가 다르면 무시
         if (!processedEvents.markProcessed(envelope.eventId(), CONSUMER)) return;     // 이미 처리한 이벤트
         settlementFacade.holdSellerBySanctionEvent(event.sellerId(), event.reason());
     }

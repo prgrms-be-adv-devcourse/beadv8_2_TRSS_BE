@@ -21,7 +21,8 @@ import java.nio.charset.StandardCharsets;
  * 흐름: 주문 확정 → outbox 저장 → 릴레이가 Kafka 발행 → 이 컨슈머(groupId = settlement)
  * 한 메시지를 하나의 트랜잭션에서 처리한다(@Transactional).
  *   1. order.events에 함께 오는 다른 주문 이벤트는 무시한다. eventType 헤더로 먼저 거르고(payload를 읽지 않음),
- *      헤더가 없는 메시지(콘솔로 다시 보낸 DLT 메시지 등)는 봉투를 읽어 거른다
+ *      헤더가 없는 메시지(콘솔로 다시 보낸 DLT 메시지 등)는 봉투의 eventType만 읽어 거른다.
+ *      그래서 이 앱이 아직 모르는 새 이벤트 타입이 헤더 없이 와도 역직렬화 실패로 DLT에 쌓이지 않는다
  *   2. 같은 트랜잭션 안에서 eventId를 processed_event에 기록한다. 이미 있으면(재전달) 아무것도 하지 않는다
  *   3. 정산 후보를 만든다
  * 3이 실패하면 2의 기록도 함께 롤백되므로, 같은 메시지를 다시 받으면 처음부터 다시 처리한다.
@@ -32,8 +33,16 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 public class SettlementEventListener {
 
-    /** processed_event.consumer 값이자 Kafka groupId. 같은 이벤트를 다른 컨텍스트와 따로 처리한다 */
-    static final String CONSUMER = "settlement";
+    /** Kafka groupId. 정산의 모든 리스너가 같은 그룹을 쓴다(바꾸면 오프셋이 처음부터 다시 잡히므로 그대로 둔다) */
+    static final String GROUP_ID = "settlement";
+
+    /**
+     * processed_event.consumer 값. 리스너 단위로 정한다(서비스.리스너).
+     * 서비스 이름 하나로 두면 같은 서비스의 다른 리스너가 같은 이벤트를 따로 받을 때 먼저 처리한 쪽의 기록 때문에 건너뛴다
+     * 예전 이름("settlement")으로 남은 기록은 옮기지 않는다. 이미 처리한 메시지는 오프셋이 커밋돼 다시 오지 않고,
+     * DLT를 다시 보내 같은 이벤트가 와도 order_item_id 유니크와 후보 생성의 중복 건너뛰기가 막는다
+     */
+    static final String CONSUMER = "settlement.order-confirmed";
 
     /** OutboxKafkaSender가 붙이는 이벤트 타입 헤더 */
     private static final String EVENT_TYPE_HEADER = "eventType";
@@ -42,16 +51,18 @@ public class SettlementEventListener {
     private final EventMessages eventMessages;
     private final ProcessedEvents processedEvents;
 
-    @KafkaListener(topics = "order.events", groupId = CONSUMER)
+    @KafkaListener(topics = "order.events", groupId = GROUP_ID)
     @Transactional
     public void handle(ConsumerRecord<String, String> record) {
         // 다루지 않는 이벤트는 payload를 읽기 전에 거른다. 이 앱이 모르는 새 이벤트 타입이어도 DLT로 보내지 않는다
         Header eventType = record.headers().lastHeader(EVENT_TYPE_HEADER);
-        if (eventType != null && !OrderConfirmedEvent.class.getSimpleName()
-                .equals(new String(eventType.value(), StandardCharsets.UTF_8))) return;
+        String type = eventType != null
+                ? new String(eventType.value(), StandardCharsets.UTF_8)
+                : eventMessages.eventTypeOf(record.value());   // 헤더가 없으면 봉투의 eventType만 읽는다
+        if (!OrderConfirmedEvent.class.getSimpleName().equals(type)) return;
 
         EventEnvelope<DomainEvent> envelope = eventMessages.read(record.value());
-        if (!(envelope.payload() instanceof OrderConfirmedEvent event)) return;           // 헤더 없이 온 다른 주문 이벤트는 무시
+        if (!(envelope.payload() instanceof OrderConfirmedEvent event)) return;           // 타입 이름과 payload가 다르면 무시
         if (!processedEvents.markProcessed(envelope.eventId(), CONSUMER)) return;       // 이미 처리한 이벤트
         settlementFacade.createCandidates(event.orderId(), event.confirmedAt(), event.items());
     }
