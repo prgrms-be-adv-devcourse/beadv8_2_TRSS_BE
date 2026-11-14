@@ -17,6 +17,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.batch.core.job.parameters.JobParameters;
+import org.springframework.batch.core.job.parameters.JobParametersBuilder;
 import org.springframework.batch.core.step.StepExecution;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +52,7 @@ import static org.mockito.Mockito.when;
  * 회원·결제 Port는 테스트 대역으로 바꾼다. 결제 대역은 두 번째 정산서를 처음 지급할 때 Error를 던진다.
  * SettlementPayoutTasklet은 Exception만 잡으므로 Error는 Step 실패가 되고 Job은 FAILED로 끝난다.
  *
- * 정산월은 실행마다 과거의 임의 달을 쓴다. 같은 달의 JobInstance가 이미 COMPLETED면 다시 실행할 수 없기 때문이다
+ * 정산월은 실행마다 아직 JobInstance가 없는 과거의 임의 달을 쓴다. 같은 달의 JobInstance가 이미 COMPLETED면 다시 실행할 수 없기 때문이다
  * (Batch 메타 테이블은 지우지 않는다). 테스트 데이터는 판매자 ID를 임의 범위로 잡아 다른 데이터와 섞이지 않게 한다.
  */
 @SpringBootTest(properties = "custom.outbox.relayEnabled=false")
@@ -80,7 +82,7 @@ class SettlementMonthlyJobRestartIntegrationTest {
     @BeforeEach
     void setUp() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        targetMonth = YearMonth.of(random.nextInt(1100, 2000), random.nextInt(1, 13));
+        targetMonth = unusedMonth(random);
         sellerA = 900_000_000L + random.nextLong(1_000_000L) * 10;
         sellerB = sellerA + 1;
 
@@ -152,6 +154,20 @@ class SettlementMonthlyJobRestartIntegrationTest {
         assertEquals(1, transferCalls.get(settlementA.id()).get());   // A는 다시 지급하지 않는다
         assertEquals(2, transferCalls.get(settlementB.id()).get());   // B는 멈춘 지급 1번 + 이어서 1번
         assertEquals(SettlementStatus.PAID.name(), settlementOf(sellerB).status());
+    }
+
+    /**
+     * 아직 JobInstance가 없는 과거의 임의 달. Batch 메타 테이블은 지우지 않으므로 이전 테스트 실행이 같은 달을 썼다면
+     * 그 달은 COMPLETED로 남아 다시 실행할 수 없다(409-SETTLEMENT_ALREADY_COMPLETED). 그런 달은 건너뛰고 다시 고른다
+     */
+    private YearMonth unusedMonth(ThreadLocalRandom random) {
+        while (true) {
+            YearMonth month = YearMonth.of(random.nextInt(1100, 2000), random.nextInt(1, 13));
+            JobParameters identifying = new JobParametersBuilder()
+                    .addString(SettlementJobNames.PARAM_TARGET_MONTH, month.toString())
+                    .toJobParameters();
+            if (jobRepository.getJobInstance(SettlementJobNames.JOB_NAME, identifying) == null) return month;
+        }
     }
 
     private SellerDto approved(Long sellerId) {
