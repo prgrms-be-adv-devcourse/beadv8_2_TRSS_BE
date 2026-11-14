@@ -14,7 +14,7 @@ public enum SettlementAdminStatusGroup {
     /** 처리 필요: 재시도 중 + 수동 처리 필요 */
     ACTION_REQUIRED("처리 필요", List.of(SettlementStatus.FAILED, SettlementStatus.MANUAL_REQUIRED)),
     /** 지급 예정 */
-    SCHEDULED("지급 예정", List.of(SettlementStatus.READY)),
+    SCHEDULED("지급 예정", List.of(SettlementStatus.READY, SettlementStatus.PROCESSING)),
     /** 지급 완료 */
     PAID("지급 완료", List.of(SettlementStatus.PAID)),
     /** 보류 (제재·원장 불일치·관리자 보류) */

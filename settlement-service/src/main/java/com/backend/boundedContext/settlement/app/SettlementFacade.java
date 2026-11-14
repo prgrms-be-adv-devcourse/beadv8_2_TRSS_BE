@@ -5,6 +5,7 @@ import com.backend.boundedContext.settlement.domain.SettlementCandidateStatus;
 import com.backend.boundedContext.settlement.domain.SettlementJudgement;
 import com.backend.boundedContext.settlement.domain.SettlementLedgerCheckResult;
 import com.backend.boundedContext.settlement.domain.SettlementSellerStatus;
+import com.backend.boundedContext.settlement.domain.SettlementPolicy;
 import com.backend.boundedContext.settlement.domain.SettlementStatus;
 import com.backend.boundedContext.settlement.domain.SettlementTrigger;
 import com.backend.boundedContext.settlement.in.dto.SettlementLedgerMismatchConfirmResponse;
@@ -46,6 +47,7 @@ import java.util.Set;
 public class SettlementFacade {
 
     private final SettlementSupport settlementSupport;
+    private final SettlementPolicy settlementPolicy;
     private final SettlementCreateCandidatesUseCase settlementCreateCandidatesUseCase;
     private final SettlementAggregateUseCase settlementAggregateUseCase;
     private final SettlementPayoutUseCase settlementPayoutUseCase;
@@ -173,9 +175,20 @@ public class SettlementFacade {
         return settlementSupport.findRetryTargetIds(LocalDateTime.now(), limit);
     }
 
-    /** 지급 트랜잭션과 실패 기록 트랜잭션은 UseCase가 TransactionTemplate으로 연다 */
+    /** 선점·결과 기록·실패 기록 트랜잭션은 UseCase가 TransactionTemplate으로 연다(결제 지급 요청은 트랜잭션 밖) */
     public SettlementPayoutResult payout(Long settlementId, SettlementTrigger trigger, Long batchExecutionId) {
         return settlementPayoutUseCase.payout(settlementId, trigger, batchExecutionId, null);
+    }
+
+    /** 지급 결과 재확인 대상: PROCESSING이 된 지 processingRecheckMinutes가 지난 정산서 */
+    public List<Long> findProcessingOverdueIds(int limit) {
+        return settlementSupport.findProcessingOverdueIds(
+                LocalDateTime.now().minusMinutes(settlementPolicy.getProcessingRecheckMinutes()), limit);
+    }
+
+    /** 지급 결과 재확인. 결제 원장 조회는 트랜잭션 밖, 확정은 UseCase가 TransactionTemplate으로 연다 */
+    public SettlementPayoutResult reconcileProcessing(Long settlementId) {
+        return settlementPayoutUseCase.reconcileProcessing(settlementId);
     }
 
     /** 관리자 수동 재처리(MANUAL_REQUIRED만, 사유 필수) */

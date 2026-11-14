@@ -72,6 +72,8 @@ public class SettlementPayoutTasklet implements Tasklet {
             SettlementBatchSupport.add(context, SettlementJobNames.FEE_TOTAL, result.totalFee());
         } else if (result.status() == SettlementStatus.MANUAL_REQUIRED) {
             SettlementBatchSupport.add(context, SettlementJobNames.MANUAL_REQUIRED_COUNT, 1);
+        } else if (result.status() == SettlementStatus.PROCESSING) {
+            SettlementBatchSupport.add(context, SettlementJobNames.PROCESSING_COUNT, 1);
         } else {
             SettlementBatchSupport.add(context, SettlementJobNames.FAILED_COUNT, 1);
         }

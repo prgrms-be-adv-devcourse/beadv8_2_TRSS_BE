@@ -12,7 +12,8 @@ import java.util.Optional;
 
 /**
  * 같은 앱의 PaymentApi로 SettlementPaymentPort를 구현함 (정산 모듈 분리 전까지 사용)
- * PaymentApi.transfer는 호출한 쪽 트랜잭션에 참여하므로, 지금은 정산서 PAID와 지급이 한 트랜잭션으로 묶임
+ * PaymentApi.transfer는 HTTP라 정산 트랜잭션에 참여하지 않는다. 그래서 SettlementPayoutUseCase가 지급을
+ * ① PROCESSING 선점 → ② 트랜잭션 밖 transfer → ③ 결과 기록으로 나누고, 결과를 모르면 findTransfer로 확정한다
  */
 @Component
 @RequiredArgsConstructor
