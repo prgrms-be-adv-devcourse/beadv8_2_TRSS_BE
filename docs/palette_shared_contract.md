@@ -76,7 +76,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 반품 환불 | payment | `OrderReturnedEvent` 수신(Kafka `order.events`) → 홀딩 → 구매자 지갑(REFUND), 플랫폼 지갑 → 구매자 지갑(배송비, SHIPPING_FEE_REFUND), 홀딩 → 플랫폼 지갑(장바구니 쿠폰 지원금, COUPON_SUBSIDY_CANCEL) → 결제 REFUNDED, 홀딩 RELEASED (결제 담당 구현 예정, 지금은 받는 코드 없음) | 이벤트, 별도 Tx |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시, 배송지 있는 주문은 배송 완료 뒤) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
-| 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)`(잠금 밖) → ① 정산서 잠금·확인 후 PROCESSING 커밋 → ② `PaymentApi.transfer(command)`(트랜잭션 밖) → ③ 결과 기록(PAID / 4xx면 FAILED·MANUAL_REQUIRED / 결과 모름이면 PROCESSING 유지, 재확인 스케줄러가 `findTransfer`로 확정) | 동기(HTTP), 트랜잭션 세 개 |
+| 월 정산 지급 | settlement | ⓪ 이전에 지급을 시도한 정산서(FAILED·MANUAL_REQUIRED)는 `PaymentApi.findTransfer`로 먼저 확인(잠금 밖, 지급 기록이 있으면 transfer 없이 PAID·금액이 다르면 MANUAL_REQUIRED로 확정, 조회 실패면 그대로 진행) → `MemberApi.getSeller(sellerId)`(잠금 밖) → ① 정산서 잠금·확인 후 PROCESSING 커밋 → ② `PaymentApi.transfer(command)`(트랜잭션 밖) → ③ 결과 기록(PAID / 4xx면 FAILED·MANUAL_REQUIRED / 결과 모름이면 PROCESSING 유지, 재확인 스케줄러가 `findTransfer`로 확정) | 동기(HTTP), 트랜잭션 세 개 |
 | 상품 삭제·관리자 즉시 중지·판매 중지 요청 승인 | product | 상품 잠금 → 상품 DELETED/STOPPED → 심사 중인 중지 요청 CANCELED → `OrderApi.cancelPendingOrders(productIds, PRODUCT_STOPPED)` → (주문이) `ProductApi.restoreStock` | 동기, 같은 Tx |
 | 판매자 철회 요청 | member | `SettlementApi.getUnsettledAmount(sellerId)` 0인지 확인 → 판매자 WITHDRAW_REQUESTED → `SellerWithdrawalRequestedEvent` → (market) 판매 중 상품 STOPPED, 결제 대기 주문 취소·재고 복원 | 이벤트 (미정산 확인은 동기 조회, 조회 실패 시 503) |
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기 조회 (조회 실패 시 503) |
