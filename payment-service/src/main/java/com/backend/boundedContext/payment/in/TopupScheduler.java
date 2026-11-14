@@ -62,4 +62,18 @@ public class TopupScheduler {
             log.error("CANCELING 충전 건 결과 확인에 실패했습니다. 다음 실행에서 다시 처리합니다.", e);
         }
     }
+
+    // METHOD_CANCELING 결과 확인: PROCESSING 결과 확인과 같은 간격으로 실행
+    @Scheduled(fixedDelayString = "${custom.payment.topupReconcileIntervalSeconds}", timeUnit = TimeUnit.SECONDS)
+    public void reconcileMethodCancelingTopups() {
+        try {
+            TopupReconcileResult result = paymentFacade.reconcileMethodCancelingTopups();
+            if (result.total() > 0) {
+                log.info("METHOD_CANCELING 충전 건 결과 확인: 취소 확정 {}건, 재시도 실패 {}건, 확인 대기 {}건, 오류 {}건",
+                        result.completed(), result.failed(), result.pending(), result.errors());
+            }
+        } catch (Exception e) {
+            log.error("METHOD_CANCELING 충전 건 결과 확인에 실패했습니다. 다음 실행에서 다시 처리합니다.", e);
+        }
+    }
 }

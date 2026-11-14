@@ -350,6 +350,77 @@ class TopupTest {
         assertThat(topup.isCancelingAttempt(2)).isFalse();
     }
 
+    @Test
+    @DisplayName("허용하지 않은 결제 수단으로 승인되면 예치금에 반영하지 않고 METHOD_CANCELING이 되며 취소 회차가 1이 된다")
+    void startMethodCancel() {
+        Topup topup = Topup.create(1L, wallet, 30_000, PgProvider.TOSS);
+        topup.markProcessing("pk_1");
+
+        topup.startMethodCancel();
+
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.METHOD_CANCELING);
+        assertThat(topup.getCancelAttempts()).isEqualTo(1);
+        assertThat(topup.getRemainingAmount()).isZero();
+        assertThat(topup.cancelableAmount()).isZero();
+    }
+
+    @Test
+    @DisplayName("PROCESSING이 아니면 허용하지 않은 결제 수단 취소를 시작할 수 없다")
+    void startMethodCancel_notProcessing() {
+        Topup topup = doneTopup(30_000);
+
+        assertThatThrownBy(topup::startMethodCancel)
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-TOPUP_ALREADY_PROCESSED");
+    }
+
+    @Test
+    @DisplayName("다시 요청하면 취소 회차만 늘어 새 멱등 키를 쓴다 (충전 취소 키와 겹치지 않음)")
+    void retryMethodCancel() {
+        Topup topup = Topup.create(1L, wallet, 30_000, PgProvider.TOSS);
+        ReflectionTestUtils.setField(topup, "id", 7L);
+        topup.markProcessing("pk_1");
+        topup.startMethodCancel();
+        String first = topup.methodCancelIdempotencyKey();
+
+        topup.retryMethodCancel();
+
+        assertThat(first).isEqualTo("TOPUP-7-METHOD-CANCEL-1");
+        assertThat(topup.methodCancelIdempotencyKey()).isEqualTo("TOPUP-7-METHOD-CANCEL-2");
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.METHOD_CANCELING);
+        assertThat(topup.isMethodCancelingAttempt(1)).isFalse();
+        assertThat(topup.isMethodCancelingAttempt(2)).isTrue();
+    }
+
+    @Test
+    @DisplayName("전액 취소가 확정되면 FAILED_METHOD_NOT_ALLOWED가 되고 취소된 금액·사유가 남는다")
+    void completeMethodCancel() {
+        Topup topup = Topup.create(1L, wallet, 30_000, PgProvider.TOSS);
+        topup.markProcessing("pk_1");
+        topup.startMethodCancel();
+
+        topup.completeMethodCancel("허용하지 않은 결제 수단(OTHER)이라 PG에서 취소했습니다.", NOW);
+
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        assertThat(topup.getCanceledAmount()).isEqualTo(30_000);
+        assertThat(topup.getCanceledAt()).isEqualTo(NOW);
+        assertThat(topup.getFailReason()).contains("OTHER");
+        assertThat(topup.isMethodCancelingAttempt(1)).isFalse();
+    }
+
+    @Test
+    @DisplayName("METHOD_CANCELING이 아니면 다시 요청·확정할 수 없다")
+    void retryOrCompleteMethodCancel_notMethodCanceling() {
+        Topup topup = doneTopup(30_000);
+
+        assertThatThrownBy(topup::retryMethodCancel)
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-TOPUP_ALREADY_PROCESSED");
+        assertThatThrownBy(() -> topup.completeMethodCancel("사유", NOW))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("409-TOPUP_ALREADY_PROCESSED");
+    }
+
     private Topup doneTopup(long amount) {
         Topup topup = Topup.create(1L, wallet, amount, PgProvider.TOSS);
         topup.markProcessing("pk_" + amount);

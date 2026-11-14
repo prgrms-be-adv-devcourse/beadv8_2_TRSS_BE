@@ -52,6 +52,7 @@ public class PaymentFacade {
     private final PaymentExpireTopupsUseCase paymentExpireTopupsUseCase;
     private final PaymentReconcileTopupsUseCase paymentReconcileTopupsUseCase;
     private final PaymentReconcileCancelingTopupsUseCase paymentReconcileCancelingTopupsUseCase;
+    private final PaymentReconcileMethodCancelingTopupsUseCase paymentReconcileMethodCancelingTopupsUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -68,7 +69,7 @@ public class PaymentFacade {
         return paymentGetWalletUseCase.getWallet(memberId);
     }
 
-    // 결과가 정해지지 않은 충전 건(READY·PROCESSING·CANCELING)이 있는지
+    // 결과가 정해지지 않은 충전 건(READY·PROCESSING·CANCELING·METHOD_CANCELING)이 있는지
     @Transactional(readOnly = true)
     public boolean hasPendingTopups(Long memberId) {
         return paymentCheckPendingTopupsUseCase.hasPendingTopups(memberId);
@@ -160,6 +161,12 @@ public class PaymentFacade {
     // (확정·되돌림은 PaymentTopupCancelProcessor에서 건마다 짧은 트랜잭션으로 실행)
     public TopupReconcileResult reconcileCancelingTopups() {
         return paymentReconcileCancelingTopupsUseCase.reconcileCancelingTopups(LocalDateTime.now());
+    }
+
+    // METHOD_CANCELING 충전 건 결과 확인 (스케줄러). PG 조회·취소를 트랜잭션 밖에서 해야 하므로 @Transactional을 붙이지 않음
+    // (확정·회차 증가는 PaymentTopupConfirmProcessor에서 건마다 짧은 트랜잭션으로 실행)
+    public TopupReconcileResult reconcileMethodCancelingTopups() {
+        return paymentReconcileMethodCancelingTopupsUseCase.reconcileMethodCancelingTopups(LocalDateTime.now());
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

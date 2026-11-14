@@ -42,7 +42,9 @@ public record AdminTopupDto(
                 - FAILED_AMOUNT_MISMATCH: 준비 금액과 승인 요청 금액이 다름
                 - FAILED_EXPIRED: 결제창 진행 시간 초과
                 - FAILED_SYSTEM_ERROR: 그 외 오류
-                - CANCELED: 충전 금액 전부 취소""", example = "DONE")
+                - CANCELED: 충전 금액 전부 취소
+                - METHOD_CANCELING: 허용하지 않은 결제 수단이라 예치금에 반영하지 않고 PG 전액 취소 중
+                - FAILED_METHOD_NOT_ALLOWED: 허용하지 않은 결제 수단이라 PG에서 전액 취소함""", example = "DONE")
         TopupStatus status,
 
         @Schema(description = "실패 사유. 실패한 충전 건만 값이 있음")

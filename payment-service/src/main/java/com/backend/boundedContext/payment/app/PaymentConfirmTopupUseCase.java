@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
  * - 거절(카드 거절·한도 초과 등) → FAILED_PG_DECLINED 기록 후 400 TOPUP_PAYMENT_DECLINED
  * - 설정 오류(API 키 등) → 우리 설정 문제이므로 FAILED_SYSTEM_ERROR 기록 후 502 EXTERNAL_SERVICE_ERROR
  * - 결과 모름(응답 없음·5xx·이미 처리된 결제) → 승인 여부를 알 수 없으므로 PROCESSING 유지, 200 + status PROCESSING
+ * - 승인됐지만 허용하지 않은 결제 수단 → 예치금에 반영하지 않고 PG 전액 취소, 400 TOPUP_METHOD_NOT_ALLOWED
+ *   (취소 결과를 모르거나 실패하면 METHOD_CANCELING으로 남겨 대사가 다시 취소)
  */
 @Slf4j
 @Component
@@ -37,6 +39,7 @@ public class PaymentConfirmTopupUseCase {
 
     private final PaymentTopupConfirmProcessor paymentTopupConfirmProcessor;
     private final TopupGateways topupGateways;
+    private final PaymentTopupMethodCanceller paymentTopupMethodCanceller;
     private final PaymentMemberPort memberPort;
 
     public TopupConfirmDto confirmTopup(Long memberId, String paymentKey, String orderId, long amount) {
@@ -66,6 +69,12 @@ public class PaymentConfirmTopupUseCase {
             String message = Objects.requireNonNullElse(e.getPgMessage(), PaymentErrorCode.TOPUP_PAYMENT_DECLINED.msg());
             paymentTopupConfirmProcessor.fail(topupId, TopupStatus.FAILED_PG_DECLINED, message);
             throw new DomainException(PaymentErrorCode.TOPUP_PAYMENT_DECLINED, Map.of("code", Objects.requireNonNullElse(e.getCode(), "UNKNOWN"), "message", message));
+        }
+
+        // 허용하지 않은 결제 수단이면 반영하지 않고 PG 전액 취소
+        if (!PaymentTopupConfirmProcessor.isAllowedMethod(result.method())) {
+            paymentTopupMethodCanceller.cancelApproved(topupId, result.method());
+            throw new DomainException(PaymentErrorCode.TOPUP_METHOD_NOT_ALLOWED);
         }
 
         // Tx2: 예치금 반영. PG는 이미 승인했으므로 반영에 실패해도 오류로 끝내지 않고 PROCESSING으로 두어 스케줄러가 반영

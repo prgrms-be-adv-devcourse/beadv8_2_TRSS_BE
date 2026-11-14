@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  * (승인 응답과 동시에 반영하려 해도 충전 건 잠금과 PROCESSING 확인으로 한 번만 반영됨)
  *
  * PG 결과별 처리
- * - APPROVED(승인) → complete(): 예치금 반영
+ * - APPROVED(승인) → complete(): 예치금 반영. 허용하지 않은 결제 수단이면 반영하지 않고 PG 전액 취소
  * - NOT_APPROVED(중단·만료) → FAILED_PG_DECLINED (실패 사유에 PG 원래 상태값을 남겨 중단·만료를 구분)
  * - CANCELED(PG에서 취소됨) → FAILED_SYSTEM_ERROR (예치금 반영 없이 돈이 돌려졌으므로)
  * - 결제 없음 → FAILED_SYSTEM_ERROR (PG에 결제 내역이 없어 돈이 빠지지 않음)
@@ -37,6 +37,7 @@ public class PaymentReconcileTopupsUseCase {
     private final PaymentPolicy paymentPolicy;
     private final PaymentTopupConfirmProcessor paymentTopupConfirmProcessor;
     private final TopupGateways topupGateways;
+    private final PaymentTopupMethodCanceller paymentTopupMethodCanceller;
 
     public TopupReconcileResult reconcileProcessingTopups(LocalDateTime now) {
         LocalDateTime cutoff = now.minus(paymentPolicy.topupReconcileDelay());
@@ -74,6 +75,10 @@ public class PaymentReconcileTopupsUseCase {
 
         switch (result.status()) {
             case APPROVED -> {
+                if (!PaymentTopupConfirmProcessor.isAllowedMethod(result.method())) {
+                    paymentTopupMethodCanceller.cancelApproved(target.topupId(), result.method());
+                    return Outcome.FAILED;
+                }
                 paymentTopupConfirmProcessor.complete(target.topupId(), result);
                 return Outcome.COMPLETED;
             }

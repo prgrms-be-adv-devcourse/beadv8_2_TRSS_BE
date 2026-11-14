@@ -1,6 +1,8 @@
 package com.backend.boundedContext.payment.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -146,6 +148,57 @@ class TopupReconcileIntegrationTest {
 
         verify(tossPaymentsClient, never()).getPayment(topup.paymentKey());
         assertThat(topupRepository.findById(topup.topupId()).orElseThrow().getStatus()).isEqualTo(TopupStatus.PROCESSING);
+    }
+
+    @Test
+    @DisplayName("PROCESSING 대사가 허용하지 않은 결제 수단 승인을 확인하면 예치금에 반영하지 않고 PG 전액 취소해 FAILED_METHOD_NOT_ALLOWED")
+    void reconcile_notAllowedMethod() {
+        Processing topup = processing();
+        moveUpdatedAtMinutesAgo(topup.topupId(), 6);
+        given(tossPaymentsClient.getPayment(topup.paymentKey())).willReturn(tossBy(topup, "가상계좌", null));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString())).willReturn(tossBy(topup, "가상계좌", null));
+
+        paymentFacade.reconcileProcessingTopups();
+
+        assertThat(topupRepository.findById(topup.topupId()).orElseThrow().getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
+        assertThat(transactionsOfWallet()).isEmpty();
+        verify(tossPaymentsClient).cancel(topup.paymentKey(), AMOUNT, "충전에 허용하지 않은 결제 수단", "TOPUP-" + topup.topupId() + "-METHOD-CANCEL-1");
+    }
+
+    @Test
+    @DisplayName("METHOD_CANCELING 대사: 취소가 안 됐으면 다음 회차 키로 다시 취소하고, 이미 취소됐으면 확정만 한다")
+    void reconcileMethodCanceling() {
+        Processing topup = processing();
+        paymentTopupConfirmProcessor.startMethodCancel(topup.topupId());   // 첫 취소 응답을 못 받아 METHOD_CANCELING, 회차 1
+        moveUpdatedAtMinutesAgo(topup.topupId(), 6);
+        given(tossPaymentsClient.getPayment(topup.paymentKey())).willReturn(tossBy(topup, "가상계좌", null));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString())).willReturn(tossBy(topup, "가상계좌", null));
+
+        TopupReconcileResult result = paymentFacade.reconcileMethodCancelingTopups();
+
+        assertThat(result.completed()).isGreaterThanOrEqualTo(1);
+        assertThat(topupRepository.findById(topup.topupId()).orElseThrow().getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        verify(tossPaymentsClient).cancel(topup.paymentKey(), AMOUNT, "충전에 허용하지 않은 결제 수단", "TOPUP-" + topup.topupId() + "-METHOD-CANCEL-2");
+    }
+
+    @Test
+    @DisplayName("METHOD_CANCELING 대사: PG에서 이미 전액 취소됐으면 다시 요청하지 않고 확정한다")
+    void reconcileMethodCanceling_alreadyCanceled() {
+        Processing topup = processing();
+        paymentTopupConfirmProcessor.startMethodCancel(topup.topupId());
+        moveUpdatedAtMinutesAgo(topup.topupId(), 6);
+        given(tossPaymentsClient.getPayment(topup.paymentKey()))
+                .willReturn(tossBy(topup, "가상계좌", List.of(new TossPaymentResponse.Cancel(AMOUNT, "DONE"))));
+
+        paymentFacade.reconcileMethodCancelingTopups();
+
+        assertThat(topupRepository.findById(topup.topupId()).orElseThrow().getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        verify(tossPaymentsClient, never()).cancel(anyString(), anyLong(), anyString(), anyString());
+    }
+
+    private TossPaymentResponse tossBy(Processing topup, String method, List<TossPaymentResponse.Cancel> cancels) {
+        return new TossPaymentResponse(topup.paymentKey(), topup.orderId(), "DONE", AMOUNT, method, null, cancels);
     }
 
     private record Processing(Long topupId, String orderId, String paymentKey) {}

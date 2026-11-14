@@ -214,6 +214,7 @@ if (updated == 0) throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
   - 401·`INVALID_API_KEY`·`UNAUTHORIZED_KEY`(키 오류) → 충전 FAILED_SYSTEM_ERROR, `502-EXTERNAL_SERVICE_ERROR`
   - 그 밖의 4xx(카드 거절 등) → 충전 FAILED_PG_DECLINED, `400-TOPUP_PAYMENT_DECLINED`(`data.code`·`message`)
   - 5xx·`ALREADY_PROCESSED_PAYMENT`·승인 후 DB 반영 실패 → 충전 PROCESSING, `200-1` + `data.status: "PROCESSING"`
+  - 승인됐지만 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외) → 예치금에 반영하지 않고 토스 전액 취소, `400-TOPUP_METHOD_NOT_ALLOWED`. 취소 결과를 모르거나 실패하면 충전 METHOD_CANCELING으로 두고 대사 스케줄러가 다시 취소(`TOPUP-{id}-METHOD-CANCEL-{회차}`, 첫 시도 포함 최대 3회. 3회 모두 실패하면 ERROR 로그 한 번 후 사람이 확인)
   - 연결 5초·응답 30초 제한 (`custom.toss`)
 - 토스 충전 취소의 오류 처리 (취소 시작 때 잔액을 먼저 빼고, 확정 실패면 되돌린다):
   - 401·`INVALID_API_KEY`·`UNAUTHORIZED_KEY`(키 오류) → 잔액·남은 금액 되돌림(원장 `CHARGE_CANCEL_RESTORE`), `502-EXTERNAL_SERVICE_ERROR`
@@ -311,6 +312,7 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 400-TOPUP_PAYMENT_DECLINED | 토스가 결제를 승인하지 않음(카드 거절·한도 초과 등) (`data.code`·`message`: 토스 오류 코드·메시지) |
 | | 409-TOPUP_ALREADY_PROCESSED | READY가 아닌 충전 건(승인 중·완료·실패·만료)에 승인·실패 기록 요청, 이미 쓰인 결제키 |
 | | 409-TOPUP_NOT_CANCELABLE | 승인 완료(DONE)가 아니거나 취소할 남은 금액이 없는 충전 건에 취소 요청 |
+| | 400-TOPUP_METHOD_NOT_ALLOWED | 승인된 결제가 충전에 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외). 예치금에 반영하지 않고 결제를 자동 취소 |
 | | 400-TOPUP_CANCEL_DECLINED | 토스가 충전 취소를 거절함(환불 기간 지남·부분 취소 불가 등). 잔액은 되돌림 (`data.code`·`message`: 토스 오류 코드·메시지) |
 | | 409-PAYMENT_ALREADY_PAID | 다른 멱등 키로 이미 PAID인 주문을 결제 (내부 `PaymentApi.pay`) |
 | | 404-HOLDING_NOT_FOUND / 409-HOLDING_INSUFFICIENT / 409-TRANSFER_AMOUNT_MISMATCH | 정산 지급(`PaymentApi.transfer`)에서 홀딩 없음 / 홀딩 남은 금액 부족 / 주문별 금액 합 ≠ 지급액 + 수수료 |
@@ -404,6 +406,6 @@ public RsData<PayResponse> pay(...) { ... }
 | 실패 응답을 `RsData`로 통일, 405·415 처리 | 완료 |
 | 성공 응답 HTTP 200 통일 | 완료 (별도 코드 없음) |
 | Security `AuthenticationEntryPoint`·`AccessDeniedHandler` | 완료 (`JwtAuthenticationEntryPoint`·`JwtAccessDeniedHandler`) |
-| 토스 연동 예외(`TossPaymentException`·`TossTimeoutException`)·충전 대사 스케줄러(승인·취소) | 완료 |
+| 토스 연동 예외(`TossPaymentException`·`TossTimeoutException`)·충전 대사 스케줄러(승인·취소·허용하지 않은 결제 수단 취소) | 완료 |
 | 요청별 `traceId`(MDC, `X-Trace-Id` 헤더) | 미구현 |
 | 운영 프로필에서 `show-sql` 끄기 | 미구현 |

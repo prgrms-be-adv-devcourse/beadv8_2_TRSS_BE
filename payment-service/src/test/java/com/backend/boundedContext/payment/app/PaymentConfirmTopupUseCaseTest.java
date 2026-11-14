@@ -47,7 +47,8 @@ class PaymentConfirmTopupUseCaseTest {
     private final TopupGateways topupGateways = mock(TopupGateways.class);
     private final TopupGatewayPort gateway = mock(TopupGatewayPort.class);
     private final PaymentMemberPort memberPort = mock(PaymentMemberPort.class);
-    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, topupGateways, memberPort);
+    private final PaymentTopupMethodCanceller methodCanceller = mock(PaymentTopupMethodCanceller.class);
+    private final PaymentConfirmTopupUseCase useCase = new PaymentConfirmTopupUseCase(processor, topupGateways, methodCanceller, memberPort);
 
     private final PgPaymentResult approved =
             new PgPaymentResult(PAYMENT_KEY, ORDER_ID, PgPaymentStatus.APPROVED, "DONE", AMOUNT, 0, PgPaymentMethod.CARD, null);
@@ -162,6 +163,37 @@ class PaymentConfirmTopupUseCaseTest {
 
         assertProcessing(result);
     }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단: 예치금에 반영하지 않고 PG 전액 취소로 넘긴 뒤 400 TOPUP_METHOD_NOT_ALLOWED")
+    void confirm_notAllowedMethod() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approvedBy(PgPaymentMethod.OTHER));
+
+        assertThatThrownBy(() -> useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        verify(methodCanceller).cancelApproved(TOPUP_ID, PgPaymentMethod.OTHER);
+        verify(processor, never()).complete(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("계좌이체·간편결제는 허용 수단이라 그대로 반영한다")
+    void confirm_allowedMethods() {
+        started();
+        given(gateway.confirm(PAYMENT_KEY, ORDER_ID, AMOUNT)).willReturn(approvedBy(PgPaymentMethod.TRANSFER));
+
+        useCase.confirmTopup(MEMBER_ID, PAYMENT_KEY, ORDER_ID, AMOUNT);
+
+        verify(processor).complete(eq(TOPUP_ID), any());
+        verify(methodCanceller, never()).cancelApproved(anyLong(), any());
+    }
+
+    private PgPaymentResult approvedBy(PgPaymentMethod method) {
+        return new PgPaymentResult(PAYMENT_KEY, ORDER_ID, PgPaymentStatus.APPROVED, "DONE", AMOUNT, 0, method, null);
+    }
+
 
     private void started() {
         given(processor.start(MEMBER_ID, ORDER_ID, PAYMENT_KEY, AMOUNT))

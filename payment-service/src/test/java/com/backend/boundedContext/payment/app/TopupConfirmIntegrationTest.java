@@ -43,6 +43,7 @@ import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
 import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
 import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
+import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
 import com.backend.global.exception.DomainException;
 
 /**
@@ -173,6 +174,44 @@ class TopupConfirmIntegrationTest {
         assertThat(topup.getFailReason()).contains("20000", "10000");
         assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
         assertThat(transactionsOfWallet()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단(가상계좌): 예치금에 반영하지 않고 PG 전액 취소 후 FAILED_METHOD_NOT_ALLOWED, 400")
+    void confirm_notAllowedMethod() {
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willReturn(tossDoneBy("가상계좌"));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString())).willReturn(tossDoneBy("가상계좌"));
+
+        assertThatThrownBy(() -> paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        Topup topup = savedTopup();
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        assertThat(topup.getCanceledAmount()).isEqualTo(AMOUNT);
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
+        assertThat(transactionsOfWallet()).isEmpty();
+        verify(tossPaymentsClient, times(1)).cancel(paymentKey, AMOUNT, "충전에 허용하지 않은 결제 수단", "TOPUP-" + topup.getId() + "-METHOD-CANCEL-1");
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단: PG 취소 응답을 못 받으면 METHOD_CANCELING으로 남고 예치금은 그대로 0, 탈퇴 대기 대상")
+    void confirm_notAllowedMethod_cancelUnknown() {
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willReturn(tossDoneBy("가상계좌"));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+
+        assertThatThrownBy(() -> paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        assertThat(savedTopup().getStatus()).isEqualTo(TopupStatus.METHOD_CANCELING);
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
+        assertThat(paymentFacade.hasPendingTopups(memberId)).isTrue();
+    }
+
+    private TossPaymentResponse tossDoneBy(String method) {
+        return new TossPaymentResponse(paymentKey, orderId, "DONE", AMOUNT, method, APPROVED_AT, null);
     }
 
     private TossPaymentResponse tossDone() {

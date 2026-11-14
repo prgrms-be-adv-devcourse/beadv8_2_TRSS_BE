@@ -38,8 +38,9 @@ class PaymentReconcileTopupsUseCaseTest {
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
     private final TopupGateways topupGateways = mock(TopupGateways.class);
     private final TopupGatewayPort gateway = mock(TopupGatewayPort.class);
+    private final PaymentTopupMethodCanceller methodCanceller = mock(PaymentTopupMethodCanceller.class);
     private final PaymentReconcileTopupsUseCase useCase =
-            new PaymentReconcileTopupsUseCase(paymentPolicy, processor, topupGateways);
+            new PaymentReconcileTopupsUseCase(paymentPolicy, processor, topupGateways, methodCanceller);
 
     @BeforeEach
     void setUp() {
@@ -140,6 +141,19 @@ class PaymentReconcileTopupsUseCaseTest {
         verify(processor).complete(8L, done8);
         assertThat(result.errors()).isEqualTo(1);
         assertThat(result.completed()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("PG가 승인했지만 허용하지 않은 결제 수단이면 예치금에 반영하지 않고 PG 전액 취소로 넘긴다")
+    void reconcile_approvedNotAllowedMethod() {
+        targets(TARGET);
+        given(gateway.getPayment("pk_7")).willReturn(new PgPaymentResult("pk_7", "TOPUP-7", PgPaymentStatus.APPROVED, "DONE", 20_000, 0, PgPaymentMethod.OTHER, null));
+
+        TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
+
+        assertThat(result.failed()).isEqualTo(1);
+        verify(methodCanceller).cancelApproved(7L, PgPaymentMethod.OTHER);
+        verify(processor, never()).complete(anyLong(), any());
     }
 
     private void targets(TopupReconcileTarget... targets) {
