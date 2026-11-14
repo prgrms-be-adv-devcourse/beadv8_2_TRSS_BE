@@ -357,6 +357,8 @@ HTTP 요청이 아니므로 `GlobalExceptionHandler`가 동작하지 않는다.
 | | 404-INFLUENCER_NOT_FOUND | 협약 요청 대상 인플루언서가 없음 |
 | | 409-INFLUENCER_STATE_INVALID | 승인되지 않은 인플루언서에게 협약 요청 |
 | | 403-INFLUENCER_NOT_APPROVED | 승인된 인플루언서가 아닌 회원이 인플루언서 API 호출 |
+| recommend (은정, ai) | 404-SURVEY_NOT_FOUND | 뷰티 설문을 아직 하지 않은 회원의 프로필 조회 |
+| | 400-SURVEY_ANSWER_INVALID | 설문 답이 칸에 맞지 않음: 선호 성분 칸에 피하는 성분 코드(또는 반대), 같은 코드 중복, 고민 4개 이상(도메인 검사. 요청 검증에서는 400-VALIDATION_FAILED). 모르는 코드는 400-INVALID_REQUEST |
 
 
 ## 9. 로그 규칙
