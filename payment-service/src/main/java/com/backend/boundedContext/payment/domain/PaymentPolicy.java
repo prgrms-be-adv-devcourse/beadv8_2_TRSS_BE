@@ -15,6 +15,7 @@ public class PaymentPolicy {
     private final Duration topupReadyTtl;
     private final Duration topupReconcileDelay;
     private final int topupReconcileBatchSize;
+    private final Duration topupStuckWarnAfter;
     private final Long adminMemberId;
 
     public PaymentPolicy(
@@ -23,6 +24,7 @@ public class PaymentPolicy {
             @Value("${custom.payment.topupReadyExpireMinutes}") long topupReadyExpireMinutes,
             @Value("${custom.payment.topupReconcileDelayMinutes}") long topupReconcileDelayMinutes,
             @Value("${custom.payment.topupReconcileBatchSize}") int topupReconcileBatchSize,
+            @Value("${custom.payment.topupStuckWarnMinutes}") long topupStuckWarnMinutes,
             @Value("${custom.payment.adminMemberId}") Long adminMemberId
     ) {
         this.topupUnit = topupUnit;
@@ -30,6 +32,7 @@ public class PaymentPolicy {
         this.topupReadyTtl = Duration.ofMinutes(topupReadyExpireMinutes);
         this.topupReconcileDelay = Duration.ofMinutes(topupReconcileDelayMinutes);
         this.topupReconcileBatchSize = topupReconcileBatchSize;
+        this.topupStuckWarnAfter = Duration.ofMinutes(topupStuckWarnMinutes);
         this.adminMemberId = adminMemberId;
     }
 
@@ -60,6 +63,11 @@ public class PaymentPolicy {
     // 결과 확인 스케줄러가 한 번에 조회하는 충전 건수 (다 채우면 같은 실행에서 이어서 조회)
     public int topupReconcileBatchSize() {
         return topupReconcileBatchSize;
+    }
+
+    // 결과가 정해지지 않은 상태(PROCESSING·CANCELING·METHOD_CANCELING)로 이 시간이 넘게 남은 충전 건은 오류 로그로 알림
+    public Duration topupStuckWarnAfter() {
+        return topupStuckWarnAfter;
     }
 
     // 정산 수수료(FEE)를 받는 관리자 회원 ID

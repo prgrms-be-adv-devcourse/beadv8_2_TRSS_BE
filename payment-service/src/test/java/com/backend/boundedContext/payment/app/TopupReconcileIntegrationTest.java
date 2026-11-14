@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +34,7 @@ import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
+import com.backend.boundedContext.payment.out.TopupStuckCount;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
 import com.backend.boundedContext.payment.out.pg.PgPaymentMethod;
@@ -165,6 +167,20 @@ class TopupReconcileIntegrationTest {
 
         assertThat(fromStart).containsExactly(first.topupId(), second.topupId(), third.topupId());
         assertThat(afterSecond).containsExactly(third.topupId());
+    }
+
+    @Test
+    @DisplayName("오래 남은 충전 건은 기준 시각 이전부터 같은 상태인 건만 상태별로 센다")
+    void countStale() {
+        Processing stuck = processing(), recent = processing();
+        // 로컬 DB의 다른 충전 건과 섞이지 않게 아주 오래전 시각으로 옮김
+        moveUpdatedAt(stuck.topupId(), LocalDateTime.of(2001, 1, 1, 0, 0));
+        moveUpdatedAt(recent.topupId(), LocalDateTime.of(2001, 1, 3, 0, 0));
+
+        List<TopupStuckCount> counts = topupRepository.countStale(
+                EnumSet.of(TopupStatus.PROCESSING, TopupStatus.CANCELING, TopupStatus.METHOD_CANCELING), LocalDateTime.of(2001, 1, 2, 0, 0));
+
+        assertThat(counts).containsExactly(new TopupStuckCount(TopupStatus.PROCESSING, 1, stuck.topupId()));
     }
 
     @Test

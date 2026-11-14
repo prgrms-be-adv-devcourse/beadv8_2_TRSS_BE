@@ -35,7 +35,7 @@ class PaymentReconcileTopupsUseCaseTest {
     private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 10, 14, 9, 50);
     private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "pk_7", PgProvider.TOSS, UPDATED_AT);
 
-    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
+    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 60, 1L);
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
     private final TopupGateways topupGateways = mock(TopupGateways.class);
     private final TopupGatewayPort gateway = mock(TopupGatewayPort.class);

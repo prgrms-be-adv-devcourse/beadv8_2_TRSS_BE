@@ -34,7 +34,7 @@ class PaymentReconcileMethodCancelingTopupsUseCaseTest {
     private static final LocalDateTime CUTOFF = LocalDateTime.of(2026, 11, 12, 9, 55);
     private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 11, 12, 9, 50);
 
-    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
+    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 60, 1L);
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
     private final PaymentTopupMethodCanceller canceller = mock(PaymentTopupMethodCanceller.class);
     private final TopupGateways topupGateways = mock(TopupGateways.class);

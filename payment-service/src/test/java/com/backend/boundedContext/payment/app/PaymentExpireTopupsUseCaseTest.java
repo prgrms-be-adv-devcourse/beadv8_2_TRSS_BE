@@ -18,7 +18,7 @@ import com.backend.boundedContext.payment.out.TopupRepository;
 class PaymentExpireTopupsUseCaseTest {
 
     private final TopupRepository topupRepository = mock(TopupRepository.class);
-    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
+    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 60, 1L);
     private final PaymentExpireTopupsUseCase useCase = new PaymentExpireTopupsUseCase(paymentPolicy, topupRepository);
 
     @Test

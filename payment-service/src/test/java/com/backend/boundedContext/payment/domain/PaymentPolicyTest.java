@@ -16,7 +16,7 @@ import com.backend.global.exception.DomainException;
 
 class PaymentPolicyTest {
 
-    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
+    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 60, 1L);
 
     @ParameterizedTest
     @ValueSource(longs = {10_000, 20_000, 990_000, 1_000_000})

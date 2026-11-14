@@ -72,6 +72,15 @@ public interface TopupRepository extends JpaRepository<Topup, Long>, JpaSpecific
     List<Topup> findStale(@Param("status") TopupStatus status, @Param("cutoff") LocalDateTime cutoff,
                           @Param("afterUpdatedAt") LocalDateTime afterUpdatedAt, @Param("afterId") Long afterId, Pageable pageable);
 
+    // 오래 남은 충전 건: 기준 시각 이전부터 같은 상태로 남은 충전 건을 상태별로 셈
+    @Query("""
+            select new com.backend.boundedContext.payment.out.TopupStuckCount(t.status, count(t), min(t.id))
+            from Topup t
+            where t.status in :statuses and t.updatedAt < :cutoff
+            group by t.status
+            """)
+    List<TopupStuckCount> countStale(@Param("statuses") Collection<TopupStatus> statuses, @Param("cutoff") LocalDateTime cutoff);
+
     /**
      * READY 만료: 기준 시각 이전에 만든 READY 충전 건을 한 번에 만료 상태로 바꾸고 바뀐 건수를 반환
      * 조건부 UPDATE라 같은 순간 승인 요청이 PROCESSING으로 선점한 건은 바뀌지 않음
