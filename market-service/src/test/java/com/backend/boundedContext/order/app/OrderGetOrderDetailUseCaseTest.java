@@ -21,6 +21,8 @@ import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.payment.dto.PaymentAttemptDto;
 import com.backend.shared.payment.dto.PaymentAttemptStatus;
 import com.backend.shared.payment.out.PaymentApi;
+import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.out.ProductApi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +52,8 @@ class OrderGetOrderDetailUseCaseTest {
     PaymentApi paymentApi;
     @Mock
     DeliveryApi deliveryApi;
+    @Mock
+    ProductApi productApi;
     @InjectMocks
     OrderGetOrderDetailUseCase useCase;
 
@@ -80,6 +84,40 @@ class OrderGetOrderDetailUseCaseTest {
                         OrderItemResponse::discountRate, OrderItemResponse::lineAmount)
                 .containsExactly(tuple(13_000L, 15_000L, 20, 26_000L), tuple(5_000L, 5_000L, null, 5_000L));
         assertThat(response.totalPrice()).isEqualTo(31_000);   // 금액은 단가 기준
+    }
+
+    private static OptionSnapshotDto option(Long optionId, Long productId, String thumbnailUrl, boolean saleable) {
+        return new OptionSnapshotDto(optionId, productId, 2L, "상품", "기본", 10_000, 10_000, null, 5,
+                saleable, null, thumbnailUrl);
+    }
+
+    @Test
+    @DisplayName("항목마다 상품의 현재 대표 이미지를 담는다 (판매 중지·삭제 상품도 이미지가 있으면 담고, 이미지가 없으면 null)")
+    void itemThumbnails() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
+                .willReturn(Optional.of(order(500L)));
+        given(productApi.getOptions(List.of(100L, 101L))).willReturn(List.of(
+                option(101L, 11L, null, true),
+                option(100L, 10L, "https://img.example/lipstick.jpg", false)));   // 판매 중지된 상품
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.items()).extracting(OrderItemResponse::optionId, OrderItemResponse::thumbnailUrl)
+                .containsExactly(tuple(100L, "https://img.example/lipstick.jpg"), tuple(101L, null));
+    }
+
+    @Test
+    @DisplayName("상품 이미지 조회에 실패해도 주문 상세는 이미지 없이 응답한다")
+    void itemThumbnails_lookupFailed(CapturedOutput output) {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
+                .willReturn(Optional.of(order(500L)));
+        given(productApi.getOptions(List.of(100L, 101L))).willThrow(new IllegalStateException("상품 조회 실패"));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.items()).extracting(OrderItemResponse::thumbnailUrl).containsExactly(null, null);
+        assertThat(response.totalPrice()).isEqualTo(25_000);
+        assertThat(output).contains("상품 이미지 조회에 실패해 주문 상세를 이미지 없이 응답합니다");
     }
 
     @Test

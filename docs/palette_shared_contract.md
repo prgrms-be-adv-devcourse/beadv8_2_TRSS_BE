@@ -71,6 +71,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 배송 시작 | delivery | 물류 담당 송장 등록 → 배송 SHIPPED → `DeliveryShippedEvent` → (Kafka `delivery.events`) 알림이 구매자에게 배송 시작 알림 | 이벤트, 별도 Tx (송장 수정은 이벤트 없음) |
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
 | 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
+| 주문 상세의 항목 이미지 | order | `ProductApi.getOptions(optionIds)` → 항목별 상품의 현재 대표 이미지(`items[].thumbnailUrl`, 판매 중지·삭제 상품 포함) (TRSS-242) | 동기 조회 (조회 실패 시 주문 상세는 200 + 이미지 null) |
 | 주문 취소·15분 만료 | order | `ProductApi.lockProductsForOrderChange(productIds)` → 주문 잠금·상태 다시 확인 → 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
 | 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` → (커밋 뒤 Kafka `order.events`) | 동기, 같은 Tx + 이벤트 (재고 복원과 outbox 저장이 승인과 같은 트랜잭션) |
 | 반품 환불 | payment | `OrderReturnedEvent` 수신(Kafka `order.events`) → 홀딩 → 구매자 지갑(REFUND), 플랫폼 지갑 → 구매자 지갑(배송비, SHIPPING_FEE_REFUND), 홀딩 → 플랫폼 지갑(장바구니 쿠폰 지원금, COUPON_SUBSIDY_CANCEL) → 결제 REFUNDED, 홀딩 RELEASED (결제 담당 구현 예정, 지금은 받는 코드 없음) | 이벤트, 별도 Tx |
