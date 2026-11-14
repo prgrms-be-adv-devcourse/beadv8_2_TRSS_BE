@@ -29,7 +29,7 @@ class OrderSupportTest {
     OrderSupport orderSupport;
 
     private OptionSnapshotDto option(Long optionId, boolean saleable) {
-        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", 15000, 10,
+        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", 15000, 15000, null, 10,
                 saleable, saleable ? null : ProductUnsaleableReason.PRODUCT_STOPPED, null);
     }
 

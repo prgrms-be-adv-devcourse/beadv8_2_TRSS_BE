@@ -50,7 +50,7 @@ class OrderUpdateCartItemUseCaseTest {
 
     private void givenStock(int stock) {
         given(productApi.getOptions(List.of(100L))).willReturn(List.of(
-                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, stock, true, null, null)));
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 15000, null, stock, true, null, null)));
     }
 
     @Test

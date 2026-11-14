@@ -7,11 +7,13 @@ import com.backend.boundedContext.order.in.dto.OrderDeliveryResponse;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
 import com.backend.boundedContext.order.in.dto.OrderItemResponse;
 import com.backend.boundedContext.order.in.dto.OrderPaymentResponse;
+import com.backend.boundedContext.order.in.dto.RefundStatus;
 import com.backend.boundedContext.order.in.dto.ShippingAddressResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.delivery.out.DeliveryApi;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.payment.dto.PaymentAttemptStatus;
 import com.backend.shared.payment.out.PaymentApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -105,8 +107,28 @@ public class OrderGetOrderDetailUseCase {
                 order.getCartCouponDiscountAmount(),
                 order.getPayAmount(),
                 order.getShippingFee(),
-                payments.unavailable()
+                payments.unavailable(),
+                order.getReturnRequestedAt(),
+                order.getReturnReasonCode(),
+                order.getReturnReason(),
+                order.getReturnRejectedAt(),
+                order.getReturnRejectReason(),
+                order.getReturnedAt(),
+                refundStatus(order, payments)
         );
+    }
+
+    // 환불 상태: 반품 승인(RETURNED) 주문만 결제 시도의 REFUNDED 여부로 본다
+    private RefundStatus refundStatus(Order order, PaymentsResult payments) {
+        if (order.getStatus() != OrderStatus.RETURNED) {
+            return RefundStatus.NONE;
+        }
+        if (payments.unavailable()) {
+            return RefundStatus.UNKNOWN;
+        }
+        boolean refunded = payments.payments().stream()
+                .anyMatch(payment -> payment.status() == PaymentAttemptStatus.REFUNDED);
+        return refunded ? RefundStatus.COMPLETED : RefundStatus.PENDING;
     }
 
     private OrderItemResponse toItem(OrderItem item) {
@@ -120,7 +142,9 @@ public class OrderGetOrderDetailUseCase {
                 item.getUnitPrice(),
                 item.getQuantity(),
                 item.getLineAmount(),
-                item.getDiscountAmount()
+                item.getDiscountAmount(),
+                item.getListUnitPrice(),
+                item.getDiscountRate()
         );
     }
 }

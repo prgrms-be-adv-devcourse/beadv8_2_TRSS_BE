@@ -85,7 +85,7 @@ class OrderDeliveryFlowIntegrationTest {
     @BeforeEach
     void setUp() {
         given(productApi.getOptions(anyCollection())).willReturn(List.of(
-                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", 10_000, 10, true, null, null)));
+                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", 10_000, 10_000, null, 10, true, null, null)));
     }
 
     @AfterEach

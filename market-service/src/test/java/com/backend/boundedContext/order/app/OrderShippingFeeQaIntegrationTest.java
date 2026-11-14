@@ -75,7 +75,7 @@ class OrderShippingFeeQaIntegrationTest {
 
     private Long givenCartItem(long price) {
         given(productApi.getOptions(anyCollection())).willReturn(List.of(
-                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", price, 10, true, null, null)));
+                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", price, price, null, 10, true, null, null)));
         given(memberApi.getSellers(any())).willReturn(List.of(new SellerDto(2L, 20L, "테스트상점", SellerStatus.APPROVED)));
 
         return transactionTemplate.execute(status -> {
@@ -203,7 +203,7 @@ class OrderShippingFeeQaIntegrationTest {
         assertThat(detail.payAmount()).isEqualTo(20_000);
 
         given(productApi.getOptions(anyCollection())).willReturn(List.of(
-                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", 20_000, 10, true, null, null)));
+                new OptionSnapshotDto(optionId, 10L, 2L, "립스틱", "기본", 20_000, 20_000, null, 10, true, null, null)));
         given(paymentApi.pay(any())).willReturn(new PayResultDto(902L, PayResultStatus.PAID, 0, 0));
         orderFacade.payOrder(buyerId, created.orderId());
 

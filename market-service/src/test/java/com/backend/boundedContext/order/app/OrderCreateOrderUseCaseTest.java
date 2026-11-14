@@ -84,7 +84,7 @@ class OrderCreateOrderUseCaseTest {
 
     /** 옵션 ID = 상품 ID × 10, 판매자는 2번 */
     private OptionSnapshotDto onSale(Long optionId, long price) {
-        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, 10,
+        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, price, null, 10,
                 true, null, null);
     }
 
@@ -251,7 +251,7 @@ class OrderCreateOrderUseCaseTest {
     @DisplayName("배송비: 쿠폰 없는 주문도 배송비를 저장하고, 예상 금액은 배송비를 뺀 상품 금액 합계와 비교한다 (판매자 2명이어도 한 번)")
     void create_shippingFee() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1, 110L, 1));
-        OptionSnapshotDto otherSeller = new OptionSnapshotDto(110L, 11L, 9L, "상품110", "기본", 8000, 10, true, null, null);
+        OptionSnapshotDto otherSeller = new OptionSnapshotDto(110L, 11L, 9L, "상품110", "기본", 8000, 8000, null, 10, true, null, null);
         givenOptions(onSale(100L, 12000), otherSeller);
         given(memberApi.getSellers(any())).willReturn(List.of(
                 new SellerDto(SELLER_ID, 20L, "테스트상점", SellerStatus.APPROVED),

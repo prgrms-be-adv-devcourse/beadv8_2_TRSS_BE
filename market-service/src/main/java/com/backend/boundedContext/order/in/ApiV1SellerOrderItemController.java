@@ -33,7 +33,9 @@ public class ApiV1SellerOrderItemController {
 
     private final OrderFacade orderFacade;
 
-    @Operation(summary = "판매자 주문 항목 조회", description = "결제 완료 이후 주문 중 본인 상품 항목만 최신 주문순으로 조회합니다.")
+    @Operation(summary = "판매자 주문 항목 조회", description = "결제 완료 이후 주문 중 본인 상품 항목만 최신 주문순으로 조회합니다. "
+                    + "상품 쿠폰은 판매자 부담이라 discountAmount(상품 쿠폰 할인액)와 discountedLineAmount(할인 후 금액)를 함께 주며, "
+                    + "정산은 할인 후 금액 기준입니다.")
     @GetMapping
     public RsData<PageResponse<SellerOrderItemResponse>> getSellerOrderItems(
             @AuthenticationPrincipal AuthMember authMember,

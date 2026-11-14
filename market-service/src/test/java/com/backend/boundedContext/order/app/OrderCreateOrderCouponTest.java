@@ -68,7 +68,7 @@ class OrderCreateOrderCouponTest {
 
     /** 옵션 ID = 상품 ID x 10, 판매자는 2번 */
     private OptionSnapshotDto onSale(Long optionId, long price) {
-        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, 10,
+        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, price, null, 10,
                 true, null, null);
     }
 

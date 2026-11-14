@@ -38,7 +38,7 @@ class OrderGetCartShippingFeeQaTest {
     }
 
     private OptionSnapshotDto onSale(Long optionId, long price) {
-        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, 10, true, null, null);
+        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, price, null, 10, true, null, null);
     }
 
     @Test

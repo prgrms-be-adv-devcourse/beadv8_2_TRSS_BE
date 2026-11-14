@@ -2,11 +2,15 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
+import com.backend.boundedContext.order.domain.OrderItem;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
+import com.backend.boundedContext.order.domain.ReturnItemDecision;
+import com.backend.boundedContext.order.domain.ReturnReasonCode;
 import com.backend.boundedContext.order.domain.ShippingAddress;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
 import com.backend.boundedContext.order.in.dto.OrderItemResponse;
 import com.backend.boundedContext.order.in.dto.OrderPaymentResponse;
+import com.backend.boundedContext.order.in.dto.RefundStatus;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.global.exception.GlobalErrorCode;
@@ -28,6 +32,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,6 +65,24 @@ class OrderGetOrderDetailUseCaseTest {
     }
 
     @Test
+    @DisplayName("주문 항목의 정가·할인율은 주문 때 저장한 값을 그대로 담는다 (할인 없던 항목은 정가 = 단가, 할인율 null)")
+    void listPriceAndDiscountRate() {
+        Order order = Order.create(BUYER_ID, List.of(
+                // 상품 10,000원 20% 할인 + 옵션 추가금 5,000원 → 단가 13,000원, 정가 15,000원, 할인율 20%
+                new OrderItemSpec(null, 10L, 100L, 2L, "립스틱", "대용량", "상점", 13_000, 2, 15_000, 20),
+                new OrderItemSpec(null, 11L, 101L, 2L, "블러셔", "기본", "상점", 5_000, 1)), LocalDateTime.now(), 15);
+        ReflectionTestUtils.setField(order, "id", 500L);
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.items()).extracting(OrderItemResponse::unitPrice, OrderItemResponse::listPrice,
+                        OrderItemResponse::discountRate, OrderItemResponse::lineAmount)
+                .containsExactly(tuple(13_000L, 15_000L, 20, 26_000L), tuple(5_000L, 5_000L, null, 5_000L));
+        assertThat(response.totalPrice()).isEqualTo(31_000);   // 금액은 단가 기준
+    }
+
+    @Test
     @DisplayName("본인 주문이면 항목 스냅샷과 금액을 담아 반환한다")
     void detail() {
         given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID))
@@ -77,6 +100,14 @@ class OrderGetOrderDetailUseCaseTest {
         assertThat(response.delivery()).isNull();
         assertThat(response.deliveryUnavailable()).isFalse();
         verifyNoInteractions(deliveryApi);   // 배송지 없는 주문은 delivery를 부르지 않는다
+        // 반품하지 않은 주문: 반품 필드는 모두 null, 환불 상태 NONE
+        assertThat(response.returnRequestedAt()).isNull();
+        assertThat(response.returnReasonCode()).isNull();
+        assertThat(response.returnReason()).isNull();
+        assertThat(response.returnRejectedAt()).isNull();
+        assertThat(response.returnRejectReason()).isNull();
+        assertThat(response.returnedAt()).isNull();
+        assertThat(response.refundStatus()).isEqualTo(RefundStatus.NONE);
     }
 
     @Test
@@ -227,5 +258,118 @@ class OrderGetOrderDetailUseCaseTest {
 
         assertThat(response.deliveredAt()).isEqualTo(deliveredAt);
         assertThat(response.delivery().deliveredAt()).isEqualTo(deliveredAt);
+    }
+
+    // ===== 반품 필드·환불 상태 (TRSS-222 구매자 반품 요청) =====
+
+    private static final LocalDateTime RETURN_PAID_AT = LocalDateTime.of(2026, 11, 1, 10, 0);
+    private static final LocalDateTime RETURN_REQUESTED_AT = RETURN_PAID_AT.plusDays(2);
+
+    /** 결제 후 반품 요청한 주문 (배송지 없는 주문이라 PAID면 요청 가능) */
+    private Order returnRequestedOrder(Long orderId) {
+        Order order = order(orderId);
+        order.pay(RETURN_PAID_AT);
+        order.requestReturn(ReturnReasonCode.OTHER, "색상이 사진과 달라요", RETURN_REQUESTED_AT);
+        return order;
+    }
+
+    /** 반품 승인된 주문 (항목 id는 저장 전이라 직접 붙인다) */
+    private Order returnedOrder(Long orderId) {
+        Order order = returnRequestedOrder(orderId);
+        long itemId = orderId * 10;
+        List<ReturnItemDecision> decisions = new ArrayList<>();
+        for (OrderItem item : order.getItems()) {
+            ReflectionTestUtils.setField(item, "id", ++itemId);
+            decisions.add(new ReturnItemDecision(itemId, false));
+        }
+        order.approveReturn(decisions, RETURN_REQUESTED_AT.plusDays(1));
+        return order;
+    }
+
+    private static PaymentAttemptDto attempt(Long id, PaymentAttemptStatus status) {
+        LocalDateTime refundedAt = status == PaymentAttemptStatus.REFUNDED ? RETURN_REQUESTED_AT.plusDays(1) : null;
+        return new PaymentAttemptDto(id, status, 25_000, RETURN_PAID_AT, RETURN_PAID_AT, refundedAt);
+    }
+
+    @Test
+    @DisplayName("반품 요청 중이면 요청 시각·사유 코드·상세 사유를 담고, 환불 상태는 NONE")
+    void return_requested() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(returnRequestedOrder(500L)));
+        given(paymentApi.getPaymentAttempts(500L)).willReturn(List.of(attempt(1L, PaymentAttemptStatus.PAID)));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.status()).isEqualTo(OrderStatus.RETURN_REQUESTED);
+        assertThat(response.returnRequestedAt()).isEqualTo(RETURN_REQUESTED_AT);
+        assertThat(response.returnReasonCode()).isEqualTo(ReturnReasonCode.OTHER);
+        assertThat(response.returnReason()).isEqualTo("색상이 사진과 달라요");
+        assertThat(response.returnedAt()).isNull();
+        assertThat(response.refundStatus()).isEqualTo(RefundStatus.NONE);
+    }
+
+    @Test
+    @DisplayName("거절돼 PAID로 돌아온 주문은 거절 시각·거절 사유를 담고, 환불 상태는 NONE")
+    void return_rejected() {
+        Order order = returnRequestedOrder(500L);
+        order.rejectReturn("사용 흔적이 있어 반품할 수 없습니다", RETURN_REQUESTED_AT.plusDays(1));
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.getPaymentAttempts(500L)).willReturn(List.of(attempt(1L, PaymentAttemptStatus.PAID)));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.returnRequestedAt()).isEqualTo(RETURN_REQUESTED_AT);
+        assertThat(response.returnRejectedAt()).isEqualTo(RETURN_REQUESTED_AT.plusDays(1));
+        assertThat(response.returnRejectReason()).isEqualTo("사용 흔적이 있어 반품할 수 없습니다");
+        assertThat(response.refundStatus()).isEqualTo(RefundStatus.NONE);
+    }
+
+    @Test
+    @DisplayName("RETURNED이고 결제 시도에 REFUNDED가 있으면 환불 상태 COMPLETED, 승인 시각을 담는다")
+    void refundStatus_completed() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(returnedOrder(500L)));
+        given(paymentApi.getPaymentAttempts(500L)).willReturn(List.of(
+                attempt(1L, PaymentAttemptStatus.FAILED_INSUFFICIENT_BALANCE), attempt(2L, PaymentAttemptStatus.REFUNDED)));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.refundStatus()).isEqualTo(RefundStatus.COMPLETED);
+        assertThat(response.returnedAt()).isEqualTo(RETURN_REQUESTED_AT.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("RETURNED인데 결제 시도에 REFUNDED가 아직 없으면 환불 상태 PENDING")
+    void refundStatus_pending() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(returnedOrder(500L)));
+        given(paymentApi.getPaymentAttempts(500L)).willReturn(List.of(attempt(1L, PaymentAttemptStatus.PAID)));
+
+        assertThat(useCase.getOrderDetail(BUYER_ID, 500L).refundStatus()).isEqualTo(RefundStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("RETURNED인데 결제 내역 조회가 실패하면 환불 상태 UNKNOWN, paymentUnavailable = true")
+    void refundStatus_unknown() {
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(returnedOrder(500L)));
+        given(paymentApi.getPaymentAttempts(500L))
+                .willThrow(new DomainException(GlobalErrorCode.EXTERNAL_SERVICE_ERROR));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.refundStatus()).isEqualTo(RefundStatus.UNKNOWN);
+        assertThat(response.paymentUnavailable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("RETURNED가 아닌 주문은 결제 내역 조회가 실패해도 환불 상태 NONE (UNKNOWN은 반품 승인 주문만)")
+    void refundStatus_notReturned_unavailable() {
+        Order order = order(500L);
+        order.pay(RETURN_PAID_AT);
+        given(orderRepository.findWithItemsByIdAndBuyerId(500L, BUYER_ID)).willReturn(Optional.of(order));
+        given(paymentApi.getPaymentAttempts(500L))
+                .willThrow(new DomainException(GlobalErrorCode.EXTERNAL_SERVICE_ERROR));
+
+        OrderDetailResponse response = useCase.getOrderDetail(BUYER_ID, 500L);
+
+        assertThat(response.refundStatus()).isEqualTo(RefundStatus.NONE);
+        assertThat(response.paymentUnavailable()).isTrue();
     }
 }

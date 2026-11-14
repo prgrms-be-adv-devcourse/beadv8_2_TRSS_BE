@@ -91,6 +91,34 @@ class OrderGetSellerOrderItemsUseCaseTest {
         assertThat(row.quantity()).isEqualTo(3);
         assertThat(row.unitPrice()).isEqualTo(12_000);
         assertThat(row.lineAmount()).isEqualTo(36_000);
+        assertThat(row.discountAmount()).isZero();                 // 상품 쿠폰을 쓰지 않은 항목
+        assertThat(row.discountedLineAmount()).isEqualTo(36_000);   // = lineAmount
+        assertThat(row.status()).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("상품 쿠폰을 쓴 항목은 할인액과 할인 후 금액(lineAmount − discountAmount)을 담고, 기존 금액 필드는 그대로다")
+    @SuppressWarnings("unchecked")
+    void productCouponDiscount() {
+        Order order = Order.create(3L, List.of(
+                new OrderItemSpec(null, 10L, 100L, SELLER_ID, "약산성 토너", "300ml", "온결", 12_000, 3)), ORDERED_AT, 15);
+        ReflectionTestUtils.setField(order, "id", 500L);
+        OrderItem item = order.getItems().get(0);
+        ReflectionTestUtils.setField(item, "id", 900L);
+        order.applyProductCouponDiscount(900L, 5_000);
+        order.pay(ORDERED_AT.plusMinutes(1));
+        given(memberApi.findSellerByMemberId(MEMBER_ID)).willReturn(Optional.of(seller(SellerStatus.APPROVED)));
+        given(orderItemRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .willReturn(new PageImpl<>(List.of(item), PAGE, 1));
+
+        SellerOrderItemResponse row = useCase.getSellerOrderItems(MEMBER_ID, null, null, null, null, PAGE).items().get(0);
+
+        assertThat(row.unitPrice()).isEqualTo(12_000);
+        assertThat(row.quantity()).isEqualTo(3);
+        assertThat(row.lineAmount()).isEqualTo(36_000);
+        assertThat(row.discountAmount()).isEqualTo(5_000);
+        assertThat(row.discountedLineAmount()).isEqualTo(31_000);
+        assertThat(row.discountedLineAmount()).isEqualTo(row.lineAmount() - row.discountAmount());
         assertThat(row.status()).isEqualTo(OrderStatus.PAID);
     }
 

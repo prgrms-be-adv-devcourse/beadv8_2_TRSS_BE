@@ -31,6 +31,7 @@ import com.backend.boundedContext.order.app.OrderFacade;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
 import com.backend.boundedContext.order.in.dto.PriceChangedResponse;
+import com.backend.boundedContext.order.in.dto.RefundStatus;
 import com.backend.boundedContext.order.in.dto.ShippingAddressRequest;
 import com.backend.boundedContext.order.in.dto.ShippingAddressResponse;
 import com.backend.global.exception.DomainException;
@@ -140,7 +141,8 @@ class ApiV1OrderControllerDeliveryTest {
                 9L, "20261108-0001", OrderStatus.PAID, 10_000, LocalDateTime.now(), LocalDateTime.now(), 0,
                 LocalDateTime.now(), null, null, List.of(), List.of(),
                 new ShippingAddressResponse("홍길동", "01012345678", "06236", "서울", null, null),
-                null, null, true, 0, 0, 12_500, 2_500, false));
+                null, null, true, 0, 0, 12_500, 2_500, false,
+                null, null, null, null, null, null, RefundStatus.NONE));
 
         mockMvc.perform(get("/api/v1/orders/9").header("Authorization", bearer()))
                 .andExpect(status().isOk())
