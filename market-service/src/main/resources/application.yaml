@@ -74,7 +74,7 @@ custom:
     accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
   internal:
     # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 모든 서비스가 같은 값을 쓰고, 기본값 없이 환경변수(.env)로만 주입한다.
-    # market이 받는 내부 API(/internal/v1/orders) 검사와 회원·배송 내부 API 호출(MemberApiClient, DeliveryApiClient)에 함께 쓴다
+    # market이 받는 내부 API(/internal/v1/orders) 검사와 회원·결제·배송 내부 API 호출(MemberApiClient, PaymentApiClient, DeliveryApiClient)에 함께 쓴다
     apiKey: ${INTERNAL_API_KEY}
   cors:
     allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
@@ -100,6 +100,13 @@ custom:
     baseUrl: ${DELIVERY_SERVICE_URL:http://localhost:8085}
     connectTimeoutMillis: 1000   # delivery 서비스 접속 제한 시간(밀리초)
     readTimeoutMillis: 2000      # 응답 대기 제한 시간(밀리초). 주문 상세 요청 안에서 부르므로 짧게 둔다
+  # 결제 내부 API(/internal/v1/payments). payment-service(8083). 주문 결제(pay)·결제 취소(cancelPayment)·결제 내역 조회
+  # pay가 응답 시간 안에 오지 않으면 결과 불명으로 보고 주문을 PAYING으로 둔다. 재확인 스케줄러가 같은 키로 다시 불러 정리한다
+  # 결제 내역 조회가 실패하면 주문 상세는 결제 내역 없이(paymentUnavailable: true) 응답한다
+  payment:
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+    connectTimeoutMillis: 1000   # payment 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 5000      # 응답 대기 제한 시간(밀리초). 결제는 지갑 잠금을 기다릴 수 있어 다른 조회보다 길게 둔다. payingRecheckSeconds보다 짧아야 한다
   order:
     cartMaxQuantity: 99       # 장바구니 최대 수량
     expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
@@ -108,7 +115,12 @@ custom:
     schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
     expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
     expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
+    payingRecheckSeconds: 30           # 결제 중(PAYING)이 된 뒤 이 시간(초)이 지나면 재확인 스케줄러가 같은 키로 결제를 다시 불러 정리한다
+    payingRecheckIntervalSeconds: 30   # 결제 재확인 스케줄러 실행 간격(초). 한 번에 schedulerBatchSize건씩 처리한다
+    payingAlertMinutes: 10             # 결제 중 상태가 이 시간(분) 넘게 정리되지 않으면 ERROR 로그로 알린다
     couponEnabled: ${ORDER_COUPON_ENABLED:false}   # 주문에 쿠폰을 반영하는지. 결제(COUPON_SUBSIDY)와 정산(할인 후 금액)이 지원한 뒤에 켠다
+    shippingFee: 2500                  # 배송비(원). 주문당 한 번
+    freeShippingThreshold: 30000       # 무료 배송 기준(원). 상품 쿠폰 할인 후 상품 금액 합계가 이 금액 이상이면 배송비 0 (장바구니 쿠폰은 기준에 영향 없음)
   outbox:
     relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
     relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다

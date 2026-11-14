@@ -1,5 +1,6 @@
 package com.backend.boundedContext.order.app;
 
+import com.backend.boundedContext.order.app.OrderPaymentSupport.PaymentAttempt;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderErrorCode;
 import com.backend.boundedContext.order.domain.OrderItem;
@@ -7,40 +8,49 @@ import com.backend.boundedContext.order.in.dto.InsufficientBalanceResponse;
 import com.backend.boundedContext.order.in.dto.OrderPayResponse;
 import com.backend.boundedContext.order.out.OrderCouponPort;
 import com.backend.boundedContext.order.out.OrderRepository;
-import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.member.out.MemberApi;
-import com.backend.shared.order.event.OrderPaidEvent;
+import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.payment.dto.PayCommand;
 import com.backend.shared.payment.dto.PayResultDto;
-import com.backend.shared.payment.out.PaymentApi;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
  * 예치금 결제
- * 주문 PAID 변경 → 쿠폰 사용 처리 → 결제(지갑 → 홀딩)를 한 트랜잭션으로 처리한다.
- * 쿠폰 사용 처리는 결제 요청보다 먼저 한다: 예약 뒤 쿠폰이 중지됐거나 기간이 끝났으면 409-COUPON_NOT_ACTIVE로
- * 돈이 움직이기 전에 멈춘다(결제 서비스 호출은 이 트랜잭션으로 되돌릴 수 없다). 결제가 실패하면 사용 처리도 함께 롤백된다.
- * 결제 금액은 쿠폰 할인을 반영한 payAmount다(쿠폰이 꺼져 있거나 쓰지 않았으면 상품 금액 합계와 같다).
- * 배송지가 있는 주문이면 결제 완료 이벤트(OrderPaidEvent)를 outbox에 저장한다. delivery가 받아 배송 건(READY)을 만든다.
- * 결제가 실패하면(예외) 주문 변경과 함께 이벤트 저장도 롤백된다.
+ * 결제는 HTTP라 주문 트랜잭션에 참여하지 못하므로 트랜잭션 두 개로 나눈다 (OrderFacade.payOrder는 트랜잭션을 열지 않는다)
+ * 1. 상품 판매 가능 여부, 주문 만료 시각, 예약 쿠폰을 지금 쓸 수 있는지 확인
+ * 2. 주문을 잠그고 PAYING으로 바꾼 뒤 이번 시도의 멱등키·시작 시각을 기록하고 커밋 (트랜잭션 1)
+ * 3. 결제 요청 (트랜잭션 밖)
+ * 4. 주문을 다시 잠그고 아직 PAYING이고 같은 키일 때만 결과 반영 (트랜잭션 2, OrderPaymentSupport)
+ * 결과를 모르면 "결제 확인 중"(주문 PAYING)으로 응답하고, 재확인 스케줄러가 같은 키로 결제를 다시 불러 정리한다.
+ * 결제 금액은 쿠폰 할인을 반영하고 배송비를 더한 payAmount다.
  */
 @Component
-@RequiredArgsConstructor
 public class OrderPayOrderUseCase {
 
     private final OrderRepository orderRepository;
     private final OrderSupport orderSupport;
-    private final PaymentApi paymentApi;
+    private final OrderPaymentSupport orderPaymentSupport;
     private final MemberApi memberApi;
-    private final EventPublisher eventPublisher;
     private final OrderCouponPort orderCouponPort;
+    private final TransactionTemplate transaction;
+
+    public OrderPayOrderUseCase(OrderRepository orderRepository, OrderSupport orderSupport,
+                                OrderPaymentSupport orderPaymentSupport, MemberApi memberApi,
+                                OrderCouponPort orderCouponPort, PlatformTransactionManager transactionManager) {
+        this.orderRepository = orderRepository;
+        this.orderSupport = orderSupport;
+        this.orderPaymentSupport = orderPaymentSupport;
+        this.memberApi = memberApi;
+        this.orderCouponPort = orderCouponPort;
+        this.transaction = new TransactionTemplate(transactionManager);
+    }
 
     public OrderPayResponse pay(Long buyerId, Long orderId) {
         // 탈퇴한 회원은 남은 Access Token으로 결제할 수 없게 401
@@ -48,23 +58,47 @@ public class OrderPayOrderUseCase {
 
         LocalDateTime now = LocalDateTime.now();
 
+        PayCommand command = transaction.execute(status -> startPaying(buyerId, orderId, now));
+        PaymentAttempt attempt = orderPaymentSupport.requestAndApply(command, now);
+
+        if (attempt.isUnknown()) {
+            // 결과를 모름: 주문은 PAYING. 프론트는 "결제 확인 중"으로 보여 주고 주문 상태를 다시 조회한다
+            return new OrderPayResponse(command.orderId(), command.orderNumber(), OrderStatus.PAYING,
+                    command.amount(), null, null);
+        }
+        return toResponse(attempt.order(), attempt.result(), command, now);
+    }
+
+    // 1·2단계: 확인하고 PAYING으로. 확인에 실패하면 PAYING 변경도 함께 롤백된다
+    private PayCommand startPaying(Long buyerId, Long orderId, LocalDateTime now) {
         Order order = orderRepository.findByIdAndBuyerIdForUpdate(orderId, buyerId)
                 .orElseThrow(() -> new DomainException(OrderErrorCode.ORDER_NOT_FOUND));
 
-        long remainingSeconds = order.remainingPaymentSeconds(now);
-
-        order.pay(now);
+        // 결제 중이면 409-PAYMENT_IN_PROGRESS, 결제 대기가 아니면 409-ORDER_STATE_INVALID, 만료면 409-ORDER_EXPIRED
+        order.startPaying(newIdempotencyKey(order), now);
         validateSaleable(order.getItems());
-        orderCouponPort.useReservedCoupons(order.getId(), now);
+        // 예약 뒤 중지됐거나 기간이 끝난 쿠폰이면 409-COUPON_NOT_ACTIVE로 돈이 움직이기 전에 멈춘다
+        orderCouponPort.validateReservedCouponsUsable(order.getId(), now);
 
-        PayResultDto result = paymentApi.pay(new PayCommand(order.getId(), order.getOrderNumber(), buyerId,
-                order.getPayAmount(), order.getExpiresAt(), newIdempotencyKey(order)));
-        handleFailure(result, remainingSeconds);
-        publishPaidEvent(order);
-        removeCartItems(buyerId, order.getItems());
+        return orderPaymentSupport.toPayCommand(order);
+    }
 
-        return new OrderPayResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
-                order.getPayAmount(), order.getPaidAt(), result.paymentId());
+    // 결과가 PAID가 아니면 예외로 알린다. 주문 상태(PAYMENT_FAILED)는 이미 커밋됐다
+    private OrderPayResponse toResponse(Order order, PayResultDto result, PayCommand command, LocalDateTime now) {
+        switch (result.status()) {
+            case PAID -> {
+                if (!order.isPaidWith(command.idempotencyKey())) {
+                    // 주문에 반영하지 못해 결제를 취소(보상)했다 (OrderPaymentSupport)
+                    throw new DomainException(OrderErrorCode.ORDER_STATE_INVALID);
+                }
+                return new OrderPayResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
+                        order.getPayAmount(), order.getPaidAt(), result.paymentId());
+            }
+            case FAILED_INSUFFICIENT_BALANCE -> throw new DomainException(OrderErrorCode.INSUFFICIENT_BALANCE,
+                    new InsufficientBalanceResponse(result.shortage(), result.chargeAmount(), order.remainingPaymentSeconds(now)));
+            case FAILED_ORDER_EXPIRED -> throw new DomainException(OrderErrorCode.ORDER_EXPIRED);
+            default -> throw new IllegalStateException("처리할 수 없는 결제 결과입니다: " + result.status());
+        }
     }
 
     // 판매가능여부 확인
@@ -72,46 +106,8 @@ public class OrderPayOrderUseCase {
         orderSupport.getSaleableOptions(items.stream().map(OrderItem::getOptionId).toList());
     }
 
-    // 결제 결과가 PAID가 아니면 예외처리, 롤백
-    private void handleFailure(PayResultDto result, long remainingSeconds) {
-        switch (result.status()) {
-            case PAID -> { }
-            case FAILED_INSUFFICIENT_BALANCE -> throw new DomainException(OrderErrorCode.INSUFFICIENT_BALANCE,
-                    new InsufficientBalanceResponse(result.shortage(), result.chargeAmount(), remainingSeconds));
-            case FAILED_ORDER_EXPIRED -> throw new DomainException(OrderErrorCode.ORDER_EXPIRED);
-            default -> throw new IllegalStateException("처리할 수 없는 결제 결과입니다: " + result.status());
-        }
-    }
-
-    // 배송지가 있는 주문만 배송 흐름을 탄다. 배송지 없는 주문(프론트가 붙기 전)은 발행하지 않고 결제 기준으로 확정된다
-    private void publishPaidEvent(Order order) {
-        if (!order.hasShippingAddress()) {
-            return;
-        }
-        eventPublisher.publish(new OrderPaidEvent(
-                order.getId(),
-                order.getOrderNumber(),
-                order.getBuyerId(),
-                order.getPaidAt(),
-                order.getShippingAddress().toDto(),
-                order.getItems().stream()
-                        .map(OrderItem::toPaidOrderItemDto)
-                        .toList()
-        ));
-    }
-
-    // 결제 시도마다 새 키 (같은 키로 다시 호출하면 처음 결과를 반환)
+    // 결제 시도마다 새 키 (같은 키로 다시 호출하면 처음 결과를 반환). 재확인 스케줄러는 주문에 저장한 이 키를 다시 쓴다
     private String newIdempotencyKey(Order order) {
         return "ORDER-" + order.getId() + "-PAY-" + UUID.randomUUID();
-    }
-
-    // 장바구니 항목 삭제
-    private void removeCartItems(Long buyerId, List<OrderItem> items) {
-        List<Long> cartItemIds = items.stream()
-                .map(OrderItem::getCartItemId)
-                .filter(Objects::nonNull)
-                .toList();
-
-        orderSupport.findCart(buyerId).ifPresent(cart -> cart.removeItems(cartItemIds));
     }
 }

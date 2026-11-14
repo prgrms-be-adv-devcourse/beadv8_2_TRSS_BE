@@ -32,6 +32,8 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_STATE_INVALID(409, "현재 주문 상태에서는 처리할 수 없습니다."),
     ORDER_EXPIRED(409, "결제 가능 시간이 지난 주문입니다."),
     RETURN_ALREADY_REQUESTED(409, "이미 반품을 요청한 주문입니다."),
+    RETURN_REASON_REQUIRED(400, "기타 사유는 상세 내용을 적어 주세요."),
+    RETURN_ITEMS_MISMATCH(400, "주문 항목마다 재고 복원 여부를 한 번씩 정해 주세요."),
     ORDER_ITEM_EMPTY(400, "주문할 상품을 선택해 주세요."),
     ORDER_OPTION_DUPLICATED(400, "한 주문에 같은 옵션을 두 번 담을 수 없습니다."),
     ORDER_QUANTITY_INVALID(400, "주문 수량은 1개 이상이어야 합니다."),
@@ -39,13 +41,14 @@ public enum OrderErrorCode implements ErrorCode {
     ORDER_STATUS_INVALID(400, "조회할 수 없는 주문 상태입니다."),
     ORDER_NOT_CANCELABLE(409, "결제 전 주문만 취소할 수 있습니다."),
     ORDER_NOT_CONFIRMABLE(409, "결제 완료된 주문만 구매 확정할 수 있습니다."),
-    ORDER_NOT_DELIVERED(409, "배송이 완료된 뒤에 구매 확정할 수 있습니다."),
+    ORDER_NOT_DELIVERED(409, "배송이 완료된 뒤에 처리할 수 있습니다."),   // 구매 확정·반품 요청 공통
 
     // 쿠폰
     ORDER_COUPON_NOT_AVAILABLE(409, "아직 주문에 쿠폰을 사용할 수 없습니다."),
 
     // 결제
-    INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다.");
+    INSUFFICIENT_BALANCE(402, "예치금 잔액이 부족합니다."),
+    PAYMENT_IN_PROGRESS(409, "결제를 확인하고 있습니다. 잠시 후 주문 상태를 다시 확인해 주세요.");
 
     private final int status;
     private final String msg;

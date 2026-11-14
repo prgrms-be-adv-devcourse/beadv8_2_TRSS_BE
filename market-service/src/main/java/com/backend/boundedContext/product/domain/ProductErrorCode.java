@@ -35,6 +35,16 @@ public enum ProductErrorCode implements ErrorCode {
     OPTION_LIMIT_EXCEEDED(400, "옵션 조합은 최대 100개까지 만들 수 있습니다."),
     LAST_OPTION_NOT_DELETABLE(409, "마지막 남은 옵션은 삭제할 수 없습니다."),
 
+    // 할인
+    DISCOUNT_NOT_FOUND(404, "할인을 찾을 수 없습니다."),
+    DISCOUNT_PRICE_INVALID(400, "할인가는 정가의 10~99%여야 합니다 (할인율 1~90%)."),
+    DISCOUNT_PERIOD_INVALID(400, "할인 시작 시각은 지금 이후, 종료 시각은 지금 이후이면서 시작 시각 뒤 1년 이내여야 합니다."),
+    DISCOUNT_PERIOD_OVERLAPPED(409, "기간이 겹치는 할인이 이미 있습니다."),
+    DISCOUNT_NOT_SCHEDULED(409, "시작 전인 할인만 삭제하거나 할인가·시작 시각을 바꿀 수 있습니다."),
+    DISCOUNT_ENDED(409, "끝난 할인은 수정할 수 없습니다."),
+    DISCOUNT_NOT_ACTIVE(409, "진행 중인 할인만 종료할 수 있습니다."),
+    PRICE_LOCKED_BY_DISCOUNT(409, "진행 중이거나 예약된 할인이 있으면 가격을 바꿀 수 없습니다."),
+
     // 판매 중지 요청
     STOP_REQUEST_PENDING(409, "심사 중인 판매 중지 요청이 이미 있습니다."),
     STOP_REQUEST_NOT_PENDING(409, "심사 중인 요청만 처리할 수 있습니다."),

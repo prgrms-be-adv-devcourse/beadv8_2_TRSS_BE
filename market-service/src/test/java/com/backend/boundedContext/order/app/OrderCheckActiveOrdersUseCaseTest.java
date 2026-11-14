@@ -24,15 +24,15 @@ class OrderCheckActiveOrdersUseCaseTest {
     @InjectMocks
     OrderCheckActiveOrdersUseCase useCase;
 
-    // 진행 중: 결제 대기, 결제 완료, 반품 요청 / 종료: 구매확정, 취소, 반품완료
+    // 진행 중: 결제 대기, 결제 중, 결제 완료, 반품 요청 / 종료: 구매확정, 취소, 반품완료
     private static boolean isActiveStatuses(Collection<OrderStatus> statuses) {
-        return statuses.size() == 4
-                && statuses.containsAll(List.of(
-                        OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED, OrderStatus.PAID, OrderStatus.RETURN_REQUESTED));
+        return statuses.size() == 5
+                && statuses.containsAll(List.of(OrderStatus.CREATED, OrderStatus.PAYING, OrderStatus.PAYMENT_FAILED,
+                        OrderStatus.PAID, OrderStatus.RETURN_REQUESTED));
     }
 
     @Test
-    @DisplayName("hasActiveOrders: 구매자 기준으로 진행 중 상태(CREATED, PAYMENT_FAILED, PAID, RETURN_REQUESTED) 주문 존재 여부를 돌려준다")
+    @DisplayName("hasActiveOrders: 구매자 기준으로 진행 중 상태(CREATED, PAYING, PAYMENT_FAILED, PAID, RETURN_REQUESTED) 주문 존재 여부를 돌려준다")
     void hasActiveOrders() {
         given(orderRepository.existsByBuyerIdAndStatusIn(eq(3L), argThat(OrderCheckActiveOrdersUseCaseTest::isActiveStatuses)))
                 .willReturn(true);

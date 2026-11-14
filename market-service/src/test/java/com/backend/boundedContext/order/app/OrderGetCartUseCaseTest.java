@@ -2,6 +2,7 @@ package com.backend.boundedContext.order.app;
 
 import com.backend.boundedContext.order.domain.Cart;
 import com.backend.boundedContext.order.domain.CartItem;
+import com.backend.boundedContext.order.domain.OrderPolicy;
 import com.backend.boundedContext.order.domain.UnorderableReason;
 import com.backend.boundedContext.order.in.dto.CartItemResponse;
 import com.backend.boundedContext.order.in.dto.CartResponse;
@@ -11,10 +12,10 @@ import com.backend.shared.member.out.MemberApi;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import com.backend.shared.product.out.ProductApi;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -24,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -36,13 +38,19 @@ class OrderGetCartUseCaseTest {
     @Mock ProductApi productApi;   // 상품 모듈 대역
     @Mock MemberApi memberApi;     // 회원 모듈 대역
 
-    @InjectMocks OrderGetCartUseCase useCase;
+    OrderGetCartUseCase useCase;
+
+    @BeforeEach
+    void setUp() {
+        // 배송비 2,500원, 30,000원 이상 무료 (application.yaml과 같은 값)
+        useCase = new OrderGetCartUseCase(orderSupport, productApi, memberApi, new OrderPolicy(15, 7, 99, 100, 1, 2500, 30000));
+    }
 
     private static final Long BUYER_ID = 3L;
 
     /** 옵션 ID = 상품 ID × 10 으로 두고, 판매자는 2번 */
     private OptionSnapshotDto onSale(Long optionId, long price, int stock) {
-        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, stock,
+        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, price, null, stock,
                 true, null, null);
     }
 
@@ -66,6 +74,9 @@ class OrderGetCartUseCaseTest {
 
         assertThat(response.items()).isEmpty();
         assertThat(response.orderable()).isFalse();
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isZero();
+        assertThat(response.remainingForFreeShipping()).isZero();
         verify(productApi, never()).getOptions(any());
     }
 
@@ -81,6 +92,28 @@ class OrderGetCartUseCaseTest {
         assertThat(item.productId()).isEqualTo(10L);
         assertThat(item.optionName()).isEqualTo("기본");
         assertThat(item.orderable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("정가·할인율은 현재 스냅샷 값을 그대로 담고, 금액은 단가(할인가) 기준이다. 옵션 추가금이 있어도 할인율을 다시 계산하지 않는다")
+    void listPriceAndDiscountRate() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 2, 110L, 1, 120L, 1)));
+        given(productApi.getOptions(List.of(100L, 110L, 120L))).willReturn(List.of(
+                // 정가 20,000원 25% 할인
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15_000, 20_000, 25, 5, true, null, null),
+                // 상품 10,000원 20% 할인 + 옵션 추가금 5,000원 → (15,000 − 13,000) / 15,000 = 13%가 아니라 20%
+                new OptionSnapshotDto(110L, 11L, 2L, "블러셔", "대용량", 13_000, 15_000, 20, 5, true, null, null),
+                // 할인 없음
+                onSale(120L, 9_000, 5)));
+
+        List<CartItemResponse> items = useCase.getCart(BUYER_ID).items();
+
+        assertThat(items).extracting(CartItemResponse::price, CartItemResponse::listPrice, CartItemResponse::discountRate,
+                        CartItemResponse::lineAmount)
+                .containsExactly(
+                        tuple(15_000L, 20_000L, 25, 30_000L),
+                        tuple(13_000L, 15_000L, 20, 13_000L),
+                        tuple(9_000L, 9_000L, null, 9_000L));
     }
 
     @Test
@@ -136,7 +169,7 @@ class OrderGetCartUseCaseTest {
     void optionDeleted() {
         given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1)));
         given(productApi.getOptions(List.of(100L))).willReturn(List.of(
-                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 5,
+                new OptionSnapshotDto(100L, 10L, 2L, "립스틱", "기본", 15000, 15000, null, 5,
                         false, ProductUnsaleableReason.OPTION_DELETED, null)));
 
         CartItemResponse item = useCase.getCart(BUYER_ID).items().get(0);
@@ -200,5 +233,68 @@ class OrderGetCartUseCaseTest {
         assertThat(response.items().get(1).unorderableReason()).isEqualTo(UnorderableReason.IN_PENDING_ORDER);
         assertThat(response.orderable()).isFalse();
         assertThat(response.expectedTotalPrice()).isEqualTo(15000);  // 결제 대기 옵션은 금액에서 제외
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 주문 가능 항목 합 25,000원이면 배송비 2,500원, 예상 결제 27,500원, 무료 배송까지 5,000원")
+    void shippingFee_belowThreshold() {
+        // 100번 10,000원 x 2 + 110번 5,000원 x 1 = 25,000원, 120번은 품절이라 합계에서 빠진다
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 2, 110L, 1, 120L, 1)));
+        given(productApi.getOptions(List.of(100L, 110L, 120L))).willReturn(List.of(
+                onSale(100L, 10000, 5),
+                onSale(110L, 5000, 5),
+                onSale(120L, 50000, 0)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.expectedTotalPrice()).isEqualTo(25_000);   // 의미 유지: 배송비 제외
+        assertThat(response.shippingFee()).isEqualTo(2_500);
+        assertThat(response.expectedPayAmount()).isEqualTo(27_500);
+        assertThat(response.remainingForFreeShipping()).isEqualTo(5_000);
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 주문 가능 항목 합이 30,000원 이상이면 배송비 0원, 남은 금액 0원")
+    void shippingFee_free() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 2)));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 5)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.expectedTotalPrice()).isEqualTo(30_000);
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isEqualTo(30_000);
+        assertThat(response.remainingForFreeShipping()).isZero();
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 항목이 없으면 배송비·예상 결제·남은 금액이 모두 0")
+    void shippingFee_noSelection() {
+        Cart cart = cartWith(100L, 1);
+        cart.selectAll(false);
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cart));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 5)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.selectedCount()).isZero();
+        assertThat(response.expectedTotalPrice()).isZero();
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isZero();
+        assertThat(response.remainingForFreeShipping()).isZero();
+    }
+
+    @Test
+    @DisplayName("배송비: 선택한 항목이 모두 주문 불가(품절)면 배송비·예상 결제·남은 금액이 모두 0")
+    void shippingFee_noOrderableSelection() {
+        given(orderSupport.findCart(BUYER_ID)).willReturn(Optional.of(cartWith(100L, 1)));
+        given(productApi.getOptions(List.of(100L))).willReturn(List.of(onSale(100L, 15000, 0)));
+
+        CartResponse response = useCase.getCart(BUYER_ID);
+
+        assertThat(response.selectedCount()).isEqualTo(1);
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.expectedPayAmount()).isZero();
+        assertThat(response.remainingForFreeShipping()).isZero();
     }
 }

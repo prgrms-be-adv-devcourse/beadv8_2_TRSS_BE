@@ -14,7 +14,10 @@ public interface OrderCouponPort {
     /** 장바구니 쿠폰을 주문에 예약하고 할인액을 돌려준다. orderAmount는 상품 쿠폰 할인 후 상품 금액 합계 */
     long reserveCartCoupon(Long buyerId, Long couponId, Long orderId, long orderAmount, LocalDateTime now);
 
-    /** 결제 성공: 예약된 쿠폰 사용 처리 (결제 요청 전에 부른다) */
+    /** 결제 시작: 예약된 쿠폰을 지금 쓸 수 있는지 확인. 아니면 409-COUPON_NOT_ACTIVE */
+    void validateReservedCouponsUsable(Long orderId, LocalDateTime now);
+
+    /** 결제 성공 반영: 예약된 쿠폰 사용 처리 (주문 PAID와 같은 트랜잭션). 그사이 쿠폰이 중지됐어도 실패하지 않는다 */
     void useReservedCoupons(Long orderId, LocalDateTime now);
 
     /** 결제 전 취소, 만료: 예약된 쿠폰 해제 */

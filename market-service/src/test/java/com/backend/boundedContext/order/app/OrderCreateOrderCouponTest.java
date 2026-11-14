@@ -62,13 +62,13 @@ class OrderCreateOrderCouponTest {
     @Mock OrderCouponPort orderCouponPort;
 
     private OrderCreateOrderUseCase useCase(boolean couponEnabled) {
-        return new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1), productApi,
+        return new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1, 2500, 30000), productApi,
                 memberApi, new OrderCouponPolicy(couponEnabled), orderCouponPort);
     }
 
     /** 옵션 ID = 상품 ID x 10, 판매자는 2번 */
     private OptionSnapshotDto onSale(Long optionId, long price) {
-        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, 10,
+        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, price, null, 10,
                 true, null, null);
     }
 
@@ -132,7 +132,9 @@ class OrderCreateOrderCouponTest {
         assertThat(response.totalPrice()).isEqualTo(55_000);
         assertThat(response.productDiscountAmount()).isEqualTo(30_000);
         assertThat(response.cartCouponDiscountAmount()).isEqualTo(3_000);
-        assertThat(response.payAmount()).isEqualTo(55_000 - 30_000 - 3_000);
+        // 상품 쿠폰 할인 후 25,000원 < 30,000원이라 배송비 2,500원
+        assertThat(response.shippingFee()).isEqualTo(2_500);
+        assertThat(response.payAmount()).isEqualTo(55_000 - 30_000 - 3_000 + 2_500);
         assertThat(response.items()).extracting(OrderCreateResponse.Item::discountAmount).containsExactly(30_000L, 0L);
 
         // 재고 차감 → 상품 쿠폰 → 장바구니 쿠폰 순서
@@ -150,6 +152,7 @@ class OrderCreateOrderCouponTest {
         OrderCreateResponse response = useCase(true).create(BUYER_ID, null, List.of(1L, 2L), 55_000, null,
                 OrderCouponSelection.NONE);
 
+        assertThat(response.shippingFee()).isZero();   // 55,000원 ≥ 30,000원
         assertThat(response.payAmount()).isEqualTo(55_000);
         verifyNoInteractions(orderCouponPort);
     }
@@ -165,7 +168,8 @@ class OrderCreateOrderCouponTest {
 
         assertThat(response.productDiscountAmount()).isEqualTo(26_000);
         assertThat(response.cartCouponDiscountAmount()).isZero();
-        assertThat(response.payAmount()).isEqualTo(29_000);
+        assertThat(response.shippingFee()).isEqualTo(2_500);   // 상품 쿠폰 할인 후 29,000원
+        assertThat(response.payAmount()).isEqualTo(29_000 + 2_500);
         verify(orderCouponPort, never()).reserveCartCoupon(any(), any(), any(), anyLong(), any());
     }
 
@@ -214,7 +218,7 @@ class OrderCreateOrderCouponTest {
     }
 
     @Test
-    @DisplayName("꺼짐: 쿠폰 없이 주문하면 결제 금액은 상품 금액 합계다 (지금 동작 그대로)")
+    @DisplayName("꺼짐: 쿠폰 없이 주문하면 예상 금액은 상품 금액 합계와 비교하고(지금 동작 그대로), 결제 금액은 여기에 배송비를 더한다")
     void disabledWithoutCoupon() {
         Cart cart = Cart.create(BUYER_ID);
         CartItem item = cart.addItem(100L, 1, 99);
@@ -228,7 +232,77 @@ class OrderCreateOrderCouponTest {
 
         OrderCreateResponse response = useCase(false).create(BUYER_ID, null, List.of(1L), 10_000, null);
 
-        assertThat(response.payAmount()).isEqualTo(10_000);
+        assertThat(response.totalPrice()).isEqualTo(10_000);
+        assertThat(response.shippingFee()).isEqualTo(2_500);
+        assertThat(response.payAmount()).isEqualTo(12_500);
         verifyNoInteractions(orderCouponPort);
+    }
+
+    // ===== 배송비 (TRSS-210) =====
+
+    /** 장바구니 항목 1: 옵션 100 priceA x 1, 항목 2: 옵션 110 priceB x 1 (같은 판매자). 저장하면 주문 ID 500, 항목 ID 1부터 */
+    private void givenTwoItems(long priceA, long priceB) {
+        Cart cart = Cart.create(BUYER_ID);
+        CartItem first = cart.addItem(100L, 1, 99);
+        CartItem second = cart.addItem(110L, 1, 99);
+        ReflectionTestUtils.setField(first, "id", 1L);
+        ReflectionTestUtils.setField(second, "id", 2L);
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cart);
+
+        List<OptionSnapshotDto> options = List.of(onSale(100L, priceA), onSale(110L, priceB));
+        given(orderSupport.getSaleableOptions(List.of(100L, 110L))).willReturn(options.stream()
+                .collect(Collectors.toMap(OptionSnapshotDto::optionId, Function.identity())));
+        given(memberApi.getSellers(List.of(SELLER_ID))).willReturn(List.of(
+                new SellerDto(SELLER_ID, 20L, "테스트상점", SellerStatus.APPROVED)));
+        given(orderRepository.save(any(Order.class))).willAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            ReflectionTestUtils.setField(order, "id", ORDER_ID);
+            long itemId = 1;
+            for (OrderItem item : order.getItems()) {
+                ReflectionTestUtils.setField(item, "id", itemId++);
+            }
+            return order;
+        });
+    }
+
+    @Test
+    @DisplayName("배송비: 쿠폰 주문은 배송비를 뺀 할인 후 금액을 보내면 통과한다 (배송비 때문에 PRICE_CHANGED가 나지 않는다)")
+    void shippingFee_couponOrderComparesBeforeShipping() {
+        // 32,000원 + 상품 쿠폰 3,000원 → 배송비 기준 29,000원 → 배송비 2,500원
+        givenTwoItems(20_000, 12_000);
+        given(orderCouponPort.reserveProductCoupon(eq(BUYER_ID), eq(CODE), eq(ORDER_ID), eq(1L), eq(10L), eq(20_000L), any()))
+                .willReturn(3_000L);
+
+        OrderCreateResponse response = useCase(true).create(BUYER_ID, null, List.of(1L, 2L), 29_000, null,
+                productCouponOn(1L, null));
+
+        assertThat(response.shippingFee()).isEqualTo(2_500);
+        assertThat(response.payAmount()).isEqualTo(31_500);
+    }
+
+    @Test
+    @DisplayName("배송비: 쿠폰 주문에 배송비를 더한 금액을 보내면 409-PRICE_CHANGED이고 currentAmount는 배송비 제외 금액이다")
+    void shippingFee_couponOrderWithShippingIsPriceChanged() {
+        givenTwoItems(20_000, 12_000);
+        given(orderCouponPort.reserveProductCoupon(any(), any(), any(), any(), any(), anyLong(), any())).willReturn(3_000L);
+
+        assertThatThrownBy(() -> useCase(true).create(BUYER_ID, null, List.of(1L, 2L), 31_500, null,
+                productCouponOn(1L, null)))
+                .hasFieldOrPropertyWithValue("resultCode", "409-PRICE_CHANGED")
+                .hasFieldOrPropertyWithValue("data", new PriceChangedResponse(29_000));
+    }
+
+    @Test
+    @DisplayName("배송비: 35,000원 + 장바구니 쿠폰 5,000원 → 장바구니 쿠폰은 기준에 영향이 없어 배송비 0원, 결제 금액 30,000원")
+    void shippingFee_cartCouponDoesNotAffect() {
+        givenTwoItems(20_000, 15_000);
+        given(orderCouponPort.reserveCartCoupon(eq(BUYER_ID), eq(7L), eq(ORDER_ID), eq(35_000L), any())).willReturn(5_000L);
+
+        OrderCreateResponse response = useCase(true).create(BUYER_ID, null, List.of(1L, 2L), 30_000, null,
+                new OrderCouponSelection(List.of(), 7L));
+
+        assertThat(response.cartCouponDiscountAmount()).isEqualTo(5_000);
+        assertThat(response.shippingFee()).isZero();
+        assertThat(response.payAmount()).isEqualTo(30_000);
     }
 }

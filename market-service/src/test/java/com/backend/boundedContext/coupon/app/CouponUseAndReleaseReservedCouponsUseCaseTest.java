@@ -39,23 +39,29 @@ class CouponUseAndReleaseReservedCouponsUseCaseTest {
     }
 
     @Test
-    @DisplayName("결제 성공: 아직 RESERVED이고 쿠폰을 지금 쓸 수 있는 기록만 USED로 바꾸고, 바뀐 수를 돌려준다")
+    @DisplayName("결제 성공 반영: 아직 RESERVED인 기록을 쿠폰 상태와 관계없이 USED로 바꾸고, 바뀐 수를 돌려준다")
     void use() {
-        given(couponUsageRepository.countByOrderIdAndStatus(ORDER_ID, CouponUsageStatus.RESERVED)).willReturn(1L);
-        given(couponUsageRepository.markUsedIfReservedAndCouponUsable(ORDER_ID, NOW)).willReturn(1);
+        given(couponUsageRepository.markUsedIfReserved(ORDER_ID, NOW)).willReturn(2);
 
         int count = new CouponUseReservedCouponsUseCase(couponUsageRepository).use(ORDER_ID, NOW);
 
-        assertThat(count).isEqualTo(1);
+        assertThat(count).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("결제 성공: 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있어 예약 수보다 적게 바뀌면 409-COUPON_NOT_ACTIVE (결제와 함께 롤백)")
-    void use_couponStoppedAfterReserve() {
-        given(couponUsageRepository.countByOrderIdAndStatus(ORDER_ID, CouponUsageStatus.RESERVED)).willReturn(2L);
-        given(couponUsageRepository.markUsedIfReservedAndCouponUsable(ORDER_ID, NOW)).willReturn(1);
+    @DisplayName("결제 시작 확인: 예약 쿠폰이 모두 쓸 수 있으면 통과한다")
+    void validateUsable() {
+        given(couponUsageRepository.countReservedWithUnusableCoupon(ORDER_ID, NOW)).willReturn(0L);
 
-        assertThatThrownBy(() -> new CouponUseReservedCouponsUseCase(couponUsageRepository).use(ORDER_ID, NOW))
+        new CouponUseReservedCouponsUseCase(couponUsageRepository).validateUsable(ORDER_ID, NOW);
+    }
+
+    @Test
+    @DisplayName("결제 시작 확인: 예약 뒤 중지됐거나 기간이 끝난 쿠폰이 있으면 409-COUPON_NOT_ACTIVE (결제 요청 전)")
+    void validateUsable_couponStoppedAfterReserve() {
+        given(couponUsageRepository.countReservedWithUnusableCoupon(ORDER_ID, NOW)).willReturn(1L);
+
+        assertThatThrownBy(() -> new CouponUseReservedCouponsUseCase(couponUsageRepository).validateUsable(ORDER_ID, NOW))
                 .extracting("resultCode").isEqualTo("409-COUPON_NOT_ACTIVE");
     }
 

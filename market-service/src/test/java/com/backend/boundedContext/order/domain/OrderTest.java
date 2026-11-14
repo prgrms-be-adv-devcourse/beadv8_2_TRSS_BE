@@ -161,7 +161,7 @@ class OrderTest {
     void confirm_returnRequested_fail() {
         Order order = createOrder();
         order.pay(NOW.plusMinutes(1));
-        ReflectionTestUtils.setField(order, "status", OrderStatus.RETURN_REQUESTED);   // 반품 요청 기능 추가 전이라 상태만 바꿈
+        order.requestReturn(ReturnReasonCode.CHANGE_OF_MIND, null, NOW.plusDays(1));   // 배송지 없는 주문은 PAID면 요청 가능
 
         assertThatThrownBy(() -> order.confirm(ConfirmType.MANUAL, NOW.plusDays(1)))
                 .isInstanceOf(DomainException.class)
@@ -200,7 +200,7 @@ class OrderTest {
 
         Order returnRequested = createOrder();
         returnRequested.pay(NOW.plusMinutes(1));
-        ReflectionTestUtils.setField(returnRequested, "status", OrderStatus.RETURN_REQUESTED);
+        returnRequested.requestReturn(ReturnReasonCode.DEFECTIVE, null, NOW.plusDays(1));
         assertThat(returnRequested.isAutoConfirmable(NOW.plusDays(30), 7)).isFalse();
     }
 
@@ -365,5 +365,93 @@ class OrderTest {
         order.markDelivered(NOW.plusDays(5));
 
         assertThat(order.getDeliveredAt()).isEqualTo(first);
+    }
+
+    // ===== 결제 중(PAYING) =====
+
+    @Test
+    @DisplayName("결제 시작: 결제 대기 주문은 PAYING이 되고 멱등키·시작 시각이 기록된다. 결제 실패 주문도 다시 시작할 수 있다")
+    void startPaying() {
+        Order order = createOrder();
+
+        order.startPaying("K1", NOW.plusMinutes(1));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAYING);
+        assertThat(order.getPaymentIdempotencyKey()).isEqualTo("K1");
+        assertThat(order.getPayingStartedAt()).isEqualTo(NOW.plusMinutes(1));
+        assertThat(order.isPayingWith("K1")).isTrue();
+        assertThat(order.isPayingWith("K2")).isFalse();
+        assertThat(order.isPaymentPending()).isFalse();
+
+        order.failPayment("잔액 부족");
+        order.startPaying("K2", NOW.plusMinutes(2));
+        assertThat(order.isPayingWith("K2")).isTrue();
+    }
+
+    @Test
+    @DisplayName("결제 시작: 결제 중이면 409-PAYMENT_IN_PROGRESS, 결제 완료면 409-ORDER_STATE_INVALID, 만료면 409-ORDER_EXPIRED")
+    void startPaying_rejected() {
+        Order paying = createOrder();
+        paying.startPaying("K1", NOW.plusMinutes(1));
+        assertThatThrownBy(() -> paying.startPaying("K2", NOW.plusMinutes(2)))
+                .extracting("resultCode").isEqualTo("409-PAYMENT_IN_PROGRESS");
+
+        Order paid = createOrder();
+        paid.pay(NOW.plusMinutes(1));
+        assertThatThrownBy(() -> paid.startPaying("K2", NOW.plusMinutes(2)))
+                .extracting("resultCode").isEqualTo("409-ORDER_STATE_INVALID");
+
+        Order expired = createOrder();
+        assertThatThrownBy(() -> expired.startPaying("K1", NOW.plusMinutes(EXPIRE_MINUTES)))
+                .extracting("resultCode").isEqualTo("409-ORDER_EXPIRED");
+    }
+
+    @Test
+    @DisplayName("결제 성공 반영: PAYING → PAID. 만료 시각이 지난 뒤 반영돼도 PAID가 된다")
+    void completePayment_afterExpiresAt() {
+        Order order = createOrder();
+        order.startPaying("K1", NOW.plusMinutes(14));
+
+        order.completePayment(NOW.plusMinutes(20));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getPaidAt()).isEqualTo(NOW.plusMinutes(20));
+        assertThat(order.isPaidWith("K1")).isTrue();
+        assertThat(order.getStatusHistories()).extracting(OrderStatusHistory::getToStatus)
+                .containsExactly(OrderStatus.CREATED, OrderStatus.PAYING, OrderStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("결제 실패 반영: PAYING → PAYMENT_FAILED. 결제 중이 아닌 주문에 결과를 반영하면 코드 오류")
+    void failPayment() {
+        Order order = createOrder();
+        order.startPaying("K1", NOW.plusMinutes(1));
+
+        order.failPayment("잔액 부족");
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
+        assertThat(order.isPaymentPending()).isTrue();
+        assertThatThrownBy(() -> order.completePayment(NOW.plusMinutes(2))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> order.failPayment("다시")).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("결제 중 주문은 취소할 수 없고(409-PAYMENT_IN_PROGRESS) 만료 처리 대상도 아니다")
+    void paying_notCancelableNorExpirable() {
+        Order order = createOrder();
+        order.startPaying("K1", NOW.plusMinutes(1));
+
+        assertThatThrownBy(() -> order.cancel(OrderCancelType.USER, "구매자 취소", NOW.plusMinutes(2)))
+                .extracting("resultCode").isEqualTo("409-PAYMENT_IN_PROGRESS");
+        assertThat(order.isExpirable(NOW.plusMinutes(60), 1)).isFalse();
+        assertThat(order.remainingPaymentSeconds(NOW.plusMinutes(2))).isZero();
+    }
+
+    @Test
+    @DisplayName("상태 묶음: PAYING은 진행 중·결제 미완료에 들어가고 결제 대기에는 들어가지 않는다")
+    void statusGroups() {
+        assertThat(Order.ACTIVE_STATUSES).contains(OrderStatus.PAYING);
+        assertThat(Order.PAYMENT_UNFINISHED_STATUSES).contains(OrderStatus.PAYING, OrderStatus.CREATED, OrderStatus.PAYMENT_FAILED);
+        assertThat(Order.PAYMENT_PENDING_STATUSES).doesNotContain(OrderStatus.PAYING);
     }
 }

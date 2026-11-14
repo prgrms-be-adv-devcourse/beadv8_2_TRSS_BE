@@ -43,7 +43,7 @@ class OrderGetCartItemsAmountUseCaseTest {
     }
 
     private OptionSnapshotDto option(Long optionId, long price, boolean saleable) {
-        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, 10,
+        return new OptionSnapshotDto(optionId, optionId / 10, 2L, "상품" + optionId, "기본", price, price, null, 10,
                 saleable, saleable ? null : ProductUnsaleableReason.PRODUCT_STOPPED, null);
     }
 

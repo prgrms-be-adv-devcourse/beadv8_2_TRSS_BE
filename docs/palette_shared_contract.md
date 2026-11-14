@@ -66,14 +66,14 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 장바구니 조회 | order | `ProductApi.getOptions(optionIds)` → 현재 가격·판매 가능 여부·대표 이미지로 예상 금액 계산 | 동기 조회 |
 | 장바구니 담기·주문 생성 시 본인 상품 검사 | order | `MemberApi.findSellerByMemberId(buyerId)` → 상품의 `sellerId`와 비교 | 동기 조회 |
 | 주문 생성 | order | 장바구니 잠금 → (같은 `Idempotency-Key`의 주문이 있으면 그 주문을 반환하고 끝, 취소된 주문이면 409) → `ProductApi.getOptions` → `MemberApi.getSellers`(판매자명 스냅샷) → 주문·주문 항목 저장 → `ProductApi.deductStock` | 동기, 같은 Tx |
-| 결제 | order | 주문 PAID로 조건부 UPDATE(먼저) → `PaymentApi.pay(command)` → 실패면 함께 롤백 | 동기, 같은 Tx |
-| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (결제가 실패하면 이벤트도 함께 롤백) |
+| 결제 | order | 판매 가능·만료·예약 쿠폰 확인 → 주문 PAYING(멱등키·시작 시각) 커밋 → `PaymentApi.pay(command)`(HTTP): 배송비는 구매자 지갑 → 플랫폼 지갑(SHIPPING_FEE), 나머지는 홀딩(PAYMENT), 장바구니 쿠폰 지원금은 플랫폼 지갑 → 홀딩(COUPON_SUBSIDY) → 주문을 다시 잠가 아직 PAYING이고 같은 키일 때만 결과 반영(PAID: 쿠폰 사용 처리·장바구니 삭제·`OrderPaidEvent` / FAILED_*: PAYMENT_FAILED). 결과를 모르면 PAYING으로 두고 재확인 스케줄러가 같은 키로 `pay`를 다시 불러 정리 (9.1) | 동기 HTTP, Tx 2개 |
+| 결제 후 배송 생성 | order | 결제 성공 + 배송지가 있는 주문이면 `OrderPaidEvent` → (커밋 뒤 Kafka `order.events`) delivery가 배송(READY) 생성, 알림이 구매자에게 주문 완료 알림 | 이벤트, 별도 Tx (주문 PAID 반영과 같은 트랜잭션에서 outbox에 저장) |
 | 배송 시작 | delivery | 물류 담당 송장 등록 → 배송 SHIPPED → `DeliveryShippedEvent` → (Kafka `delivery.events`) 알림이 구매자에게 배송 시작 알림 | 이벤트, 별도 Tx (송장 수정은 이벤트 없음) |
 | 배송 완료 | delivery | Delivery Tracker로 배송 완료 확인 → 배송 DELIVERED → `DeliveryCompletedEvent` → (Kafka `delivery.events`) market이 주문 `deliveredAt` 기록, 알림이 구매자에게 배송 완료 알림 | 이벤트, 별도 Tx |
 | 주문 상세의 배송 정보 | order | `DeliveryApi.findByOrderId(orderId)` (배송지 있고 PAID 이후 주문만) | 동기 조회 (조회 실패 시 주문 상세는 200 + `deliveryUnavailable: true`) |
 | 주문 취소·15분 만료 | order | `ProductApi.lockProductsForOrderChange(productIds)` → 주문 잠금·상태 다시 확인 → 주문 CANCELED → `ProductApi.restoreStock(ORDER_RESTORE)` | 동기, 같은 Tx |
-| 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` | 동기 + 이벤트 |
-| 반품 환불 | payment | `OrderReturnedEvent` 수신 → 홀딩 → 구매자 지갑(REFUND) (미구현) | 이벤트 |
+| 반품 승인 | order | 주문 RETURNED → 복원 선택 항목만 `ProductApi.restoreStock(RETURN_RESTORE)` → `OrderReturnedEvent` → (커밋 뒤 Kafka `order.events`) | 동기, 같은 Tx + 이벤트 (재고 복원과 outbox 저장이 승인과 같은 트랜잭션) |
+| 반품 환불 | payment | `OrderReturnedEvent` 수신(Kafka `order.events`) → 홀딩 → 구매자 지갑(REFUND), 플랫폼 지갑 → 구매자 지갑(배송비, SHIPPING_FEE_REFUND), 홀딩 → 플랫폼 지갑(장바구니 쿠폰 지원금, COUPON_SUBSIDY_CANCEL) → 결제 REFUNDED, 홀딩 RELEASED (결제 담당 구현 예정, 지금은 받는 코드 없음) | 이벤트, 별도 Tx |
 | 구매 확정 (수동·7일 자동·반품 거절 시 즉시, 배송지 있는 주문은 배송 완료 뒤) | order | 주문 CONFIRMED → `OrderConfirmedEvent` | 이벤트 |
 | 정산 후보 생성 | settlement | `OrderConfirmedEvent` 수신(Kafka `order.events`) → 주문 항목별 후보(READY) | 이벤트 |
 | 월 정산 지급 | settlement | `MemberApi.getSeller(sellerId)` → `PaymentApi.transfer(command)` | 동기 |
@@ -82,7 +82,7 @@ X-Internal-Key: <INTERNAL_API_KEY 값>
 | 판매자 철회 승인 | member | `OrderApi.hasActiveSales(sellerId)` · `SettlementApi.getUnsettledAmount(sellerId)` 확인 → 판매자 WITHDRAWN (상품은 철회 요청 때 이미 중지) | 동기 조회 (조회 실패 시 503) |
 | 판매자 철회 거절 | member | 판매자 APPROVED로 되돌림 → `SellerWithdrawalRejectedEvent` → (market) 철회로 중지된 상품만 판매 중으로 | 이벤트 |
 | 관리자 제재 | member | 판매자 SANCTIONED → `SellerSanctionedEvent` → (market) 판매 중 상품 STOPPED · (settlement) 지급 전 정산서 HOLD | 이벤트 |
-| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 (조회 실패 시 503, 지갑이 없으면 잔액 0) |
+| 회원 탈퇴 | member | 판매자 상태가 PENDING·APPROVED·WITHDRAW_REQUESTED면 거절(SELLER_ACTIVE) → `OrderApi.hasActiveOrders` · `PaymentApi.getWallet`(잔액 0) · `PaymentApi.hasPendingTopups`(READY·PROCESSING·CANCELING 충전 건) · 판매자 정보가 있으면 상태와 무관하게 `OrderApi.hasActiveSales` · `SettlementApi.getUnsettledAmount` | 동기 조회 (조회 실패 시 503, 지갑이 없으면 잔액 0) |
 | 충전 준비·승인, 주문 생성·결제 | payment, order | `MemberApi.checkActiveMember(memberId)`: 탈퇴한 회원이면 401 (탈퇴 후 남은 Access Token 차단) | 동기 조회 |
 | 관리자 회원 상세 | member | `PaymentApi.getWallet` · `OrderApi.getRecentOrders(memberId, 5)` | 동기 조회 (조회 실패 시 해당 영역만 null) |
 | 관리자 결제·충전 조회 | payment | `MemberApi.findMemberByEmail`(이메일 검색) · `MemberApi.getMembers`(이메일 표시) | 동기 조회 |
@@ -231,11 +231,12 @@ public interface ProductApi {
     /**
      * 옵션 여러 개의 현재 정보. 장바구니 담기·조회와 주문 생성에 쓴다.
      * 삭제된 상품·옵션도 결과에 포함하고(saleable = false), 없는 ID만 빠진다. 결과 순서는 보장하지 않는다.
+     * price는 부르는 시각에 진행 중인 상품 할인을 반영한 단가다.
      */
     List<OptionSnapshotDto> getOptions(Collection<Long> optionIds);
 
     /**
-     * 상품 여러 개의 현재 정보 (상품 단위). 쿠폰 발행과 협약 pick 상품 목록에서 쓴다.
+     * 상품 여러 개의 현재 정보 (상품 단위). 쿠폰 발행과 협약 pick 상품 목록에서 쓴다. price는 할인과 무관한 정가다.
      * 삭제, 판매 중지 상품도 포함하고(onSale = false) 없는 ID만 빠진다. 순서는 보장하지 않는다.
      */
     List<ProductSnapshotDto> getProducts(Collection<Long> productIds);
@@ -292,12 +293,17 @@ package com.backend.shared.product.dto;
  * 재고 수량·본인 상품·결제 대기 주문 여부는 주문 컨텍스트가 따로 판단한다.
  * unsaleableReason은 saleable이면 null, 여러 개에 해당하면 enum 선언 순서가 우선순위다.
  * optionName은 옵션 값을 " / "로 이은 표시 이름(예: "흰색 / M", 최대 48자)이고, 옵션이 없는 상품이면 "기본".
- * price는 옵션 하나의 단가 = 상품 가격 + 옵션 추가금이다. 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)도 이 값이다.
+ * price는 옵션 하나의 단가 = (할인 중이면 할인가, 아니면 상품 가격) + 옵션 추가금이다.
+ * 주문 항목 단가·상품 쿠폰 할인 기준(lineAmount)·정산도 이 값이다.
+ * listPrice는 정가 단가 = 상품 가격 + 옵션 추가금이다. 화면 표시용이고, 할인 중이 아니면 price와 같다.
+ * discountRate는 할인율(%, 소수점 내림)이고 할인 중이 아니면 null이다. 상품 가격 기준이라 옵션 추가금과 무관하게 상품 상세의 할인율과 같다.
+ * 화면 표시용이며 (listPrice - price)로 다시 계산하지 않는다(추가금이 있으면 값이 달라진다).
  * thumbnailUrl은 대표 이미지가 없으면 null.
  */
 public record OptionSnapshotDto(Long optionId, Long productId, Long sellerId, String productName, String optionName,
-                                long price, int stock, boolean saleable,
-                                ProductUnsaleableReason unsaleableReason, String thumbnailUrl) { }
+                                long price, long listPrice, Integer discountRate, int stock, boolean saleable,
+                                ProductUnsaleableReason unsaleableReason, String thumbnailUrl) {
+}
 
 /** 주문 항목 한 줄. orderId·orderItemId는 재고 이력에 남고 중복 처리를 막는 기준이 된다. quantity는 1 이상 */
 public record StockChangeDto(Long orderId, Long orderItemId, Long optionId, int quantity) { }
@@ -310,11 +316,40 @@ public enum StockRestoreReason { ORDER_RESTORE, RETURN_RESTORE }
 - 확정(10/10): 주문과 주문 항목을 먼저 저장해 `orderItemId`를 만든 뒤, 같은 트랜잭션에서 `deductStock`을 호출합니다.
 - 잠금 순서는 항상 **상품 → 주문(→ 옵션 재고)**입니다. 상품 삭제·중지는 상품을 잠근 뒤 `cancelPendingOrders`로 주문을 잠그므로, 주문을 먼저 잠그는 흐름은 `lockProductsForOrderChange`로 상품을 먼저 잠급니다.
 - 구현 상태: 모든 메서드가 `ProductApiAdapter`에 구현되어 있습니다.
-- 옵션(TRSS-200): 상품은 옵션 이름을 최대 3개(예: 색상·사이즈) 갖고, 옵션 하나는 값의 조합 한 줄(SKU)이다. 옵션이 없는 상품은 값 없는 옵션 1개다.
-  옵션 값은 하나에 14자까지라, 표시 이름이 주문·리뷰의 `option_name`(varchar(50))에 그대로 들어간다.
+
+### 상품 옵션
+
+상품은 옵션 이름(예: 색상·사이즈)을 최대 3개 갖고, 옵션 하나는 값의 조합 한 줄(SKU)입니다. 옵션이 없는 상품은 값 없는 옵션 1개를 갖습니다.
+장바구니·주문은 옵션 ID 단위로 담고, 재고와 단가도 옵션마다 따로 있습니다.
+
+| 항목 | 규칙 |
+| --- | --- |
+| 옵션 이름 | 0~3개, 각각 1~20자, 서로 달라야 한다. 등록 뒤에는 바꾸지 않는다 |
+| 옵션 값 | 옵션 이름마다 하나씩, 각각 1~14자. 같은 조합은 한 상품에 한 번만 (409 `OPTION_DUPLICATED`) |
+| 조합 수 | 한 상품에 삭제되지 않은 조합 최대 100개 |
+| 표시 이름 | 값을 " / "로 잇는다(예: "흰색 / M", 최대 48자). 옵션이 없는 상품은 "기본". 주문·리뷰의 `option_name`(varchar(50))에 그대로 들어간다 |
+| 단가 | 상품 가격(할인 중이면 할인가) + 옵션 추가금(0 이상). 판매자는 추가금만 바꿀 수 있고, 값은 바꿀 수 없다(다른 조합은 삭제 후 추가) |
+| 삭제 | 소프트 삭제. 마지막 남은 옵션은 지울 수 없다 (409 `LAST_OPTION_NOT_DELETABLE`) |
+
 - 판매자가 옵션을 지우면 그 옵션은 `saleable = false`(`OPTION_DELETED`)가 된다. `cancelPendingOrders`는 상품 단위라 옵션 삭제로는 부르지 않는다.
-  그 옵션이 담긴 결제 대기 주문은 결제 때 `getOptions`로 판매 가능 여부를 다시 보므로 결제되지 않고(409 PRODUCT_NOT_ON_SALE),
-  구매자 취소나 결제 만료로 취소될 때 재고가 복원된다(ORDER_RESTORE는 삭제된 옵션도 재고를 늘린다).
+- 지운 옵션이 담긴 결제 대기 주문은 결제 때 `getOptions`로 판매 가능 여부를 다시 보므로 결제되지 않고(409 `PRODUCT_NOT_ON_SALE`), 구매자 취소나 결제 만료로 취소될 때 재고가 복원된다(ORDER_RESTORE는 삭제된 옵션도 재고를 늘린다).
+
+### 상품 할인
+
+판매자가 상품에 기간 할인(할인가, 시작·끝 시각)을 겁니다. 할인은 상품 가격에만 적용하고, 옵션 추가금은 할인한 가격에 그대로 더합니다.
+할인이 진행 중인지는 조회 시각으로 계산하므로(스케줄러 없음), `getOptions`를 부르는 시각의 할인이 price에 들어갑니다.
+
+| 항목 | 규칙 |
+| --- | --- |
+| 할인가 | 정가의 10~99% (할인율 1~90%). 할인율은 소수점 내림으로 보여 준다 |
+| 기간 | 시작은 지금 이후, 끝은 시작 뒤 1년 이내. 시작 이상·끝 미만이 할인 기간이다 |
+| 겹침 | 한 상품의 할인 기간은 겹칠 수 없다 (409 `DISCOUNT_PERIOD_OVERLAPPED`) |
+| 변경 | 시작 전은 할인가·시작·끝을 바꾸거나 삭제할 수 있다. 진행 중은 끝 시각만 바꾸거나(연장·단축) 지금 종료할 수 있다. 끝난 할인은 이력으로 남는다 |
+| 정가 수정 | 진행 중이거나 예약된 할인이 있으면 상품 가격을 바꿀 수 없다 (409 `PRICE_LOCKED_BY_DISCOUNT`) |
+
+- 할인이 시작되거나 끝나는 순간 장바구니에서 본 금액과 주문 생성 때 금액이 달라지면 주문 생성은 409 `PRICE_CHANGED`다. 잘못된 가격으로 주문되지 않게 하려는 의도된 동작이다.
+- 주문 금액은 주문 생성 때의 스냅샷으로 고정된다. 할인 중에 만든 주문은 할인이 끝난 뒤 결제해도 할인가다.
+- 주문 컨텍스트(금액과 무관, 표시용, TRSS-222): 주문 항목에 정가 단가(`list_unit_price`)와 할인율(`discount_rate`)을 주문 때 스냅샷으로 저장한다(V14). 장바구니 항목은 현재 스냅샷의, 주문 상세 항목은 저장된 `listPrice`·`discountRate`를 그대로 응답한다. 할인 기능 전 주문은 `listPrice = unitPrice`, `discountRate = null`이다. `OptionSnapshotDto` 호환 생성자는 지웠다.
 
 ### 받는 이벤트
 
@@ -382,16 +417,17 @@ public interface OrderApi {
 
     /**
      * 상품이 들어 있는 결제 대기(CREATED·PAYMENT_FAILED) 주문을 모두 취소하고 재고를 복원한다.
+     * 결제 중(PAYING) 주문은 취소하지 않는다: 결제 시작 때 판매 가능을 확인했으므로 결제되면 PAID로 둔다.
      * 상품 삭제·판매 중지(관리자 즉시 중지·중지 요청 승인)·판매자 철회·제재 때 상품 컨텍스트가 상품을 잠근 뒤 호출한다. 호출한 쪽 트랜잭션에 참여한다.
      * 취소한 주문 수를 반환한다.
      */
     int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType);
 
-    /** 구매자로서 진행 중인 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지. 회원 탈퇴 검사용 */
+    /** 구매자로서 진행 중인 주문(CREATED·PAYING·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지. 회원 탈퇴 검사용 */
     boolean hasActiveOrders(Long buyerId);
 
     /**
-     * 판매자 상품이 들어간 진행 중인 주문(CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지.
+     * 판매자 상품이 들어간 진행 중인 주문(CREATED·PAYING·PAYMENT_FAILED·PAID·RETURN_REQUESTED)이 있는지.
      * 판매자 철회 승인·회원 탈퇴 검사용. 있으면 회원 컨텍스트가 409로 승인·탈퇴를 거절한다.
      */
     boolean hasActiveSales(Long sellerId);
@@ -432,7 +468,10 @@ public interface CouponApi {
     /** 주문 생성(상품 쿠폰 다음): 장바구니 쿠폰을 예약하고 할인액을 돌려준다. orderAmount는 상품 쿠폰 할인 후 상품 금액 합계(배송비 제외) */
     long reserveCartCoupon(Long memberId, Long couponId, Long orderId, long orderAmount, LocalDateTime now);
 
-    /** 결제(결제 요청 전): 예약 쿠폰 사용 처리. 예약 뒤 중지, 기간 종료면 409-COUPON_NOT_ACTIVE로 결제 전체 롤백 */
+    /** 결제 시작(결제 요청 전): 예약 쿠폰을 지금 쓸 수 있는지 확인. 예약 뒤 중지, 기간 종료면 409-COUPON_NOT_ACTIVE (돈이 움직이기 전) */
+    void validateReservedCouponsUsable(Long orderId, LocalDateTime now);
+
+    /** 결제 성공 반영(주문 PAID와 같은 Tx): 예약 쿠폰 사용 처리. 쿠폰 상태·기간은 보지 않는다(그사이 중지돼도 예약이 할인을 보장) */
     int useReservedCoupons(Long orderId, LocalDateTime now);
 
     /** 결제 전 취소, 만료(OrderCancelSupport): 예약 쿠폰 해제와 수량 복원. 다시 불러도 결과가 같다 */
@@ -440,9 +479,15 @@ public interface CouponApi {
 }
 ```
 
-- 상품 금액은 옵션 단가(상품 가격 + 옵션 추가금) x 수량이다. 상품 쿠폰도 추가금을 포함한 이 금액에 할인을 적용한다.
+- 상품 금액은 옵션 단가(`OptionSnapshotDto.price`) x 수량이다. 상품 쿠폰도 추가금을 포함한 이 금액에 할인을 적용한다.
+- 할인은 상품 할인 → 상품 쿠폰 → 장바구니 쿠폰 순서로 적용한다. 할인 상품에도 쿠폰을 쓸 수 있고, 상품 쿠폰 할인액이 할인가 기준 상품 금액 이상이면 400 `COUPON_NOT_APPLICABLE`이다.
 - 주문 금액은 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인이다. 결제 요청(PayCommand.amount)은 이 결제 금액(payAmount)이다.
   배송비는 배송비 작업에서 상품 쿠폰 할인 후 금액을 기준으로 더한다(장바구니 쿠폰 기준 금액은 배송비 제외라 바뀌지 않는다).
+- 장바구니 쿠폰 할인은 플랫폼 부담이다. 주문의 장바구니 쿠폰 할인액을 PayCommand.couponSubsidyAmount로 보내고, 결제가 플랫폼 지갑에서 홀딩으로 채운다.
+  상품 쿠폰 할인은 판매자 부담이라 지원금이 없고, 정산이 할인 후 금액으로 지급한다.
+- 반품해도 사용한 쿠폰(상품·장바구니)은 복원하지 않는다. 구매자는 낸 금액(PayCommand.amount)만 돌려받고,
+  장바구니 쿠폰 지원금은 반품 환불 때 홀딩에서 관리자 지갑으로 돌려받는다(COUPON_SUBSIDY_CANCEL).
+  결제 전 취소·만료는 지금처럼 예약 쿠폰을 해제해 복원한다(releaseReservedCoupons).
 - 쿠폰은 설정 custom.order.couponEnabled(환경변수 ORDER_COUPON_ENABLED, 기본 false)가 켜져 있을 때만 주문에 반영한다.
   꺼져 있을 때 쿠폰을 보내면 409-ORDER_COUPON_NOT_AVAILABLE이라 결제 금액은 상품 금액 합계와 같다.
   결제 서비스의 장바구니 쿠폰 지원금(COUPON_SUBSIDY)과 정산의 상품 쿠폰 할인 후 금액 반영이 끝난 뒤에 켠다.
@@ -465,7 +510,12 @@ public record OrderPaidEvent(Long orderId, String orderNumber, Long buyerId, Loc
 public record OrderConfirmedEvent(Long orderId, Long buyerId, LocalDateTime confirmedAt,
                                   ConfirmType confirmType, List<ConfirmedOrderItemDto> items) implements DomainEvent { }
 
-/** 반품 승인. 결제 컨텍스트가 홀딩 금액을 구매자 지갑으로 환불한다. aggregate: ORDER / orderId */
+/**
+ * 반품 승인. 관리자 승인 트랜잭션에서 재고 복원과 함께 발행한다. aggregate: ORDER / orderId → Kafka order.events
+ * 결제 컨텍스트가 받아 홀딩 금액과 배송비를 구매자 지갑으로 환불하고, 장바구니 쿠폰 지원금을 플랫폼 지갑으로 회수한다(결제 담당 구현 예정).
+ * refundAmount = 주문의 pay_amount(배송비 포함 결제 금액 전액, 쿠폰 할인분은 돌려주지 않음).
+ *   결제는 금액 내역(배송비·지원금)을 자기 결제 건에 저장된 값으로 나누고, refundAmount는 대조용으로만 쓴다.
+ */
 public record OrderReturnedEvent(Long orderId, Long buyerId, long refundAmount, LocalDateTime returnedAt) implements DomainEvent { }
 ```
 
@@ -501,16 +551,30 @@ public interface PaymentApi {
     /** 잔액과 홀딩 중 금액. 지갑이 없으면 404 WALLET_NOT_FOUND */
     WalletSummaryDto getWallet(Long memberId);
 
-    /** 결과가 정해지지 않은 충전 건(READY·PROCESSING)이 있는지. 회원 탈퇴 검사용 (반영 전이라 잔액에 잡히지 않음) */
+    /** 결과가 정해지지 않은 충전 건(READY·PROCESSING·CANCELING)이 있는지. 회원 탈퇴 검사용 (반영 전이거나 취소가 거절되면 잔액이 다시 들어올 수 있음) */
     boolean hasPendingTopups(Long memberId);
 
     /**
-     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. 호출한 쪽 트랜잭션에 참여한다.
+     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록. HTTP(POST /internal/v1/payments/pay)라 호출한 쪽 트랜잭션에 참여하지 않는다.
+     * 주문 쪽은 주문을 PAYING으로 커밋한 뒤 부르고, 결과를 받은 뒤 별도 트랜잭션으로 반영한다(9.1).
+     * command.amount는 배송비를 포함한 결제 금액이다. 배송비(command.shippingFee)는 구매자 지갑 → 플랫폼 지갑(원장 SHIPPING_FEE)으로 옮기고,
+     * 나머지(amount − shippingFee)는 홀딩에 넣는다. 장바구니 쿠폰 지원금(command.couponSubsidyAmount)은 플랫폼 지갑 → 홀딩(원장 COUPON_SUBSIDY).
+     * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount.
+     * (배송비·지원금 처리는 결제 담당 구현 예정. 그 전까지는 amount 전체가 홀딩에 들어가고 두 필드는 쓰이지 않는다)
      * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.
-     * 주문 쪽은 결과가 PAID가 아니면 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
-     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다.
+     * 주문 쪽은 결과가 PAID가 아니면 주문을 PAYMENT_FAILED로 커밋한 뒤 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
+     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환한다. 아직 처리하지 않은 키면 그때 처리한다(키 UNIQUE·지갑 잠금으로 직렬화).
+     * 주문 쪽 재확인 스케줄러가 결과를 모르는 결제를 같은 키·같은 내용으로 다시 부르므로 이 동작에 기댄다.
+     * 오류: 4xx RsData는 주문 쪽이 "결제 없음"으로 보고 PAYMENT_FAILED로 반영한다(단 409 LOCK_CONFLICT·CONCURRENT_UPDATE·DATA_CONFLICT, 429는 결과 불명).
+     *      접속 실패·응답 시간 초과·5xx는 결과 불명으로 보고 주문을 PAYING으로 둔다.
      */
     PayResultDto pay(PayCommand command);
+
+    /**
+     * 결제 취소(보상): 결제는 됐는데 주문에 반영할 수 없을 때 결제를 되돌린다. 멱등.
+     * HTTP POST /internal/v1/payments/{idempotencyKey}/cancel
+     */
+    void cancelPayment(String idempotencyKey);
 
     /**
      * 주문의 결제 시도 목록 (주문 상세의 결제 내역). 오래된 순, 실패 시도 포함.
@@ -539,8 +603,18 @@ package com.backend.shared.payment.dto;
 
 public record WalletSummaryDto(Long memberId, long balance, long heldAmount) { }
 
-public record PayCommand(Long orderId, String orderNumber, Long buyerId, long amount,
-                         LocalDateTime orderExpiresAt, String idempotencyKey) { }
+/**
+ * amount: 구매자 결제 금액(배송비 포함, 쿠폰 할인 후), shippingFee: 그중 배송비(0 이상, amount 미만).
+ * couponSubsidyAmount: 장바구니 쿠폰 지원금 = 주문의 장바구니 쿠폰 할인액(0 이상). 장바구니 쿠폰은 플랫폼 부담이다.
+ * 결제는 배송비를 홀딩에 넣지 않고 플랫폼 지갑으로 옮기고(SHIPPING_FEE), 지원금을 플랫폼 지갑에서 홀딩으로 옮긴다(COUPON_SUBSIDY).
+ * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount. 정산은 이 홀딩에서 판매자·수수료를 지급한다(배송비는 정산 대상 아님).
+ * (두 필드의 처리는 결제 담당 구현 예정)
+ * 두 필드 없이 부르던 6인자 생성자는 둘 다 0으로 남겨 둔다.
+ * HTTP 본문에서 두 필드는 필수다. 값이 없으면 0을 보낸다. 빠지거나 null이면 400(Jackson 3 기본 설정).
+ * 그래서 market과 payment는 같은 버전으로 함께 배포한다(옛 market이 새 payment를 부르면 400).
+ */
+public record PayCommand(Long orderId, String orderNumber, Long buyerId, long amount, long shippingFee,
+                         long couponSubsidyAmount, LocalDateTime orderExpiresAt, String idempotencyKey) { }
 
 /** shortage: 잔액 부족일 때 모자란 금액, chargeAmount: 1만 원 단위로 올린 충전 권장 금액 */
 public record PayResultDto(Long paymentId, PayResultStatus status, long shortage, long chargeAmount) {
@@ -571,10 +645,12 @@ public record TransferResultDto(String idempotencyKey, Long walletTransactionId,
 
 | 이벤트 | 처리 | 멱등 기준 |
 | --- | --- | --- |
-| `OrderReturnedEvent` (미구현) | 환불(REQUESTED → COMPLETED), 홀딩 RELEASED, 결제 REFUNDED, 원장 REFUND | `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건) |
+| `OrderReturnedEvent` (결제 담당 구현 예정, 지금은 받는 코드 없음) | Kafka `order.events`. 환불(REQUESTED → COMPLETED), 원장 REFUND(홀딩 → 구매자) + SHIPPING_FEE_REFUND(배송비 > 0, 플랫폼 → 구매자) + COUPON_SUBSIDY_CANCEL(지원금 > 0, 홀딩 → 플랫폼), 홀딩 RELEASED, 결제 REFUNDED. 금액 내역은 결제 건에 저장된 값을 쓰고 `refundAmount`는 대조용(어긋나면 환불을 FAILED로 두고 재시도하지 않음, 사람이 확인). 처리 실패는 FAILED로 남기고 스케줄러가 재시도 | `processed_event`(eventId, `payment`)로 재전달을 거르고, `payment_refund.payment_id` 유니크(주문당 PAID 결제는 1건)와 원장 `idempotency_key` 유니크로 한 번 더 막음 |
 | `MemberSignedUpEvent` | 잔액 0인 지갑 생성 (Kafka `member.events`, `@KafkaListener` groupId `payment`, 가입과 별도 트랜잭션) | `processed_event`(eventId, `payment`)로 재전달을 거르고, 지갑이 이미 있으면 무시(`wallet.member_id` 유니크) |
 
-- 시스템 오류(`FAILED_SYSTEM_ERROR`)는 결과가 아니라 예외로 올라옵니다. 주문 쪽은 별도 트랜잭션으로 주문을 PAYMENT_FAILED로 바꾼 뒤 예외를 다시 던집니다. (미구현: 지금은 예외가 그대로 올라가 전체가 롤백되고, FAILED_SYSTEM_ERROR·PAYMENT_FAILED는 기록되지 않는다)
+- `OrderReturnedEvent` 배포 조건: `order.events`는 보관 기간을 따로 정하지 않아 브로커 기본값(7일)이 지나면 메시지가 지워진다. 반품 승인(market)이 먼저 배포되면 **7일 안에 payment 구독을 배포**하거나, 그 전까지 반품 승인을 열지 않는다. 그렇지 않으면 그 사이 반품 환불이 오류 없이 빠진다. payment 컨슈머는 `auto-offset-reset: earliest`라 배포 전에 쌓인 이벤트는 처음 구독할 때 받는다
+
+- 시스템 오류는 결과가 아니라 HTTP 5xx·응답 없음으로 옵니다. 주문 쪽은 결과 불명으로 보고 주문을 PAYING으로 둔 뒤, 재확인 스케줄러가 같은 키로 `pay`를 다시 불러 PAID·PAYMENT_FAILED로 정리합니다(9.1).
 
 ## 6. settlement
 
@@ -625,6 +701,7 @@ public interface SettlementApi {
 | `SellerSanctionedEvent` | `holdSeller(sellerId, reason)`와 같은 처리, 처리 이력 trigger `EVENT` | `processed_event`(eventId, `settlement`), 지급 전 정산서만 HOLD로 바꾸므로 다시 와도 결과가 같다 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `settlement`)로 받는다(TRSS-139). 같은 토픽의 다른 주문 이벤트는 무시한다. `order.events`의 `OrderPaidEvent`도 `eventType` 헤더로 거른다(정산 코드 변경 없음).
+- `order.events`에 실리는 `OrderReturnedEvent`도 `eventType` 헤더로 거르고, 헤더가 없으면 봉투를 읽어 거른다(정산 코드 변경 없음). 반품된 주문은 구매 확정되지 않아 정산 후보가 생기지 않는다.
 - `SellerSanctionedEvent`는 토픽 `seller.events`를 같은 groupId `settlement`로 받는다(`SettlementSellerEventListener`). 같은 토픽의 다른 판매자 이벤트(철회 요청·철회 거절)는 정산이 할 일이 없어 무시한다. 회원은 `holdSeller`를 부르지 않는다(TRSS-161).
 - 이벤트가 오기 전에 지급이 도는 틈은 지급 직전 확인으로 막는다. 정산서를 지급하기 직전에 판매자 상태가 `SANCTIONED`이면 지급하지 않고 HOLD로 바꾼다(처리 이력 trigger는 지급을 시작한 경로). 제재 뒤에 새로 만들어지는 정산서는 월 정산 집계가 판매자 상태를 보고 처음부터 HOLD로 만든다.
 - 한 메시지를 한 트랜잭션에서 처리한다. eventId 처리 기록과 후보 생성이 함께 커밋되고, 후보 생성이 실패하면 기록도 롤백되어 다시 처리된다.
@@ -683,6 +760,7 @@ public record DeliveryDto(Long deliveryId, DeliveryStatus status, String carrier
 | `OrderPaidEvent` | 주문당 배송 1건(READY)과 주문 항목별 배송 항목 생성 | `processed_event`(eventId, `delivery`)로 재전달을 거르고, `delivery.order_id` 유니크로 한 번 더 막음 |
 
 - Kafka 토픽 `order.events`를 `@KafkaListener`(groupId `delivery`)로 받는다. 같은 토픽의 다른 주문 이벤트(`OrderConfirmedEvent` 등)는 `eventType` 헤더로 거른다.
+- `OrderReturnedEvent`도 `eventType` 헤더로 거르고, 헤더가 없으면 봉투를 읽어 거른다(배송 코드 변경 없음).
 - 배송지·연락처는 로그에 남기지 않는다(`deliveryId`, `orderId`, `eventId`만).
 
 ### 발행하는 이벤트
@@ -759,16 +837,25 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 
 계약의 모양과는 별개로, 구현할 때 꼭 지켜야 하는 규칙입니다.
 
-### 9.1 결제는 주문 상태를 먼저 바꾼 뒤 호출한다 (주문·결제)
+### 9.1 결제는 주문을 PAYING으로 커밋한 뒤 호출하고, 같은 키일 때만 결과를 반영한다 (주문·결제)
 
-결제와 15분 만료가 동시에 일어나도 둘 중 하나만 반영되게 하려면 주문 행을 먼저 잠가야 합니다.
+결제는 HTTP라 주문 트랜잭션에 참여하지 못합니다. 그래서 "결제 요청 → 결과 반영"을 트랜잭션 두 개로 나누고, 결과를 모르면 바로 취소하지 않고 결제 중(`PAYING`)으로 남깁니다.
 
-1. 주문을 PAID로 조건부 UPDATE: `where id = ? and status in ('CREATED','PAYMENT_FAILED') and expires_at > now()`
-2. 바뀐 행이 0건이면 409 `ORDER_EXPIRED`(또는 상태 오류)를 던진다
-3. `PaymentApi.pay()`를 호출한다. 결과가 PAID가 아니면 402 `INSUFFICIENT_BALANCE` 등을 던져서 1번까지 함께 롤백한다
-4. 결제 실패 기록(`FAILED_*`)은 결제 컨텍스트가 별도 트랜잭션(REQUIRES_NEW)으로 남기므로 롤백되지 않는다
+1. 상품 판매 가능 여부, 주문 만료 시각, 예약 쿠폰을 지금 쓸 수 있는지 확인한다 (`409-PRODUCT_NOT_ON_SALE`, `409-ORDER_EXPIRED`, `409-COUPON_NOT_ACTIVE`)
+2. 주문을 잠그고 `PAYING`으로 바꾼 뒤, 이번 시도의 멱등키(`payment_idempotency_key`)와 시작 시각(`paying_started_at`)을 저장하고 커밋한다. 이미 `PAYING`이면 `409-PAYMENT_IN_PROGRESS`
+3. `PaymentApi.pay(command)`를 트랜잭션 밖에서 부른다
+4. 주문을 다시 잠그고, **아직 `PAYING`이고 같은 키일 때만** 결과를 반영한다
+   - PAID: 예약 쿠폰 사용 처리, 주문 `PAID`, 장바구니 항목 삭제, `OrderPaidEvent`(outbox)를 한 트랜잭션으로. 만료 시각이 지났어도 PAID (payment가 만료 전 결제로 판단)
+   - `FAILED_*`: `PAYMENT_FAILED` (다시 결제하거나, 만료되면 만료 스케줄러가 취소·재고 복구). 결제 취소는 부르지 않는다
+   - payment가 요청을 거절(4xx): 결제가 없으므로 `PAYMENT_FAILED`
+   - 응답 시간 초과·응답 없음·5xx·반영 트랜잭션 실패: `PAYING`으로 두고 `200-2`(결제 확인 중)로 응답
+5. 재확인 스케줄러: `PAYING`이 된 지 30초(`custom.order.payingRecheckSeconds`)가 지난 주문에 **같은 키·같은 내용으로 `pay`를 다시 불러** 4번과 같이 반영한다
+   - 읽기 전용 조회는 쓰지 않는다. "결제 없음"은 확정이 아니다(원래 요청이 늦게 도착할 수 있음)
+   - 결과가 PAID인데 주문이 이 키로 결제 중도 결제 완료도 아니면(예외 상태) `cancelPayment(키)`로 보상하고 ERROR 로그(주문 ID·키만)
+   - 계속 응답이 없으면 `PAYING` 유지, 10분(`payingAlertMinutes`)이 넘으면 ERROR 로그
 
-주문 행을 먼저 잠그면 만료 스케줄러는 결제가 끝날 때까지 기다립니다. 순서를 거꾸로 하면 지갑은 잠갔는데 주문이 만료되는 경우를 따로 처리해야 합니다.
+`PAYING` 주문은 재결제·취소·만료 처리·판매 중지 취소 대상이 아닙니다. 회원 탈퇴·판매자 진행 중 판매 검사와 장바구니·주문 생성 중복 검사에는 들어갑니다.
+결제 쪽은 `pay`의 키 UNIQUE와 지갑 잠금으로 같은 키의 요청을 직렬화하고, 실패 기록(`FAILED_*`)은 별도 트랜잭션(REQUIRES_NEW)으로 남깁니다.
 
 ### 9.2 재고 차감·복원 모두 상품 ID 오름차순으로 잠근다 (상품)
 
@@ -802,4 +889,5 @@ public record DeliveryCompletedEvent(Long deliveryId, Long orderId, Long buyerId
 - [x] 주문 생성 시 재고 이력의 `orderItemId` 처리 (유진·은정)
 - [ ] 정산 지급 시 판매자 1명의 여러 주문을 `SettledOrderAmountDto` 목록으로 넘기는 방식이 홀딩 처리에 맞는지 (다은·지은)
 - [x] 결제 `PROCESSING`은 쓰지 않아 제거 (지은)
+- [x] 주문 항목에 정가 단가·할인율을 저장하고 장바구니·주문 상세에 정가·할인율 표시, 이후 `OptionSnapshotDto` 호환 생성자 제거 (유진·은정)
 - [x] 판매자의 회원 탈퇴: 판매자는 판매자 철회 완료(WITHDRAWN) 후에만 회원 탈퇴할 수 있다. 철회 승인 시점에 진행 중인 판매(`OrderApi.hasActiveSales`)와 미정산 금액(`SettlementApi.getUnsettledAmount`)이 없어야 한다. 탈퇴 후 정산금이 탈퇴 회원 지갑으로 들어가는 것을 막기 위함 (시연·지은·은정·다은)

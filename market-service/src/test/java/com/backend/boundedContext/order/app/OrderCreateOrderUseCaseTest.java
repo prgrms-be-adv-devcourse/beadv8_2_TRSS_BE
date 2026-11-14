@@ -66,7 +66,7 @@ class OrderCreateOrderUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1), productApi, memberApi,
+        useCase = new OrderCreateOrderUseCase(orderSupport, orderRepository, new OrderPolicy(15, 7, 99, 100, 1, 2500, 30000), productApi, memberApi,
                 new OrderCouponPolicy(false), orderCouponPort);
     }
 
@@ -84,7 +84,7 @@ class OrderCreateOrderUseCaseTest {
 
     /** 옵션 ID = 상품 ID × 10, 판매자는 2번 */
     private OptionSnapshotDto onSale(Long optionId, long price) {
-        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, 10,
+        return new OptionSnapshotDto(optionId, optionId / 10, SELLER_ID, "상품" + optionId, "기본", price, price, null, 10,
                 true, null, null);
     }
 
@@ -169,11 +169,11 @@ class OrderCreateOrderUseCaseTest {
     }
 
     @Test
-    @DisplayName("결제 대기 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER, 응답에 그 주문 ID를 담는다")
+    @DisplayName("결제 대기·결제 중 주문에 들어 있는 옵션이면 CART_ITEM_IN_PENDING_ORDER, 응답에 그 주문 ID를 담는다")
     void inPendingOrder() {
         given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
         givenOptions(onSale(100L, 15000));
-        given(orderRepository.findOrderIdsContainingOptions(BUYER_ID, List.of(100L), Order.PAYMENT_PENDING_STATUSES))
+        given(orderRepository.findOrderIdsContainingOptions(BUYER_ID, List.of(100L), Order.PAYMENT_UNFINISHED_STATUSES))
                 .willReturn(List.of(ORDER_ID));
 
         assertThatThrownBy(() -> useCase.create(BUYER_ID, null, List.of(1L), 15000, null))
@@ -245,6 +245,43 @@ class OrderCreateOrderUseCaseTest {
                 .isInstanceOf(DomainException.class)
                 .hasFieldOrPropertyWithValue("resultCode", "400-IDEMPOTENCY_KEY_INVALID");
         verify(orderSupport, never()).getCartForUpdate(any());
+    }
+
+    @Test
+    @DisplayName("배송비: 쿠폰 없는 주문도 배송비를 저장하고, 예상 금액은 배송비를 뺀 상품 금액 합계와 비교한다 (판매자 2명이어도 한 번)")
+    void create_shippingFee() {
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1, 110L, 1));
+        OptionSnapshotDto otherSeller = new OptionSnapshotDto(110L, 11L, 9L, "상품110", "기본", 8000, 8000, null, 10, true, null, null);
+        givenOptions(onSale(100L, 12000), otherSeller);
+        given(memberApi.getSellers(any())).willReturn(List.of(
+                new SellerDto(SELLER_ID, 20L, "테스트상점", SellerStatus.APPROVED),
+                new SellerDto(9L, 21L, "다른상점", SellerStatus.APPROVED)));
+        givenSaveAssignsIds();
+
+        OrderCreateResponse response = useCase.create(BUYER_ID, null, List.of(1L, 2L), 20000, null);
+
+        ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(saved.capture());
+        assertThat(saved.getValue().getShippingFee()).isEqualTo(2500);
+        assertThat(saved.getValue().getPayAmount()).isEqualTo(22500);
+        assertThat(response.shippingFee()).isEqualTo(2500);
+        assertThat(response.payAmount()).isEqualTo(22500);
+    }
+
+    @Test
+    @DisplayName("배송비: 상품 금액 합계 29,999원은 배송비 2,500원, 30,000원은 0원")
+    void create_shippingFeeBoundary() {
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
+        givenOptions(onSale(100L, 29999));
+        givenSeller();
+        givenSaveAssignsIds();
+        assertThat(useCase.create(BUYER_ID, null, List.of(1L), 29999, null).shippingFee()).isEqualTo(2500);
+
+        given(orderSupport.getCartForUpdate(BUYER_ID)).willReturn(cartWith(100L, 1));
+        givenOptions(onSale(100L, 30000));
+        OrderCreateResponse free = useCase.create(BUYER_ID, null, List.of(1L), 30000, null);
+        assertThat(free.shippingFee()).isZero();
+        assertThat(free.payAmount()).isEqualTo(30000);
     }
 
     @Test

@@ -1,6 +1,9 @@
 package com.backend.boundedContext.order.app;
 
 import com.backend.shared.order.dto.CartLineDto;
+import com.backend.boundedContext.order.domain.ReturnFilter;
+import com.backend.boundedContext.order.domain.ReturnItemDecision;
+import com.backend.boundedContext.order.domain.ReturnReasonCode;
 import com.backend.boundedContext.order.in.dto.*;
 import com.backend.global.page.PageResponse;
 import com.backend.shared.order.dto.OrderCancelType;
@@ -34,8 +37,13 @@ public class OrderFacade {
     private final OrderGetOrdersUseCase orderGetOrdersUseCase;
     private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
     private final OrderPayOrderUseCase orderPayOrderUseCase;
+    private final OrderRecheckPayingOrdersUseCase orderRecheckPayingOrdersUseCase;
     private final OrderCancelOrderUseCase orderCancelOrderUseCase;
     private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
+    private final OrderRequestReturnUseCase orderRequestReturnUseCase;
+    private final OrderGetAdminReturnsUseCase orderGetAdminReturnsUseCase;
+    private final OrderApproveReturnUseCase orderApproveReturnUseCase;
+    private final OrderRejectReturnUseCase orderRejectReturnUseCase;
     private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
     private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
     private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
@@ -96,8 +104,7 @@ public class OrderFacade {
         return orderGetOrderDetailUseCase.getOrderDetail(buyerId, orderId);
     }
 
-    // 결제요청
-    @Transactional
+    // 결제요청. 결제는 HTTP라 트랜잭션을 여기서 열지 않고 UseCase가 두 개로 나눠 연다 (PAYING 커밋 → 결제 요청 → 결과 반영)
     public OrderPayResponse payOrder(Long buyerId, Long orderId) {
         return orderPayOrderUseCase.pay(buyerId, orderId);
     }
@@ -112,6 +119,30 @@ public class OrderFacade {
     @Transactional
     public OrderConfirmResponse confirmOrder(Long buyerId, Long orderId) {
         return orderConfirmOrderUseCase.confirm(buyerId, orderId);
+    }
+
+    // 반품 요청 (구매자)
+    @Transactional
+    public ReturnRequestResponse requestReturn(Long buyerId, Long orderId, ReturnReasonCode reasonCode, String reason) {
+        return orderRequestReturnUseCase.request(buyerId, orderId, reasonCode, reason);
+    }
+
+    // 관리자 반품 목록
+    @Transactional(readOnly = true)
+    public PageResponse<AdminReturnSummaryResponse> getAdminReturns(ReturnFilter filter, Pageable pageable) {
+        return orderGetAdminReturnsUseCase.getReturns(filter, pageable);
+    }
+
+    // 관리자 반품 승인: 주문 상태·재고 복원·반품 승인 이벤트를 한 트랜잭션으로
+    @Transactional
+    public ReturnResultResponse approveReturn(Long orderId, List<ReturnItemDecision> decisions) {
+        return orderApproveReturnUseCase.approve(orderId, decisions);
+    }
+
+    // 관리자 반품 거절: 기준일이 지났으면 같은 트랜잭션에서 구매 확정
+    @Transactional
+    public ReturnResultResponse rejectReturn(Long orderId, String reason) {
+        return orderRejectReturnUseCase.reject(orderId, reason);
     }
 
     // 자동 구매확정 대상 주문 id 조회 (스케줄러)
@@ -142,6 +173,17 @@ public class OrderFacade {
     @Transactional
     public boolean expireOrder(Long orderId, LocalDateTime now) {
         return orderExpireOrdersUseCase.expire(orderId, now);
+    }
+
+    // 결제 재확인 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findPayingRecheckTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderRecheckPayingOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 결제 재확인 한 건 (스케줄러). 결제 요청이 HTTP라 트랜잭션은 UseCase가 결과 반영 때만 연다
+    public boolean recheckPayingOrder(Long orderId, LocalDateTime now) {
+        return orderRecheckPayingOrdersUseCase.recheck(orderId, now);
     }
 
     // 최근 주문 목록 (OrderApi)
@@ -176,7 +218,8 @@ public class OrderFacade {
         return orderGetSellerOrderItemsUseCase.getSellerOrderItems(memberId, status, from, to, keyword, pageable);
     }
 
-    // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi)
+    // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi). 결제 중(PAYING) 주문은 취소하지 않는다
+    // (결제 시작 때 판매 가능을 확인했으므로 결제되면 PAID로 둔다)
     @Transactional
     public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
         return orderCancelPendingOrdersUseCase.cancel(productIds, cancelType, LocalDateTime.now());

@@ -21,6 +21,7 @@ import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.product.dto.OptionSnapshotDto;
 import com.backend.shared.product.out.ProductApi;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -39,13 +40,15 @@ import java.util.stream.Collectors;
  * <ol>
  *     <li>상품 금액 = 단가 x 수량</li>
  *     <li>상품 쿠폰 할인 (지정한 항목 1개에 예약, 할인액은 그 항목 금액 이하)</li>
- *     <li>장바구니 쿠폰 할인 (상품 쿠폰 할인 후 상품 금액 합계 기준)</li>
- *     <li>결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인</li>
+ *     <li>배송비 (상품 쿠폰 할인 후 상품 금액 합계 기준, OrderPolicy.shippingFeeFor). 쿠폰이 없어도 반영한다</li>
+ *     <li>장바구니 쿠폰 할인 (상품 쿠폰 할인 후 상품 금액 합계 기준. 배송비와 무관)</li>
+ *     <li>결제 금액 = 상품 금액 합계 - 상품 쿠폰 할인 - 장바구니 쿠폰 할인 + 배송비</li>
  * </ol>
- * 배송비는 배송비 작업에서 2번과 3번 사이(상품 쿠폰 할인 후 금액 기준)에 더한다. 장바구니 쿠폰 기준 금액은 배송비를 빼고 계산하므로 바뀌지 않는다.
+ * 예상 결제 금액(expectedTotalPrice)은 배송비를 뺀 금액과 비교한다. 장바구니의 expectedTotalPrice도 배송비를 빼고 보여 주기 때문이다.
  * 잠금 순서는 장바구니 → 상품과 옵션(재고 차감) → 쿠폰이다. 쿠폰 쪽 작업(중지, 자동 중지)은 쿠폰보다 먼저 상품을 잠그지 않으므로
  * 서로 기다리다 막히지 않는다.
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrderCreateOrderUseCase {
@@ -114,7 +117,7 @@ public class OrderCreateOrderUseCase {
                 shippingAddress == null ? null : shippingAddress.toShippingAddress(),
                 LocalDateTime.now(), orderPolicy.getExpireMinutes());
 
-        // 쿠폰이 없으면 결제 금액 = 상품 금액 합계라 저장·재고 차감 전에 바로 확인한다
+        // 쿠폰이 없으면 배송비를 뺀 결제 금액 = 상품 금액 합계라 저장·재고 차감 전에 바로 확인한다
         if (coupons.isEmpty() && order.getTotalPrice() != expectedTotalPrice) {
             throw new DomainException(OrderErrorCode.PRICE_CHANGED, new PriceChangedResponse(order.getTotalPrice()));
         }
@@ -124,13 +127,18 @@ public class OrderCreateOrderUseCase {
                 .map(OrderItem::toStockChangeDto)
                 .toList());
 
-        applyCoupons(buyerId, order, coupons, LocalDateTime.now());
+        applyCouponsAndShippingFee(buyerId, order, coupons, LocalDateTime.now());
 
-        // 쿠폰을 쓰면 예상 결제 금액을 쿠폰 할인 후 금액(payAmount)과 비교한다. 할인은 쿠폰을 예약해야 정해지므로 여기서 본다.
+        // 쿠폰을 쓰면 예상 결제 금액을 쿠폰 할인 후, 배송비를 뺀 금액과 비교한다. 할인은 쿠폰을 예약해야 정해지므로 여기서 본다.
         // 다르면 같은 트랜잭션의 주문 저장, 재고 차감, 쿠폰 예약이 모두 롤백된다
-        if (order.getPayAmount() != expectedTotalPrice) {
-            throw new DomainException(OrderErrorCode.PRICE_CHANGED, new PriceChangedResponse(order.getPayAmount()));
+        if (order.getPayAmountBeforeShipping() != expectedTotalPrice) {
+            throw new DomainException(OrderErrorCode.PRICE_CHANGED, new PriceChangedResponse(order.getPayAmountBeforeShipping()));
         }
+
+        // 금액 항목만 남긴다 (배송지·연락처는 남기지 않는다)
+        log.info("주문 생성 orderId={}, totalPrice={}, productDiscountAmount={}, cartCouponDiscountAmount={}, shippingFee={}, payAmount={}",
+                order.getId(), order.getTotalPrice(), order.getProductDiscountAmount(), order.getCartCouponDiscountAmount(),
+                order.getShippingFee(), order.getPayAmount());
 
         return OrderCreateResponse.from(order);
     }
@@ -143,10 +151,10 @@ public class OrderCreateOrderUseCase {
     }
 
     /**
-     * 상품 쿠폰 → 장바구니 쿠폰 순서로 반영한다. 쿠폰 예약은 주문 ID와 주문 항목 ID가 필요해 주문을 저장한 뒤에 한다.
-     * 쿠폰이 없으면 아무것도 하지 않아 결제 금액은 상품 금액 합계와 같다.
+     * 상품 쿠폰 → 배송비 → 장바구니 쿠폰 순서로 반영한다. 쿠폰 예약은 주문 ID와 주문 항목 ID가 필요해 주문을 저장한 뒤에 한다.
+     * 쿠폰이 없으면 배송비만 반영해 결제 금액은 상품 금액 합계 + 배송비다.
      */
-    private void applyCoupons(Long buyerId, Order order, OrderCouponSelection coupons, LocalDateTime now) {
+    private void applyCouponsAndShippingFee(Long buyerId, Order order, OrderCouponSelection coupons, LocalDateTime now) {
         for (OrderCouponSelection.ProductCoupon selection : coupons.productCoupons()) {
             OrderItem target = order.getItems().stream()
                     .filter(item -> selection.cartItemId().equals(item.getCartItemId()))
@@ -157,6 +165,9 @@ public class OrderCreateOrderUseCase {
                     target.getProductId(), target.getLineAmount(), now);
             order.applyProductCouponDiscount(target.getId(), discount);
         }
+
+        // 배송비는 상품 쿠폰 할인 뒤 금액으로 정한다 (장바구니 쿠폰은 기준에 영향 없음)
+        order.applyShippingFee(orderPolicy.shippingFeeFor(order.getProductSubtotal()));
 
         if (coupons.cartCouponId() != null) {
             long cartCouponDiscount = orderCouponPort.reserveCartCoupon(buyerId, coupons.cartCouponId(), order.getId(),
@@ -196,11 +207,11 @@ public class OrderCreateOrderUseCase {
         }
     }
 
-    // 결제 대기 주문에 들어 있는 옵션으로는 새 주문을 만들 수 없음
+    // 결제가 끝나지 않은(결제 대기·결제 중) 주문에 들어 있는 옵션으로는 새 주문을 만들 수 없음
     // 응답 유실 후 키 없이 다시 보낸 경우에도 주문서로 돌아갈 수 있게 결제 대기 주문 ID를 담는다
     private void validateNotInPendingOrder(Long buyerId, List<Long> optionIds) {
         List<Long> pendingOrderIds = orderRepository.findOrderIdsContainingOptions(
-                buyerId, optionIds, Order.PAYMENT_PENDING_STATUSES);
+                buyerId, optionIds, Order.PAYMENT_UNFINISHED_STATUSES);
 
         if (!pendingOrderIds.isEmpty()) {
             throw new DomainException(OrderErrorCode.CART_ITEM_IN_PENDING_ORDER,
@@ -233,7 +244,9 @@ public class OrderCreateOrderUseCase {
                 option.optionName(),
                 sellerNames.get(option.sellerId()),
                 option.price(),
-                item.getQuantity()
+                item.getQuantity(),
+                option.listPrice(),      // 표시용 정가·할인율은 스냅샷 값 그대로 (다시 계산하지 않는다)
+                option.discountRate()
         );
     }
 }

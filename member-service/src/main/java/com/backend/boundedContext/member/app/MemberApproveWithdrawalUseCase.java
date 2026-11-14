@@ -36,7 +36,7 @@ public class MemberApproveWithdrawalUseCase {
             throw new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
         }
 
-        // 판매자 상품이 들어간 CREATED·PAYMENT_FAILED·PAID·RETURN_REQUESTED 주문
+        // 판매자 상품이 들어간 CREATED·PAYING·PAYMENT_FAILED·PAID·RETURN_REQUESTED 주문
         if (WithdrawalCheckQueries.query(() -> memberOrderPort.hasActiveSales(sellerId))) {
             throw new DomainException(MemberErrorCode.ACTIVE_SALES_EXIST);
         }

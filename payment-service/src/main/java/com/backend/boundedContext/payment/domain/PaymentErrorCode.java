@@ -24,7 +24,8 @@ public enum PaymentErrorCode implements ErrorCode {
     AMOUNT_MISMATCH(400, "충전 요청 금액이 일치하지 않습니다."),
     TOPUP_PAYMENT_DECLINED(400, "결제가 승인되지 않았습니다."),
     TOPUP_ALREADY_PROCESSED(409, "이미 처리된 충전입니다."),
-    TOPUP_ALREADY_USED(409, "사용한 금액이 있는 충전 건은 취소할 수 없습니다."),
+    TOPUP_NOT_CANCELABLE(409, "취소할 수 있는 충전 금액이 없습니다."),
+    TOPUP_CANCEL_DECLINED(400, "충전 취소가 거절되었습니다."),
 
     // 결제
     PAYMENT_ALREADY_PAID(409, "이미 결제된 주문입니다."),

@@ -15,11 +15,12 @@ import lombok.RequiredArgsConstructor;
 public class PaymentCheckPendingTopupsUseCase {
 
     // 결과가 아직 정해지지 않은 상태. READY는 결제창 진행 중, PROCESSING은 승인 중이거나 대사 스케줄러가 결과를 확인할 건
-    private static final Set<TopupStatus> PENDING_STATUSES = EnumSet.of(TopupStatus.READY, TopupStatus.PROCESSING);
+    // CANCELING은 충전 취소 중이거나 결과를 확인할 건 (취소가 거절되면 잔액이 다시 들어옴)
+    private static final Set<TopupStatus> PENDING_STATUSES = EnumSet.of(TopupStatus.READY, TopupStatus.PROCESSING, TopupStatus.CANCELING);
 
     private final TopupRepository topupRepository;
 
-    // 이 회원에게 결과가 정해지지 않은 충전 건이 있는지 (있으면 나중에 예치금이 반영될 수 있음)
+    // 이 회원에게 결과가 정해지지 않은 충전 건이 있는지 (있으면 나중에 예치금이 반영되거나 되돌아올 수 있음)
     public boolean hasPendingTopups(Long memberId) {
         return topupRepository.existsByMemberIdAndStatusIn(memberId, PENDING_STATUSES);
     }

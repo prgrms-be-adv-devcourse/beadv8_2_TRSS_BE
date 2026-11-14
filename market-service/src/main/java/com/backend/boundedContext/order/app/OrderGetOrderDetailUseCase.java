@@ -7,11 +7,13 @@ import com.backend.boundedContext.order.in.dto.OrderDeliveryResponse;
 import com.backend.boundedContext.order.in.dto.OrderDetailResponse;
 import com.backend.boundedContext.order.in.dto.OrderItemResponse;
 import com.backend.boundedContext.order.in.dto.OrderPaymentResponse;
+import com.backend.boundedContext.order.in.dto.RefundStatus;
 import com.backend.boundedContext.order.in.dto.ShippingAddressResponse;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.exception.DomainException;
 import com.backend.shared.delivery.out.DeliveryApi;
 import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.payment.dto.PaymentAttemptStatus;
 import com.backend.shared.payment.out.PaymentApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +33,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class OrderGetOrderDetailUseCase {
 
-    // 배송 건이 있을 수 있는 상태 (결제 이후). CREATED·PAYMENT_FAILED·CANCELED는 배송 건이 없어 부르지 않는다
+    // 배송 건이 있을 수 있는 상태 (결제 이후). CREATED·PAYING·PAYMENT_FAILED·CANCELED는 배송 건이 없어 부르지 않는다
     private static final Set<OrderStatus> DELIVERY_STATUSES = Set.of(
             OrderStatus.PAID, OrderStatus.CONFIRMED, OrderStatus.RETURN_REQUESTED, OrderStatus.RETURNED);
 
@@ -44,11 +46,22 @@ public class OrderGetOrderDetailUseCase {
                 .orElseThrow(() -> new DomainException(OrderErrorCode.ORDER_NOT_FOUND));
 
         // 내 주문인지 확인한 뒤에 결제 내역을 조회한다
-        List<OrderPaymentResponse> payments = paymentApi.getPaymentAttempts(order.getId()).stream()
-                .map(OrderPaymentResponse::from)
-                .toList();
+        return toDetail(order, LocalDateTime.now(), getPayments(order), getDelivery(order));
+    }
 
-        return toDetail(order, LocalDateTime.now(), payments, getDelivery(order));
+    // 결제 내역 조회 결과. unavailable이면 payment 서비스가 응답하지 못한 것
+    private record PaymentsResult(List<OrderPaymentResponse> payments, boolean unavailable) {
+    }
+
+    private PaymentsResult getPayments(Order order) {
+        try {
+            return new PaymentsResult(paymentApi.getPaymentAttempts(order.getId()).stream()
+                    .map(OrderPaymentResponse::from)
+                    .toList(), false);
+        } catch (DomainException e) {
+            log.warn("결제 내역 조회에 실패해 주문 상세를 결제 내역 없이 응답합니다: orderId={}, reason={}", order.getId(), e.getMessage());
+            return new PaymentsResult(List.of(), true);
+        }
     }
 
     // 배송 정보 조회 결과. unavailable이면 delivery 서비스가 응답하지 못한 것
@@ -71,7 +84,7 @@ public class OrderGetOrderDetailUseCase {
         }
     }
 
-    private OrderDetailResponse toDetail(Order order, LocalDateTime now, List<OrderPaymentResponse> payments,
+    private OrderDetailResponse toDetail(Order order, LocalDateTime now, PaymentsResult payments,
                                          DeliveryResult delivery) {
         return new OrderDetailResponse(
                 order.getId(),
@@ -85,15 +98,37 @@ public class OrderGetOrderDetailUseCase {
                 order.getCanceledAt(),
                 order.getConfirmedAt(),
                 order.getItems().stream().map(this::toItem).toList(),
-                payments,
+                payments.payments(),
                 order.hasShippingAddress() ? ShippingAddressResponse.from(order.getShippingAddress()) : null,
                 order.getDeliveredAt(),
                 delivery.delivery(),
                 delivery.unavailable(),
                 order.getProductDiscountAmount(),
                 order.getCartCouponDiscountAmount(),
-                order.getPayAmount()
+                order.getPayAmount(),
+                order.getShippingFee(),
+                payments.unavailable(),
+                order.getReturnRequestedAt(),
+                order.getReturnReasonCode(),
+                order.getReturnReason(),
+                order.getReturnRejectedAt(),
+                order.getReturnRejectReason(),
+                order.getReturnedAt(),
+                refundStatus(order, payments)
         );
+    }
+
+    // 환불 상태: 반품 승인(RETURNED) 주문만 결제 시도의 REFUNDED 여부로 본다
+    private RefundStatus refundStatus(Order order, PaymentsResult payments) {
+        if (order.getStatus() != OrderStatus.RETURNED) {
+            return RefundStatus.NONE;
+        }
+        if (payments.unavailable()) {
+            return RefundStatus.UNKNOWN;
+        }
+        boolean refunded = payments.payments().stream()
+                .anyMatch(payment -> payment.status() == PaymentAttemptStatus.REFUNDED);
+        return refunded ? RefundStatus.COMPLETED : RefundStatus.PENDING;
     }
 
     private OrderItemResponse toItem(OrderItem item) {
@@ -107,7 +142,9 @@ public class OrderGetOrderDetailUseCase {
                 item.getUnitPrice(),
                 item.getQuantity(),
                 item.getLineAmount(),
-                item.getDiscountAmount()
+                item.getDiscountAmount(),
+                item.getListUnitPrice(),
+                item.getDiscountRate()
         );
     }
 }

@@ -11,6 +11,8 @@ public record TopupDto(
         String orderId,
         long amount,
         long remainingAmount,
+        long cancelableAmount,  // 지금 취소할 수 있는 금액 (DONE이면 남은 금액, 그 외 0)
+        long canceledAmount,    // PG 취소가 확정된 금액 합계
         TopupStatus status,
         String failReason,  // 실패한 충전 건의 사유 (그 외 null)
         LocalDateTime approvedAt,
@@ -18,6 +20,6 @@ public record TopupDto(
 ) {
     public static TopupDto from(Topup topup) {
         return new TopupDto(topup.getId(), topup.getTossOrderId(), topup.getAmount(), topup.getRemainingAmount(),
-                topup.getStatus(), topup.getFailReason(), topup.getApprovedAt(), topup.getCreatedAt());
+                topup.cancelableAmount(), topup.getCanceledAmount(), topup.getStatus(), topup.getFailReason(), topup.getApprovedAt(), topup.getCreatedAt());
     }
 }

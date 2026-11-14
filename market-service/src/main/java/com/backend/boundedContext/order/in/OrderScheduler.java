@@ -42,6 +42,15 @@ public class OrderScheduler {
                 orderId -> orderFacade.expireOrder(orderId, now));
     }
 
+    // 결제 중(PAYING) 재확인: 같은 키로 결제를 다시 불러 PAID·PAYMENT_FAILED로 정리
+    @Scheduled(fixedDelayString = "${custom.order.payingRecheckIntervalSeconds}", timeUnit = TimeUnit.SECONDS)
+    public void recheckPayingOrders() {
+        LocalDateTime now = LocalDateTime.now();
+        processInBatches("결제 재확인", "반영",
+                (afterId, limit) -> orderFacade.findPayingRecheckTargetIds(now, afterId, limit),
+                orderId -> orderFacade.recheckPayingOrder(orderId, now));
+    }
+
     // 대상을 schedulerBatchSize건씩 id 순으로 조회하고, 한 건씩 처리한다.
     private void processInBatches(String jobName, String doneLabel,
                                   BiFunction<Long, Integer, List<Long>> findTargets,

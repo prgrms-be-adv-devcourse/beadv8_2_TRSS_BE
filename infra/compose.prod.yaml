@@ -26,8 +26,9 @@ x-app-healthcheck: &app-healthcheck
   timeout: 15s
   retries: 3
   # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다. 이 시간 안에 응답하면 바로 healthy가 된다.
-  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초). 그보다 넉넉하게 둔다
-  start_period: 180s
+  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초, 6개 동시: 189초). 그보다 넉넉하게 둔다
+  # 정말 안 뜨는 앱은 이 시간이 지나야 실패로 잡히지만, 배포 대기 상한(deploy.sh wait_limit 600초)보다는 짧다
+  start_period: 300s
 
 services:
   nginx:
@@ -144,7 +145,7 @@ services:
       # Docker 내부망으로 직접 부르고 nginx를 거치지 않는다. 키(INTERNAL_API_KEY)는 .env에서 읽는다
       MEMBER_SERVICE_URL: http://member:8081
       # 결제 내부 API(/internal/v1/payments)를 부르는 payment-service 주소 (주문 결제·취소, 결제 시도 조회)
-      # 지금은 결제 클라이언트가 임시 구현이라 읽지 않는다. HTTP로 바꿀 때 이 이름으로 읽는다
+      # PaymentApiClient가 custom.payment.baseUrl로 읽는다. 결제 결과를 모르면 주문을 PAYING으로 두고 재확인 스케줄러가 정리한다
       PAYMENT_SERVICE_URL: http://payment:8083
       # 배송 내부 API(/internal/v1/deliveries)를 부르는 delivery-service 주소 (주문 상세의 배송 정보)
       # 응답하지 못하면 주문 상세는 배송 정보 없이(deliveryUnavailable: true) 응답한다

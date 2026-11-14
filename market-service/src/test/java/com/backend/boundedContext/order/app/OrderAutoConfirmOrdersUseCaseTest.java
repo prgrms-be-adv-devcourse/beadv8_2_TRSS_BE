@@ -3,6 +3,7 @@ package com.backend.boundedContext.order.app;
 import com.backend.boundedContext.order.domain.Order;
 import com.backend.boundedContext.order.domain.OrderItemSpec;
 import com.backend.boundedContext.order.domain.OrderPolicy;
+import com.backend.boundedContext.order.domain.ReturnReasonCode;
 import com.backend.boundedContext.order.out.OrderRepository;
 import com.backend.global.eventPublisher.EventPublisher;
 import com.backend.shared.order.dto.ConfirmType;
@@ -43,7 +44,7 @@ class OrderAutoConfirmOrdersUseCaseTest {
     @BeforeEach
     void setUp() {
         // OrderPolicy는 값 객체라 실제로 만들고(autoConfirmDays 7), 이벤트 발행까지 보려고 OrderConfirmSupport도 실제 객체를 쓴다
-        useCase = new OrderAutoConfirmOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100, 1),
+        useCase = new OrderAutoConfirmOrdersUseCase(orderRepository, new OrderPolicy(15, 7, 99, 100, 1, 2500, 30000),
                 new OrderConfirmSupport(eventPublisher));
     }
 
@@ -91,7 +92,7 @@ class OrderAutoConfirmOrdersUseCaseTest {
     @DisplayName("autoConfirm: 조회 후 반품 요청이 먼저 들어와 RETURN_REQUESTED면 건너뛰고 이벤트를 발행하지 않는다")
     void autoConfirm_returnRequested() {
         Order order = paidOrder();
-        ReflectionTestUtils.setField(order, "status", OrderStatus.RETURN_REQUESTED);   // 반품 요청 기능 추가 전이라 상태만 바꿈
+        order.requestReturn(ReturnReasonCode.DEFECTIVE, null, PAID_AT.plusDays(1));   // 배송지 없는 주문은 PAID면 요청 가능
         given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
         assertThat(useCase.autoConfirm(ORDER_ID, PAID_AT.plusDays(8))).isFalse();

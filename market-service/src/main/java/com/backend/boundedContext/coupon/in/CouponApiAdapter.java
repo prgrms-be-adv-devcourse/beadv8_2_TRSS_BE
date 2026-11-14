@@ -36,6 +36,11 @@ public class CouponApiAdapter implements CouponApi {
     }
 
     @Override
+    public void validateReservedCouponsUsable(Long orderId, LocalDateTime now) {
+        couponFacade.validateReservedCouponsUsable(orderId, now);
+    }
+
+    @Override
     public int useReservedCoupons(Long orderId, LocalDateTime now) {
         return couponFacade.useReservedCoupons(orderId, now);
     }

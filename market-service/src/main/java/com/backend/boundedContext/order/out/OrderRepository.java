@@ -100,6 +100,19 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
                                    @Param("afterId") Long afterId,
                                    Pageable pageable);
 
+    // 결제 재확인 대상 주문 id 조회: PAYING이 된 지 일정 시간이 지난 주문 (인덱스 status, paying_started_at)
+    @Query("""
+            select o.id
+            from Order o
+            where o.status = com.backend.shared.order.dto.OrderStatus.PAYING
+              and o.payingStartedAt <= :startedBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findPayingRecheckTargetIds(@Param("startedBefore") LocalDateTime startedBefore,
+                                          @Param("afterId") Long afterId,
+                                          Pageable pageable);
+
     // 상품이 하나라도 들어 있는 해당 상태의 주문 id 조회
     @Query("""
             select distinct i.order.id

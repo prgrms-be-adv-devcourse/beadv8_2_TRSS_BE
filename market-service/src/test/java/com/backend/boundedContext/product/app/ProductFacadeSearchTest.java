@@ -227,7 +227,7 @@ class ProductFacadeSearchTest {
         assertThat(detail.imageUrls()).isEmpty();
         assertThat(detail.soldOut()).isFalse();
         assertThat(detail.options()).singleElement()
-                .isEqualTo(new ProductOptionDto(option(product).getId(), "기본", List.of(), 0, 25_000, false, null));
+                .isEqualTo(new ProductOptionDto(option(product).getId(), "기본", List.of(), 0, 25_000, 25_000, false, null));
 
         setStock(product, 5);
         assertThat(productFacade.getProductDetail(product.getId()).options().getFirst().remainingStock()).isEqualTo(5);

@@ -3,6 +3,7 @@ package com.backend.boundedContext.product.app;
 import com.backend.boundedContext.product.app.dto.SellerProductCountsDto;
 import com.backend.boundedContext.product.app.dto.SellerProductSummaryDto;
 import com.backend.boundedContext.product.domain.Product;
+import com.backend.boundedContext.product.domain.ProductPrice;
 import com.backend.boundedContext.product.domain.ProductDisplayStatus;
 import com.backend.boundedContext.product.domain.OptionStock;
 import com.backend.boundedContext.product.domain.ProductSaleStatus;
@@ -38,6 +39,7 @@ public class ProductGetSellerProductsUseCase {
 
     private final ProductSupport productSupport;
     private final ProductImageSupport productImageSupport;
+    private final ProductDiscountSupport productDiscountSupport;
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductStopRequestRepository productStopRequestRepository;
@@ -75,12 +77,14 @@ public class ProductGetSellerProductsUseCase {
         List<Long> productIds = products.map(Product::getId).getContent();
         Map<Long, List<OptionStock>> stocks = productSupport.getOptionStocksByProductId(productIds);
         Map<Long, String> thumbnailUrls = productImageSupport.getThumbnailUrls(productIds);
+        Map<Long, ProductPrice> prices = productDiscountSupport.getPrices(products.getContent());
         Set<Long> stopRequestPending = productIds.isEmpty() ? Set.of() : new HashSet<>(
                 productStopRequestRepository.findProductIdsByProductIdInAndStatus(productIds, ProductStopRequestStatus.PENDING));
 
         return PageResponse.from(products, product -> {
             List<OptionStock> optionStocks = stocks.getOrDefault(product.getId(), List.of());
             boolean soldOut = ProductSupport.isSoldOut(optionStocks);
+            ProductPrice price = prices.get(product.getId());
             return new SellerProductSummaryDto(
                     product.getId(),
                     optionStocks.isEmpty() ? null : optionStocks.getFirst().getId(),
@@ -88,6 +92,8 @@ public class ProductGetSellerProductsUseCase {
                     product.getName(),
                     product.getCategory().getName(),
                     product.getPrice(),
+                    price.salePrice(),
+                    price.discountRate(),
                     ProductSupport.sumStock(optionStocks),
                     ProductDisplayStatus.of(product, soldOut),
                     product.getStoppedBy(),
