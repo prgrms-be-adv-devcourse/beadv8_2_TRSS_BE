@@ -91,13 +91,13 @@ public class PaymentTopupCancelProcessor {
     }
 
     /**
-     * 취소 결과 확인 대상: 기준 시각 이전부터 CANCELING으로 남은 충전 건 (오래된 순, 최대 limit건)
+     * 취소 결과 확인 대상: 기준 시각 이전부터 CANCELING으로 남은 충전 건 (오래된 순, 위치 다음부터 최대 limit건)
      * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 판단에 필요한 값만 넘김
      */
     @Transactional(readOnly = true)
-    public List<TopupCancelReconcileTarget> findReconcileTargets(LocalDateTime cutoff, int limit) {
-        return topupRepository.findStale(TopupStatus.CANCELING, cutoff, PageRequest.of(0, limit)).stream()
-                .map(topup -> new TopupCancelReconcileTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getCancelAttempts(), topup.getCanceledAmount(), topup.getCancelingAmount()))
+    public List<TopupCancelReconcileTarget> findReconcileTargets(LocalDateTime cutoff, TopupReconcileCursor after, int limit) {
+        return topupRepository.findStale(TopupStatus.CANCELING, cutoff, after.updatedAt(), after.topupId(), PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupCancelReconcileTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getCancelAttempts(), topup.getCanceledAmount(), topup.getCancelingAmount(), topup.getUpdatedAt()))
                 .toList();
     }
 

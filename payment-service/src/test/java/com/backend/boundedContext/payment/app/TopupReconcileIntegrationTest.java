@@ -151,6 +151,23 @@ class TopupReconcileIntegrationTest {
     }
 
     @Test
+    @DisplayName("대사 대상은 (수정 시각, ID) 순으로 위치 다음 건부터 가져온다. 수정 시각이 같으면 ID로 이어 간다")
+    void findReconcileTargets_afterCursor() {
+        Processing first = processing(), second = processing(), third = processing();
+        LocalDateTime sameTime = LocalDateTime.now().minusMinutes(7).withNano(0);
+        moveUpdatedAt(first.topupId(), sameTime.minusMinutes(1));
+        moveUpdatedAt(second.topupId(), sameTime);
+        moveUpdatedAt(third.topupId(), sameTime);
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(5);
+
+        List<Long> fromStart = ownIds(paymentTopupConfirmProcessor.findReconcileTargets(cutoff, TopupReconcileCursor.START, 1_000));
+        List<Long> afterSecond = ownIds(paymentTopupConfirmProcessor.findReconcileTargets(cutoff, new TopupReconcileCursor(sameTime, second.topupId()), 1_000));
+
+        assertThat(fromStart).containsExactly(first.topupId(), second.topupId(), third.topupId());
+        assertThat(afterSecond).containsExactly(third.topupId());
+    }
+
+    @Test
     @DisplayName("PROCESSING 대사가 허용하지 않은 결제 수단 승인을 확인하면 예치금에 반영하지 않고 PG 전액 취소해 FAILED_METHOD_NOT_ALLOWED")
     void reconcile_notAllowedMethod() {
         Processing topup = processing();
@@ -213,6 +230,19 @@ class TopupReconcileIntegrationTest {
     // updated_at은 앱(KST) 기준 LocalDateTime으로 저장되므로 앱 시각으로 과거 시각을 넣음
     private void moveUpdatedAtMinutesAgo(Long topupId, int minutes) {
         jdbcTemplate.update("update topup set updated_at = ? where id = ?", LocalDateTime.now().minusMinutes(minutes), topupId);
+    }
+
+    private void moveUpdatedAt(Long topupId, LocalDateTime updatedAt) {
+        jdbcTemplate.update("update topup set updated_at = ? where id = ?", updatedAt, topupId);
+    }
+
+    // 로컬 DB에 다른 테스트·데이터의 충전 건이 있을 수 있어 이 테스트 회원의 건만 남김
+    private List<Long> ownIds(List<TopupReconcileTarget> targets) {
+        List<Long> ownIds = topupRepository.findAll().stream()
+                .filter(topup -> topup.getMemberId().equals(memberId))
+                .map(Topup::getId)
+                .toList();
+        return targets.stream().map(TopupReconcileTarget::topupId).filter(ownIds::contains).toList();
     }
 
     private TossPaymentResponse tossDone(Processing topup) {

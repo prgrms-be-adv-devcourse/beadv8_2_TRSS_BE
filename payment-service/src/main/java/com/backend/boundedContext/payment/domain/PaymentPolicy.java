@@ -57,7 +57,7 @@ public class PaymentPolicy {
         return topupReconcileDelay;
     }
 
-    // 결과 확인 스케줄러가 한 번에 처리하는 최대 충전 건수
+    // 결과 확인 스케줄러가 한 번에 조회하는 충전 건수 (다 채우면 같은 실행에서 이어서 조회)
     public int topupReconcileBatchSize() {
         return topupReconcileBatchSize;
     }

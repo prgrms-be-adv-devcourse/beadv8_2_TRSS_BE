@@ -32,6 +32,7 @@ class PaymentReconcileMethodCancelingTopupsUseCaseTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 12, 10, 0);
     private static final LocalDateTime CUTOFF = LocalDateTime.of(2026, 11, 12, 9, 55);
+    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 11, 12, 9, 50);
 
     private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
@@ -111,8 +112,8 @@ class PaymentReconcileMethodCancelingTopupsUseCaseTest {
     @DisplayName("일부만 취소됐거나 PG에 결제가 없거나 조회 결과를 모르면 아무것도 하지 않는다")
     void reconcile_cannotDecide() {
         TopupMethodCancelTarget partial = target(1);
-        TopupMethodCancelTarget notFound = new TopupMethodCancelTarget(8L, "pk_8", PgProvider.TOSS, 20_000, 1);
-        TopupMethodCancelTarget unknown = new TopupMethodCancelTarget(9L, "pk_9", PgProvider.TOSS, 20_000, 1);
+        TopupMethodCancelTarget notFound = new TopupMethodCancelTarget(8L, "pk_8", PgProvider.TOSS, 20_000, 1, UPDATED_AT);
+        TopupMethodCancelTarget unknown = new TopupMethodCancelTarget(9L, "pk_9", PgProvider.TOSS, 20_000, 1, UPDATED_AT);
         targets(partial, notFound, unknown);
         given(gateway.getPayment("pk_7")).willReturn(pg(5_000));
         given(gateway.getPayment("pk_8")).willThrow(new PgPaymentNotFoundException(new RuntimeException()));
@@ -126,11 +127,11 @@ class PaymentReconcileMethodCancelingTopupsUseCaseTest {
     }
 
     private void targets(TopupMethodCancelTarget... targets) {
-        given(processor.findMethodCancelTargets(CUTOFF, 100)).willReturn(List.of(targets));
+        given(processor.findMethodCancelTargets(CUTOFF, TopupReconcileCursor.START, 100)).willReturn(List.of(targets));
     }
 
     private static TopupMethodCancelTarget target(int attempt) {
-        return new TopupMethodCancelTarget(7L, "pk_7", PgProvider.TOSS, 20_000, attempt);
+        return new TopupMethodCancelTarget(7L, "pk_7", PgProvider.TOSS, 20_000, attempt, UPDATED_AT);
     }
 
     private static PgPaymentResult pg(long canceledAmount) {

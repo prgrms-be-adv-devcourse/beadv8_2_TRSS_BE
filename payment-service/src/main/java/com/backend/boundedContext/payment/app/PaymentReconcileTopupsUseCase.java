@@ -1,7 +1,6 @@
 package com.backend.boundedContext.payment.app;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.stereotype.Component;
@@ -28,6 +27,8 @@ import lombok.extern.slf4j.Slf4j;
  * - CANCELED(PG에서 취소됨) → FAILED_SYSTEM_ERROR (예치금 반영 없이 돈이 돌려졌으므로)
  * - 결제 없음 → FAILED_SYSTEM_ERROR (PG에 결제 내역이 없어 돈이 빠지지 않음)
  * - 결과 모름(응답 없음·그 외 오류)·PENDING(진행 중 등) → PROCESSING 유지, 다음 회차에 다시 확인
+ *
+ * 대상은 TopupReconcileBatches로 배치 단위로 가져오며, 배치를 다 채우면 같은 회차에서 이어서 처리함 (결과 모름이 나오면 그 배치까지만)
  */
 @Slf4j
 @Component
@@ -41,62 +42,48 @@ public class PaymentReconcileTopupsUseCase {
 
     public TopupReconcileResult reconcileProcessingTopups(LocalDateTime now) {
         LocalDateTime cutoff = now.minus(paymentPolicy.topupReconcileDelay());
-        List<TopupReconcileTarget> targets = paymentTopupConfirmProcessor.findReconcileTargets(cutoff, paymentPolicy.topupReconcileBatchSize());
-
-        int completed = 0, failed = 0, pending = 0, errors = 0;
-        for (TopupReconcileTarget target : targets) {
-            // 건별로 잡아 한 건의 오류가 나머지 처리를 멈추지 않게 함
-            try {
-                switch (reconcile(target)) {
-                    case COMPLETED -> completed++;
-                    case FAILED -> failed++;
-                    case PENDING -> pending++;
-                }
-            } catch (RuntimeException e) {
-                errors++;
-                log.error("충전 결과 확인 중 오류가 발생했습니다. 다음 회차에 다시 확인합니다. topupId={}", target.topupId(), e);
-            }
-        }
-        return new TopupReconcileResult(completed, failed, pending, errors);
+        int batchSize = paymentPolicy.topupReconcileBatchSize();
+        return TopupReconcileBatches.run(batchSize,
+                after -> paymentTopupConfirmProcessor.findReconcileTargets(cutoff, after, batchSize),
+                this::reconcile,
+                (target, e) -> log.error("충전 결과 확인 중 오류가 발생했습니다. 다음 회차에 다시 확인합니다. topupId={}", target.topupId(), e));
     }
 
-    private Outcome reconcile(TopupReconcileTarget target) {
+    private TopupReconcileOutcome reconcile(TopupReconcileTarget target) {
         PgPaymentResult result;
         try {
             result = topupGateways.get(target.pgProvider()).getPayment(target.paymentKey());
         } catch (PgPaymentNotFoundException e) {
             paymentTopupConfirmProcessor.fail(target.topupId(), TopupStatus.FAILED_SYSTEM_ERROR, "PG에 결제 내역이 없어 승인되지 않은 것으로 처리했습니다.");
-            return Outcome.FAILED;
+            return TopupReconcileOutcome.FAILED;
         } catch (PgResultUnknownException e) {
             // 회차마다 반복될 수 있어 스택 대신 가장 안쪽 원인 메시지만 남김
             log.warn("PG 결제 조회 결과를 알 수 없어 다음 회차에 다시 확인합니다. topupId={}, pg={}, 원인={}", target.topupId(), target.pgProvider(), NestedExceptionUtils.getMostSpecificCause(e).getMessage());
-            return Outcome.PENDING;
+            return TopupReconcileOutcome.UNKNOWN;
         }
 
         switch (result.status()) {
             case APPROVED -> {
                 if (!PaymentTopupConfirmProcessor.isAllowedMethod(result.method())) {
                     paymentTopupMethodCanceller.cancelApproved(target.topupId(), result.method());
-                    return Outcome.FAILED;
+                    return TopupReconcileOutcome.FAILED;
                 }
                 paymentTopupConfirmProcessor.complete(target.topupId(), result);
-                return Outcome.COMPLETED;
+                return TopupReconcileOutcome.COMPLETED;
             }
             case NOT_APPROVED -> {
                 paymentTopupConfirmProcessor.fail(target.topupId(), TopupStatus.FAILED_PG_DECLINED, "PG에서 결제가 승인되지 않았습니다. (" + result.pgStatus() + ")");
-                return Outcome.FAILED;
+                return TopupReconcileOutcome.FAILED;
             }
             case CANCELED -> {
                 log.error("예치금 반영 전에 PG에서 취소된 충전 건입니다. topupId={}, pg={}", target.topupId(), target.pgProvider());
                 paymentTopupConfirmProcessor.fail(target.topupId(), TopupStatus.FAILED_SYSTEM_ERROR, "PG에서 취소된 결제입니다.");
-                return Outcome.FAILED;
+                return TopupReconcileOutcome.FAILED;
             }
             default -> {
                 log.warn("PG 결제가 아직 확정되지 않아 다음 회차에 다시 확인합니다. topupId={}, pg={}", target.topupId(), target.pgProvider());
-                return Outcome.PENDING;
+                return TopupReconcileOutcome.PENDING;
             }
         }
     }
-
-    private enum Outcome { COMPLETED, FAILED, PENDING }
 }
