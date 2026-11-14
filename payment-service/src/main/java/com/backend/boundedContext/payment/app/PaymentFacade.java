@@ -53,6 +53,7 @@ public class PaymentFacade {
     private final PaymentReconcileTopupsUseCase paymentReconcileTopupsUseCase;
     private final PaymentReconcileCancelingTopupsUseCase paymentReconcileCancelingTopupsUseCase;
     private final PaymentReconcileMethodCancelingTopupsUseCase paymentReconcileMethodCancelingTopupsUseCase;
+    private final PaymentWarnStuckTopupsUseCase paymentWarnStuckTopupsUseCase;
     private final PaymentTransferUseCase paymentTransferUseCase;
     private final PaymentFindTransferUseCase paymentFindTransferUseCase;
     private final PaymentCreateSeedHoldingsUseCase paymentCreateSeedHoldingsUseCase;
@@ -167,6 +168,12 @@ public class PaymentFacade {
     // (확정·회차 증가는 PaymentTopupConfirmProcessor에서 건마다 짧은 트랜잭션으로 실행)
     public TopupReconcileResult reconcileMethodCancelingTopups() {
         return paymentReconcileMethodCancelingTopupsUseCase.reconcileMethodCancelingTopups(LocalDateTime.now());
+    }
+
+    // 결과가 정해지지 않은 채 오래 남은 충전 건 경고 (스케줄러)
+    @Transactional(readOnly = true)
+    public long warnStuckTopups() {
+        return paymentWarnStuckTopupsUseCase.warnStuckTopups(LocalDateTime.now());
     }
 
     // 정산 지급 (정산 지급 트랜잭션에 참여, 실패하면 함께 롤백)

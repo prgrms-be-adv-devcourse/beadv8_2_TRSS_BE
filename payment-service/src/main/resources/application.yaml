@@ -58,7 +58,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 3          # 스케줄 작업(충전 2, outbox 릴레이 1)이 서로 기다리지 않게 작업 수만큼
+        size: 6          # 스케줄 작업(충전 5: READY 만료·대사 3·오래 남은 건 경고, outbox 릴레이 1)이 서로 기다리지 않게 작업 수만큼
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
@@ -80,7 +80,8 @@ custom:
     topupExpireIntervalSeconds: 60      # READY 만료 스케줄러 실행 간격(초)
     topupReconcileIntervalSeconds: 300  # 결과 확인 스케줄러(PROCESSING·CANCELING·METHOD_CANCELING) 실행 간격(초)
     topupReconcileDelayMinutes: 5       # 결과를 모르는 상태가 된 뒤 토스에 다시 확인하기까지 기다리는 시간(분). 토스 응답 대기(30초)보다 충분히 길게
-    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 처리하는 최대 건수
+    topupReconcileBatchSize: 100        # 결과 확인 스케줄러가 한 번에 조회하는 건수. 다 채우면 같은 실행에서 이어서 조회(PG 결과를 모르는 건이 나오면 그 배치까지만)
+    topupStuckWarnMinutes: 60           # 결과가 정해지지 않은 상태로 이 시간(분)이 넘게 남은 충전 건은 결과 확인 스케줄러 간격마다 오류 로그로 알림
     adminMemberId: 1           # 수수료(FEE)를 받는 관리자 회원 ID (시드 1번)
     # 회원 기능은 회원 내부 API(/internal/v1/members)를 HTTP로 부른다
     memberBaseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}   # 회원 서비스(member-service) 주소. 개발 서버는 compose의 MEMBER_SERVICE_URL을 쓴다

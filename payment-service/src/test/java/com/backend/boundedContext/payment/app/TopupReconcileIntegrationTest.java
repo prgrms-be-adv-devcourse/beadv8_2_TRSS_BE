@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +34,7 @@ import com.backend.boundedContext.payment.domain.Wallet;
 import com.backend.boundedContext.payment.domain.WalletTransaction;
 import com.backend.boundedContext.payment.out.PaymentMemberPort;
 import com.backend.boundedContext.payment.out.TopupRepository;
+import com.backend.boundedContext.payment.out.TopupStuckCount;
 import com.backend.boundedContext.payment.out.WalletRepository;
 import com.backend.boundedContext.payment.out.WalletTransactionRepository;
 import com.backend.boundedContext.payment.out.pg.PgPaymentMethod;
@@ -151,6 +153,37 @@ class TopupReconcileIntegrationTest {
     }
 
     @Test
+    @DisplayName("대사 대상은 (수정 시각, ID) 순으로 위치 다음 건부터 가져온다. 수정 시각이 같으면 ID로 이어 간다")
+    void findReconcileTargets_afterCursor() {
+        Processing first = processing(), second = processing(), third = processing();
+        LocalDateTime sameTime = LocalDateTime.now().minusMinutes(7).withNano(0);
+        moveUpdatedAt(first.topupId(), sameTime.minusMinutes(1));
+        moveUpdatedAt(second.topupId(), sameTime);
+        moveUpdatedAt(third.topupId(), sameTime);
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(5);
+
+        List<Long> fromStart = ownIds(paymentTopupConfirmProcessor.findReconcileTargets(cutoff, TopupReconcileCursor.START, 1_000));
+        List<Long> afterSecond = ownIds(paymentTopupConfirmProcessor.findReconcileTargets(cutoff, new TopupReconcileCursor(sameTime, second.topupId()), 1_000));
+
+        assertThat(fromStart).containsExactly(first.topupId(), second.topupId(), third.topupId());
+        assertThat(afterSecond).containsExactly(third.topupId());
+    }
+
+    @Test
+    @DisplayName("오래 남은 충전 건은 기준 시각 이전부터 같은 상태인 건만 상태별로 센다")
+    void countStale() {
+        Processing stuck = processing(), recent = processing();
+        // 로컬 DB의 다른 충전 건과 섞이지 않게 아주 오래전 시각으로 옮김
+        moveUpdatedAt(stuck.topupId(), LocalDateTime.of(2001, 1, 1, 0, 0));
+        moveUpdatedAt(recent.topupId(), LocalDateTime.of(2001, 1, 3, 0, 0));
+
+        List<TopupStuckCount> counts = topupRepository.countStale(
+                EnumSet.of(TopupStatus.PROCESSING, TopupStatus.CANCELING, TopupStatus.METHOD_CANCELING), LocalDateTime.of(2001, 1, 2, 0, 0));
+
+        assertThat(counts).containsExactly(new TopupStuckCount(TopupStatus.PROCESSING, 1, stuck.topupId()));
+    }
+
+    @Test
     @DisplayName("PROCESSING 대사가 허용하지 않은 결제 수단 승인을 확인하면 예치금에 반영하지 않고 PG 전액 취소해 FAILED_METHOD_NOT_ALLOWED")
     void reconcile_notAllowedMethod() {
         Processing topup = processing();
@@ -213,6 +246,19 @@ class TopupReconcileIntegrationTest {
     // updated_at은 앱(KST) 기준 LocalDateTime으로 저장되므로 앱 시각으로 과거 시각을 넣음
     private void moveUpdatedAtMinutesAgo(Long topupId, int minutes) {
         jdbcTemplate.update("update topup set updated_at = ? where id = ?", LocalDateTime.now().minusMinutes(minutes), topupId);
+    }
+
+    private void moveUpdatedAt(Long topupId, LocalDateTime updatedAt) {
+        jdbcTemplate.update("update topup set updated_at = ? where id = ?", updatedAt, topupId);
+    }
+
+    // 로컬 DB에 다른 테스트·데이터의 충전 건이 있을 수 있어 이 테스트 회원의 건만 남김
+    private List<Long> ownIds(List<TopupReconcileTarget> targets) {
+        List<Long> ownIds = topupRepository.findAll().stream()
+                .filter(topup -> topup.getMemberId().equals(memberId))
+                .map(Topup::getId)
+                .toList();
+        return targets.stream().map(TopupReconcileTarget::topupId).filter(ownIds::contains).toList();
     }
 
     private TossPaymentResponse tossDone(Processing topup) {

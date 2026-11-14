@@ -32,9 +32,10 @@ import com.backend.boundedContext.payment.out.pg.TopupGateways;
 class PaymentReconcileTopupsUseCaseTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 14, 10, 0);
-    private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "pk_7", PgProvider.TOSS);
+    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 10, 14, 9, 50);
+    private static final TopupReconcileTarget TARGET = new TopupReconcileTarget(7L, "pk_7", PgProvider.TOSS, UPDATED_AT);
 
-    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 1L);
+    private final PaymentPolicy paymentPolicy = new PaymentPolicy(10_000, 1_000_000, 15, 5, 100, 60, 1L);
     private final PaymentTopupConfirmProcessor processor = mock(PaymentTopupConfirmProcessor.class);
     private final TopupGateways topupGateways = mock(TopupGateways.class);
     private final TopupGatewayPort gateway = mock(TopupGatewayPort.class);
@@ -50,12 +51,12 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("지금보다 확인 대기 시간(5분) 이전부터 PROCESSING인 건을 최대 1회 처리 건수만큼 조회한다")
     void findTargets() {
-        given(processor.findReconcileTargets(LocalDateTime.of(2026, 10, 14, 9, 55), 100)).willReturn(List.of());
+        given(processor.findReconcileTargets(LocalDateTime.of(2026, 10, 14, 9, 55), TopupReconcileCursor.START, 100)).willReturn(List.of());
 
         TopupReconcileResult result = useCase.reconcileProcessingTopups(NOW);
 
         assertThat(result.total()).isZero();
-        verify(processor).findReconcileTargets(LocalDateTime.of(2026, 10, 14, 9, 55), 100);
+        verify(processor).findReconcileTargets(LocalDateTime.of(2026, 10, 14, 9, 55), TopupReconcileCursor.START, 100);
     }
 
     @Test
@@ -75,7 +76,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("PG에서 승인되지 않음(NOT_APPROVED)이 확정되면 FAILED_PG_DECLINED로 기록하고, 실패 사유에 PG 원래 상태값을 남긴다")
     void notApproved() {
-        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS));
+        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS, UPDATED_AT));
         given(gateway.getPayment("pk_7")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "ABORTED", "TOPUP-7"));
         given(gateway.getPayment("pk_8")).willReturn(pg(PgPaymentStatus.NOT_APPROVED, "EXPIRED", "TOPUP-8"));
 
@@ -114,7 +115,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("PG 결과를 알 수 없거나 아직 확정되지 않았으면(PENDING) PROCESSING으로 두고 다음 회차에 다시 확인한다")
     void pending() {
-        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS));
+        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS, UPDATED_AT));
         given(gateway.getPayment("pk_7"))
                 .willThrow(new PgResultUnknownException(new RuntimeException("Read timed out")));
         given(gateway.getPayment("pk_8")).willReturn(pg(PgPaymentStatus.PENDING));
@@ -129,7 +130,7 @@ class PaymentReconcileTopupsUseCaseTest {
     @Test
     @DisplayName("한 건에서 오류가 나도 나머지 건은 계속 처리한다")
     void errorDoesNotStopOthers() {
-        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS));
+        targets(TARGET, new TopupReconcileTarget(8L, "pk_8", PgProvider.TOSS, UPDATED_AT));
         PgPaymentResult done7 = pg(PgPaymentStatus.APPROVED, "TOPUP-7");
         PgPaymentResult done8 = pg(PgPaymentStatus.APPROVED, "TOPUP-8");
         given(gateway.getPayment("pk_7")).willReturn(done7);
@@ -157,7 +158,7 @@ class PaymentReconcileTopupsUseCaseTest {
     }
 
     private void targets(TopupReconcileTarget... targets) {
-        given(processor.findReconcileTargets(any(), eq(100))).willReturn(List.of(targets));
+        given(processor.findReconcileTargets(any(), eq(TopupReconcileCursor.START), eq(100))).willReturn(List.of(targets));
     }
 
     private static PgPaymentResult pg(PgPaymentStatus status) {

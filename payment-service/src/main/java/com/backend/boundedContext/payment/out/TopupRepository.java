@@ -62,9 +62,24 @@ public interface TopupRepository extends JpaRepository<Topup, Long>, JpaSpecific
     @Query("select t from Topup t where t.id = :id")
     Optional<Topup> findByIdForUpdate(@Param("id") Long id);
 
-    // 결과 확인 대상: 기준 시각 이전부터 같은 상태로 남은 충전 건을 오래된 순으로 (건수 제한은 Pageable)
-    @Query("select t from Topup t where t.status = :status and t.updatedAt < :cutoff order by t.updatedAt, t.id")
-    List<Topup> findStale(@Param("status") TopupStatus status, @Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+    // 결과 확인 대상: 기준 시각 이전부터 같은 상태로 남은 충전 건을 오래된 순으로, 위치(afterUpdatedAt, afterId) 다음부터 (건수 제한은 Pageable)
+    @Query("""
+            select t from Topup t
+            where t.status = :status and t.updatedAt < :cutoff
+              and (t.updatedAt > :afterUpdatedAt or (t.updatedAt = :afterUpdatedAt and t.id > :afterId))
+            order by t.updatedAt, t.id
+            """)
+    List<Topup> findStale(@Param("status") TopupStatus status, @Param("cutoff") LocalDateTime cutoff,
+                          @Param("afterUpdatedAt") LocalDateTime afterUpdatedAt, @Param("afterId") Long afterId, Pageable pageable);
+
+    // 오래 남은 충전 건: 기준 시각 이전부터 같은 상태로 남은 충전 건을 상태별로 셈
+    @Query("""
+            select new com.backend.boundedContext.payment.out.TopupStuckCount(t.status, count(t), min(t.id))
+            from Topup t
+            where t.status in :statuses and t.updatedAt < :cutoff
+            group by t.status
+            """)
+    List<TopupStuckCount> countStale(@Param("statuses") Collection<TopupStatus> statuses, @Param("cutoff") LocalDateTime cutoff);
 
     /**
      * READY 만료: 기준 시각 이전에 만든 READY 충전 건을 한 번에 만료 상태로 바꾸고 바뀐 건수를 반환

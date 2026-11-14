@@ -161,12 +161,12 @@ public class PaymentTopupConfirmProcessor {
     }
 
     /**
-     * 허용하지 않은 결제 수단 취소 결과 확인 대상: 기준 시각 이전부터 METHOD_CANCELING으로 남은 충전 건 (오래된 순, 최대 limit건)
+     * 허용하지 않은 결제 수단 취소 결과 확인 대상: 기준 시각 이전부터 METHOD_CANCELING으로 남은 충전 건 (오래된 순, 위치 다음부터 최대 limit건)
      */
     @Transactional(readOnly = true)
-    public List<TopupMethodCancelTarget> findMethodCancelTargets(LocalDateTime cutoff, int limit) {
-        return topupRepository.findStale(TopupStatus.METHOD_CANCELING, cutoff, PageRequest.of(0, limit)).stream()
-                .map(topup -> new TopupMethodCancelTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getAmount(), topup.getCancelAttempts()))
+    public List<TopupMethodCancelTarget> findMethodCancelTargets(LocalDateTime cutoff, TopupReconcileCursor after, int limit) {
+        return topupRepository.findStale(TopupStatus.METHOD_CANCELING, cutoff, after.updatedAt(), after.topupId(), PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupMethodCancelTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getAmount(), topup.getCancelAttempts(), topup.getUpdatedAt()))
                 .toList();
     }
 
@@ -186,13 +186,13 @@ public class PaymentTopupConfirmProcessor {
     }
 
     /**
-     * 결과 확인 대상: 기준 시각 이전부터 PROCESSING으로 남은 충전 건 (오래된 순, 최대 limit건)
-     * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 ID·결제키·PG만 넘김
+     * 결과 확인 대상: 기준 시각 이전부터 PROCESSING으로 남은 충전 건 (오래된 순, 위치 다음부터 최대 limit건)
+     * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 ID·결제키·PG·수정 시각만 넘김
      */
     @Transactional(readOnly = true)
-    public List<TopupReconcileTarget> findReconcileTargets(LocalDateTime cutoff, int limit) {
-        return topupRepository.findStale(TopupStatus.PROCESSING, cutoff, PageRequest.of(0, limit)).stream()
-                .map(topup -> new TopupReconcileTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider()))
+    public List<TopupReconcileTarget> findReconcileTargets(LocalDateTime cutoff, TopupReconcileCursor after, int limit) {
+        return topupRepository.findStale(TopupStatus.PROCESSING, cutoff, after.updatedAt(), after.topupId(), PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupReconcileTarget(topup.getId(), topup.getPaymentKey(), topup.getPgProvider(), topup.getUpdatedAt()))
                 .toList();
     }
 }
