@@ -99,7 +99,7 @@ class ProductCouponIntegrationTest {
     }
 
     private Long activePartnership() {
-        Long partnershipId = couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, "함께해요");
+        Long partnershipId = couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, 20, "함께해요");
         couponFacade.acceptPartnership(INFLUENCER_MEMBER_ID, partnershipId);
         return partnershipId;
     }
@@ -284,13 +284,13 @@ class ProductCouponIntegrationTest {
     @Test
     @DisplayName("같은 인플루언서에게 협약을 다시 요청하면 409이고, 거절된 뒤에는 다시 요청할 수 있다")
     void duplicatePartnership() {
-        Long first = couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, null);
+        Long first = couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, 20, null);
 
-        assertThatThrownBy(() -> couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, null))
+        assertThatThrownBy(() -> couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, 20, null))
                 .extracting("resultCode").isEqualTo("409-PARTNERSHIP_ALREADY_EXISTS");
 
         couponFacade.rejectPartnership(INFLUENCER_MEMBER_ID, first);
-        Long second = couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, null);
+        Long second = couponFacade.requestPartnership(SELLER_MEMBER_ID, INFLUENCER_ID, 20, null);
 
         assertThat(second).isNotEqualTo(first);
         assertThat(couponFacade.getInfluencerPartnerships(INFLUENCER_MEMBER_ID, null, FIRST_PAGE).items())

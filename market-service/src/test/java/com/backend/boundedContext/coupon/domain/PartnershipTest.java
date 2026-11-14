@@ -13,7 +13,7 @@ class PartnershipTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 8, 10, 0);
 
     private Partnership requested() {
-        return Partnership.request(20L, 30L, "함께해요", NOW);
+        return Partnership.request(20L, 30L, 20, "함께해요", NOW);
     }
 
     @Test

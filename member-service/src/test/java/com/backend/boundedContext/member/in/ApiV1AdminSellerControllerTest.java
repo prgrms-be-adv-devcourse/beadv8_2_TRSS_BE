@@ -326,6 +326,42 @@ class ApiV1AdminSellerControllerTest {
         verify(memberSellerFacade, never()).sanctionSeller(any(), any());
     }
 
+    @Test
+    @DisplayName("제재 해지: 관리자는 사유와 함께 해지하고 바뀐 판매자 상세를 받는다")
+    void unsanction_admin() throws Exception {
+        given(memberSellerFacade.unsanctionSeller(5L, "소명 확인")).willReturn(detail(SellerStatus.APPROVED));
+
+        mockMvc.perform(post("/api/v1/admin/sellers/5/unsanction").header("Authorization", bearer(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": "소명 확인"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"));
+    }
+
+    @Test
+    @DisplayName("제재 해지: 사유가 비어 있으면 400, 관리자가 아니면 403")
+    void unsanction_invalid() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/sellers/5/unsanction").header("Authorization", bearer(MemberRole.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": " "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+
+        mockMvc.perform(post("/api/v1/admin/sellers/5/unsanction").header("Authorization", bearer(MemberRole.USER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason": "소명 확인"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.resultCode").value("403-FORBIDDEN"));
+
+        verify(memberSellerFacade, never()).unsanctionSeller(any(), any());
+    }
+
     private static AdminSellerDetailDto detail(SellerStatus status) {
         return new AdminSellerDetailDto(
                 5L, 7L, "seller@palette.test", "판매자", status,

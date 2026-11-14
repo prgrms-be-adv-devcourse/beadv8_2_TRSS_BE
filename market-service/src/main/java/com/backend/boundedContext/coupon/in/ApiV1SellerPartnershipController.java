@@ -45,7 +45,7 @@ public class ApiV1SellerPartnershipController {
             @AuthenticationPrincipal AuthMember authMember,
             @Valid @RequestBody PartnershipRequestRequest request
     ) {
-        Long partnershipId = couponFacade.requestPartnership(authMember.memberId(), request.influencerId(), request.message());
+        Long partnershipId = couponFacade.requestPartnership(authMember.memberId(), request.influencerId(), request.commissionRate(), request.message());
         return RsData.of("200-1", "협약을 요청했습니다.", new PartnershipIdResponse(partnershipId));
     }
 

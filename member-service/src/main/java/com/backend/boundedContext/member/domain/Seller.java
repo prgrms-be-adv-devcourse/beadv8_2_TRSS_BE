@@ -74,25 +74,42 @@ public class Seller extends BaseIdAndTime {
     @Version
     private Long version;
 
-    public static Seller apply(Member member, String businessName, String businessNumber,
-                               String representativeName, String phoneNumber,
-                               String bankName, String accountNumber, String accountHolder) {
+    public static Seller apply(
+            Member member,
+            String businessName,
+            String businessNumber,
+            String representativeName,
+            String phoneNumber,
+            String bankName,
+            String accountNumber,
+            String accountHolder
+    ) {
         Seller seller = new Seller();
         seller.member = member;
-        seller.fillApplication(businessName, businessNumber, representativeName, phoneNumber,
+        seller.submit(businessName, businessNumber, representativeName, phoneNumber,
                 bankName, accountNumber, accountHolder);
         return seller;
     }
 
+    public SellerStatusHistory recordApplied() {
+        return SellerStatusHistory.record(this, null, null);
+    }
+
     // 반려·본인 철회 뒤 재신청: 같은 행의 신청 정보를 새 값으로 바꾸고 다시 PENDING
-    public SellerStatusHistory reapply(String businessName, String businessNumber,
-                                       String representativeName, String phoneNumber,
-                                       String bankName, String accountNumber, String accountHolder) {
-        if (!canReapply()) throw stateInvalid();
+    public SellerStatusHistory applyAgain(
+            String businessName,
+            String businessNumber,
+            String representativeName,
+            String phoneNumber,
+            String bankName,
+            String accountNumber,
+            String accountHolder
+    ) {
+        if (!canReapply()) throw new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
 
         SellerStatus fromStatus = status;
-        fillApplication(businessName, businessNumber, representativeName, phoneNumber, bankName, accountNumber, accountHolder);
-        return SellerStatusHistory.of(this, fromStatus, null);
+        submit(businessName, businessNumber, representativeName, phoneNumber, bankName, accountNumber, accountHolder);
+        return SellerStatusHistory.record(this, fromStatus, null);
     }
 
     public SellerStatusHistory approve() {
@@ -102,7 +119,7 @@ public class Seller extends BaseIdAndTime {
     }
 
     public SellerStatusHistory reject(String reason) {
-        return endWithSnapshot(SellerStatus.PENDING, SellerStatus.REJECTED, reason);
+        return changeStatus(SellerStatus.PENDING, SellerStatus.REJECTED, reason);
     }
 
     public SellerStatusHistory requestWithdrawal(String reason) {
@@ -110,7 +127,7 @@ public class Seller extends BaseIdAndTime {
     }
 
     public SellerStatusHistory approveWithdrawal() {
-        return endWithSnapshot(SellerStatus.WITHDRAW_REQUESTED, SellerStatus.WITHDRAWN, null);
+        return changeStatus(SellerStatus.WITHDRAW_REQUESTED, SellerStatus.WITHDRAWN, null);
     }
 
     public SellerStatusHistory rejectWithdrawal(String reason) {
@@ -119,11 +136,17 @@ public class Seller extends BaseIdAndTime {
 
     // 판매 중이거나 철회 심사 중일 때 바로 제재
     public SellerStatusHistory sanction(String reason) {
-        if (status != SellerStatus.APPROVED && status != SellerStatus.WITHDRAW_REQUESTED) throw stateInvalid();
+        if (status != SellerStatus.APPROVED && status != SellerStatus.WITHDRAW_REQUESTED) throw new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
 
         SellerStatus from = status;
         status = SellerStatus.SANCTIONED;
-        return SellerStatusHistory.of(this, from, reason);
+        return SellerStatusHistory.record(this, from, reason);
+    }
+
+    // 제재 해지: 판매 자격을 돌려준다. 철회 심사 중에 제재됐어도 APPROVED로 돌아간다 (철회는 판매자가 다시 요청)
+    // 제재 때 사업자번호·승인일을 지우지 않았으므로 그대로 쓴다
+    public SellerStatusHistory unsanction(String reason) {
+        return changeStatus(SellerStatus.SANCTIONED, SellerStatus.APPROVED, reason);
     }
 
     // 판매 중인 판매자의 상호·연락처 수정. null은 그대로 둔다 (상태 변경이 아니라 이력은 남기지 않음)
@@ -183,7 +206,7 @@ public class Seller extends BaseIdAndTime {
         return value.replaceAll("\\D", "");
     }
 
-    private void fillApplication(String businessName, String businessNumber,
+    private void submit(String businessName, String businessNumber,
                                  String representativeName, String phoneNumber,
                                  String bankName, String accountNumber, String accountHolder) {
         this.businessName = businessName.strip();
@@ -198,24 +221,15 @@ public class Seller extends BaseIdAndTime {
         this.approvedAt = null;
     }
 
-    private SellerStatusHistory changeStatus(SellerStatus expected, SellerStatus to, String reason) {
-        if (status != expected) throw stateInvalid();
+    private SellerStatusHistory changeStatus(SellerStatus from, SellerStatus to, String reason) {
+        if (status != from) throw new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
 
         status = to;
-        return SellerStatusHistory.of(this, expected, reason);
-    }
+        if (!canReapply()) return SellerStatusHistory.record(this, from, reason);
 
-    // 재신청할 수 있는 상태로 끝날 때: 다음 재신청에 덮어써지기 전에 신청서를 이력에 남기고, 사업자번호를 비운다
-    private SellerStatusHistory endWithSnapshot(SellerStatus expected, SellerStatus to, String reason) {
-        if (status != expected) throw stateInvalid();
-
-        status = to;
-        SellerStatusHistory history = SellerStatusHistory.withSnapshot(this, expected, reason);
+        // 재신청하면 이 행이 덮어써지니, 그 전에 신청서를 이력에 남기고 사업자번호는 다른 회원이 쓸 수 있게 비운다
+        SellerStatusHistory history = SellerStatusHistory.withSellerInfo(this, from, reason);
         businessNumber = null;
         return history;
-    }
-
-    private static DomainException stateInvalid() {
-        return new DomainException(MemberErrorCode.SELLER_STATE_INVALID);
     }
 }

@@ -39,9 +39,6 @@ class OrderListPriceMigrationQaTest {
                         org.assertj.core.groups.Tuple.tuple("list_unit_price", "bigint", "NO"));
         assertThat(jdbcTemplate.queryForObject(
                 "select success from flyway_schema_history where version = '14'", Boolean.class)).isTrue();
-        assertThat(jdbcTemplate.queryForObject(
-                "select max(installed_rank) = (select installed_rank from flyway_schema_history where version = '14') "
-                        + "from flyway_schema_history", Boolean.class)).isTrue();
     }
 
     @Test

@@ -81,10 +81,10 @@ class ApiV1PartnershipAndProductCouponControllerTest {
     @Test
     @DisplayName("협약 요청: 인플루언서 ID와 메시지를 넘기고 협약 ID를 돌려준다")
     void requestPartnership() throws Exception {
-        given(couponFacade.requestPartnership(1L, 30L, "함께해요")).willReturn(5L);
+        given(couponFacade.requestPartnership(1L, 30L, 20, "함께해요")).willReturn(5L);
 
         perform(MemberRole.USER, post("/api/v1/seller/partnerships").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"influencerId\": 30, \"message\": \"함께해요\"}"))
+                .content("{\"influencerId\": 30, \"commissionRate\": 20, \"message\": \"함께해요\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.partnershipId").value(5));
     }
@@ -95,7 +95,21 @@ class ApiV1PartnershipAndProductCouponControllerTest {
         perform(MemberRole.USER, post("/api/v1/seller/partnerships").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
-        verify(couponFacade, never()).requestPartnership(anyLong(), any(), any());
+        verify(couponFacade, never()).requestPartnership(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("협약 요청: 수수료율이 없거나 15~30 밖이면 400 VALIDATION_FAILED")
+    void requestPartnership_commissionRateInvalid() throws Exception {
+        for (String body : new String[]{
+                "{\"influencerId\": 30}",
+                "{\"influencerId\": 30, \"commissionRate\": 14}",
+                "{\"influencerId\": 30, \"commissionRate\": 31}"}) {
+            perform(MemberRole.USER, post("/api/v1/seller/partnerships").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.resultCode").value("400-VALIDATION_FAILED"));
+        }
+        verify(couponFacade, never()).requestPartnership(anyLong(), any(), any(), any());
     }
 
     @Test

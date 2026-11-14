@@ -132,7 +132,7 @@ public class MemberApiClient implements MemberApi {
     /**
      * 요청을 실행하고 RsData의 data를 꺼낸다. Spring HTTP 예외는 DomainException으로 바꾼다
      */
-    private <T> T call(Supplier<RsData<T>> request) {
+    static <T> T call(Supplier<RsData<T>> request) {
         try {
             RsData<T> response = request.get();
             return response == null ? null : response.data();
@@ -166,7 +166,7 @@ public class MemberApiClient implements MemberApi {
      * - connectTimeout: 회원 서비스에 접속하는 데 걸리는 제한 시간
      * - readTimeout: 요청 후 응답을 기다리는 제한 시간. 사용자 요청 안에서 부르므로 짧게 둔다
      */
-    private static SimpleClientHttpRequestFactory requestFactory(long connectTimeoutMillis, long readTimeoutMillis) {
+    static SimpleClientHttpRequestFactory requestFactory(long connectTimeoutMillis, long readTimeoutMillis) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofMillis(connectTimeoutMillis));
         factory.setReadTimeout(Duration.ofMillis(readTimeoutMillis));

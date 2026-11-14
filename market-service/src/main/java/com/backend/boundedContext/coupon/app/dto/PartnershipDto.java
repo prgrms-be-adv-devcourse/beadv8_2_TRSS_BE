@@ -23,6 +23,7 @@ public record PartnershipDto(
         Long influencerId,
         String activityName,
         PartnershipStatus status,
+        Integer commissionRate,     // 인플루언서 수수료율(%)
         String requestMessage,
         LocalDateTime requestedAt,
         LocalDateTime acceptedAt,
@@ -38,6 +39,7 @@ public record PartnershipDto(
                 partnership.getInfluencerId(),
                 activityName,
                 partnership.getStatus(),
+                partnership.getCommissionRate(),
                 partnership.getRequestMessage(),
                 partnership.getRequestedAt(),
                 partnership.getAcceptedAt(),

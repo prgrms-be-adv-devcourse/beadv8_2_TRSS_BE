@@ -63,7 +63,7 @@ public final class CouponFixtures {
 
     /** 진행 중 협약(SELLER_ID와 INFLUENCER_ID) */
     public static Partnership activePartnership() {
-        Partnership partnership = Partnership.request(SELLER_ID, INFLUENCER_ID, "함께해요", LocalDateTime.now().minusDays(2));
+        Partnership partnership = Partnership.request(SELLER_ID, INFLUENCER_ID, 20, "함께해요", LocalDateTime.now().minusDays(2));
         partnership.accept(LocalDateTime.now().minusDays(1));
         return partnership;
     }
