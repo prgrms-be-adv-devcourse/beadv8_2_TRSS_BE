@@ -31,8 +31,10 @@ import java.util.Optional;
  * 방법: 같은 멱등 키로 결제 원장을 조회(findTransfer). 기록이 있으면 정산 데이터는 고치지 않고
  *      처리 이력(stage RECONCILE, MANUAL_REQUIRED, 409-SETTLEMENT_LEDGER_PAID_NOT_RECORDED)과 ERROR 로그로 사람에게 알린다.
  *      같은 결과가 이미 마지막 이력이면 다시 남기지 않는다.
- * 사람이 할 일: READY·FAILED는 다음 지급이 같은 키로 기존 결과를 받아 PAID가 된다. MANUAL_REQUIRED는 관리자 재처리로 같은 결과를 받는다.
- *      HOLD는 보류 사유를 확인하고 해제하면 같은 방식으로 PAID가 된다(지급이 두 번 일어나지 않는다).
+ * 사람이 할 일: FAILED는 다음 재시도가, MANUAL_REQUIRED는 관리자 재처리가 지급 요청 전에 결제 원장을 먼저 확인해(SettlementPayoutUseCase ⓪)
+ *      다시 요청하지 않고 PAID로 확정한다. READY는 다음 지급이 같은 키로 기존 결과를 받아 PAID가 된다.
+ *      HOLD는 보류 사유를 확인하고 해제하면(READY) 같은 방식으로 PAID가 된다(어느 경우든 지급이 두 번 일어나지 않는다).
+ * 원장을 보는 사이 다른 경로가 같은 정산서를 지급했으면(방금 지급한 기록을 본 것) 다시 읽어 확인하고 경보를 남기지 않는다.
  * 원장 불일치 보류(LedgerMismatchRule)에는 쓰지 않는다. 그 판매자의 지급을 막으면 오히려 PAID로 수렴하지 못한다.
  */
 @Slf4j
@@ -60,11 +62,21 @@ public class SettlementOutputReconcileUseCase {
     public boolean reconcile(Long settlementId) {
         Optional<Settlement> found = settlementRepository.findById(settlementId);
         if (found.isEmpty()) return false;
-        Settlement settlement = found.get();
+        Settlement settlement = found.get();   // 원장 조회 뒤 다시 읽어 바꾼다
         if (!TARGET_STATUSES.contains(settlement.getStatus()) || settlement.getRetryCount() == 0) return false;
 
         Optional<TransferResultDto> ledger = settlementPaymentPort.findTransfer(settlement.getIdempotencyKey());
         if (ledger.isEmpty()) return false;
+
+        // 원장을 보는 사이 재시도 스케줄러·월 정산 Job·관리자 재처리가 같은 정산서를 지급했을 수 있다(방금 지급한 기록을 본 것).
+        // 다시 읽어 이미 PAID이거나 지급 요청 중(PROCESSING)이면 경보를 남기지 않는다
+        Optional<Settlement> reread = settlementRepository.findById(settlementId);
+        if (reread.isEmpty() || !TARGET_STATUSES.contains(reread.get().getStatus())) {
+            log.info("정산 출력 대사: 원장 조회 중 정산서 상태가 바뀌어 건너뜀 settlementId={} status={}", settlementId,
+                    reread.map(Settlement::getStatus).orElse(null));
+            return false;
+        }
+        settlement = reread.get();
 
         String code = SettlementErrorCode.SETTLEMENT_LEDGER_PAID_NOT_RECORDED.resultCode();
         boolean alreadyRecorded = settlementProcessHistoryRepository

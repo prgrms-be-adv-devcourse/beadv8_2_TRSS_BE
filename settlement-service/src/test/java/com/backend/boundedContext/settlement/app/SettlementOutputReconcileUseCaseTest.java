@@ -36,6 +36,7 @@ class SettlementOutputReconcileUseCaseTest {
     private Settlement settlement;
     private TransferResultDto ledger;
     private int findTransferCalls;
+    private Runnable duringLookup;   // 원장 조회 중 다른 경로가 정산서를 바꾸는 상황
 
     @Test
     @DisplayName("FAILED 정산서에 원장 지급 기록이 있으면 RECONCILE 이력(MANUAL_REQUIRED)을 남기고 정산서는 그대로 둔다")
@@ -87,12 +88,35 @@ class SettlementOutputReconcileUseCaseTest {
         assertEquals(0, findTransferCalls);
     }
 
+    @Test
+    @DisplayName("원장을 보는 사이 다른 경로가 같은 정산서를 지급했으면(PAID) 경보·이력을 남기지 않는다")
+    void paidDuringLookup_noFalseAlarm() {
+        settlement = settlement(SettlementStatus.FAILED, 1);
+        ledger = new TransferResultDto("SETTLEMENT-31", 501L, 18_000L, 2_000L, LocalDateTime.now());
+        duringLookup = () -> settlement = settlement(SettlementStatus.PAID, 1);   // 재시도 스케줄러가 방금 지급함
+
+        assertFalse(useCase().reconcile(SETTLEMENT_ID));
+        assertTrue(histories.isEmpty());
+    }
+
+    @Test
+    @DisplayName("원장을 보는 사이 지급 요청이 시작됐으면(PROCESSING) 경보·이력을 남기지 않는다(지급 결과 재확인이 본다)")
+    void processingDuringLookup_noFalseAlarm() {
+        settlement = settlement(SettlementStatus.FAILED, 1);
+        ledger = new TransferResultDto("SETTLEMENT-31", 501L, 18_000L, 2_000L, LocalDateTime.now());
+        duringLookup = () -> settlement = settlement(SettlementStatus.PROCESSING, 1);
+
+        assertFalse(useCase().reconcile(SETTLEMENT_ID));
+        assertTrue(histories.isEmpty());
+    }
+
     private SettlementOutputReconcileUseCase useCase() {
         SettlementRepository settlementRepository = fake(SettlementRepository.class, Map.of(
                 "findById", args -> Optional.ofNullable(settlement)));
         SettlementPaymentPort paymentPort = fake(SettlementPaymentPort.class, Map.of(
                 "findTransfer", args -> {
                     findTransferCalls++;
+                    if (duringLookup != null) duringLookup.run();
                     return Optional.ofNullable(ledger);
                 }));
         SettlementProcessHistoryRepository historyRepository = fake(SettlementProcessHistoryRepository.class, Map.of(

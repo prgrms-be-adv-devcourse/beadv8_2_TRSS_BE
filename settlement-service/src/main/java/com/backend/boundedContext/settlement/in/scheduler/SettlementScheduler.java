@@ -18,9 +18,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 정산 스케줄러 4개
+ * 정산 스케줄러 5개
  *   매일 03:35 KST: 원장 재대조(지난 lookbackDays(2)일 동안 지급된 정산서 = T+1 + 풀리지 않은 불일치 정산서) 후 원장 불일치 보류 정리.
  *                   custom.settlement.ledgerRecheck.enabled일 때만
+ *   매일 03:45 KST: 출력 대사(지급을 시도했지만 PAID가 아닌 정산서에 결제 원장의 지급 기록이 있는지). ledgerRecheck.enabled일 때만
  *   매월 payDayOfMonth(10)일 00:00 KST: 지난달 월 정산 Job 실행
  *   10분마다: 다음 재시도 일시가 지난 FAILED + READY(보류 해제·지급 전에 멈춘 건) 정산서를 최대 retryBatchSize(50)건 지급
  *   5분마다: PROCESSING(지급 요청 결과 모름)이 된 지 processingRecheckMinutes(5)분이 지난 정산서를 결제 원장으로 확정
