@@ -114,9 +114,9 @@ class ApiV1DiscountDisplayJsonQaTest {
     @DisplayName("GET /api/v1/orders/{id}: 항목에 listPrice·discountRate가 추가되고 unitPrice·lineAmount·discountAmount는 그대로다")
     void orderDetail_itemJsonFields() throws Exception {
         OrderItemResponse item = new OrderItemResponse(900L, 10L, 100L, "블러셔", "대용량", "상점",
-                13_000, 2, 26_000, 0, 15_000, 20);
+                13_000, 2, 26_000, 0, 15_000, 20, "https://img.example/blusher.jpg");
         OrderItemResponse old = new OrderItemResponse(901L, 11L, 101L, "립스틱", "기본", "상점",
-                5_000, 1, 5_000, 0, 5_000, null);
+                5_000, 1, 5_000, 0, 5_000, null, null);
         OrderDetailResponse detail = new OrderDetailResponse(500L, "20261112-0001", OrderStatus.PAID, 31_000,
                 LocalDateTime.now(), LocalDateTime.now().plusMinutes(15), 0, LocalDateTime.now(), null, null,
                 List.of(item, old), List.of(), null, null, null, false, 0, 0, 31_000, 0, false,

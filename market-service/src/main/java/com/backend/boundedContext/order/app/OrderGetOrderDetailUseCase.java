@@ -15,18 +15,23 @@ import com.backend.shared.delivery.out.DeliveryApi;
 import com.backend.shared.order.dto.OrderStatus;
 import com.backend.shared.payment.dto.PaymentAttemptStatus;
 import com.backend.shared.payment.out.PaymentApi;
+import com.backend.shared.product.dto.OptionSnapshotDto;
+import com.backend.shared.product.out.ProductApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * 주문 상세
  * 배송지가 있고 결제된 주문이면 delivery 서비스에서 배송 정보를 조회해 합친다.
  * delivery가 응답하지 못해도 주문 상세는 실패시키지 않고 deliveryUnavailable = true로 응답한다.
+ * 항목마다 상품의 현재 대표 이미지(thumbnailUrl)를 붙인다. 조회에 실패해도 주문 상세는 이미지 없이 응답한다.
  */
 @Slf4j
 @Component
@@ -40,13 +45,14 @@ public class OrderGetOrderDetailUseCase {
     private final OrderRepository orderRepository;
     private final PaymentApi paymentApi;
     private final DeliveryApi deliveryApi;
+    private final ProductApi productApi;
 
     public OrderDetailResponse getOrderDetail(Long buyerId, Long orderId) {
         Order order = orderRepository.findWithItemsByIdAndBuyerId(orderId, buyerId)
                 .orElseThrow(() -> new DomainException(OrderErrorCode.ORDER_NOT_FOUND));
 
         // 내 주문인지 확인한 뒤에 결제 내역을 조회한다
-        return toDetail(order, LocalDateTime.now(), getPayments(order), getDelivery(order));
+        return toDetail(order, LocalDateTime.now(), getPayments(order), getDelivery(order), getThumbnailUrls(order));
     }
 
     // 결제 내역 조회 결과. unavailable이면 payment 서비스가 응답하지 못한 것
@@ -84,8 +90,22 @@ public class OrderGetOrderDetailUseCase {
         }
     }
 
+    // 옵션 ID → 현재 대표 이미지 URL (주문 목록과 같은 방식). 삭제된 상품도 이미지가 있으면 담긴다
+    private Map<Long, String> getThumbnailUrls(Order order) {
+        List<Long> optionIds = order.getItems().stream().map(OrderItem::getOptionId).distinct().toList();
+        Map<Long, String> thumbnails = new HashMap<>();
+        try {
+            for (OptionSnapshotDto option : productApi.getOptions(optionIds)) {
+                thumbnails.put(option.optionId(), option.thumbnailUrl());
+            }
+        } catch (RuntimeException e) {
+            log.warn("상품 이미지 조회에 실패해 주문 상세를 이미지 없이 응답합니다: orderId={}, reason={}", order.getId(), e.getMessage());
+        }
+        return thumbnails;
+    }
+
     private OrderDetailResponse toDetail(Order order, LocalDateTime now, PaymentsResult payments,
-                                         DeliveryResult delivery) {
+                                         DeliveryResult delivery, Map<Long, String> thumbnails) {
         return new OrderDetailResponse(
                 order.getId(),
                 order.getOrderNumber(),
@@ -97,7 +117,7 @@ public class OrderGetOrderDetailUseCase {
                 order.getPaidAt(),
                 order.getCanceledAt(),
                 order.getConfirmedAt(),
-                order.getItems().stream().map(this::toItem).toList(),
+                order.getItems().stream().map(item -> toItem(item, thumbnails.get(item.getOptionId()))).toList(),
                 payments.payments(),
                 order.hasShippingAddress() ? ShippingAddressResponse.from(order.getShippingAddress()) : null,
                 order.getDeliveredAt(),
@@ -131,7 +151,7 @@ public class OrderGetOrderDetailUseCase {
         return refunded ? RefundStatus.COMPLETED : RefundStatus.PENDING;
     }
 
-    private OrderItemResponse toItem(OrderItem item) {
+    private OrderItemResponse toItem(OrderItem item, String thumbnailUrl) {
         return new OrderItemResponse(
                 item.getId(),
                 item.getProductId(),
@@ -144,7 +164,8 @@ public class OrderGetOrderDetailUseCase {
                 item.getLineAmount(),
                 item.getDiscountAmount(),
                 item.getListUnitPrice(),
-                item.getDiscountRate()
+                item.getDiscountRate(),
+                thumbnailUrl
         );
     }
 }
