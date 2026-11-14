@@ -58,7 +58,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 3          # 스케줄 작업(충전 2, outbox 릴레이 1)이 서로 기다리지 않게 작업 수만큼
+        size: 6          # 스케줄 작업(충전 5: READY 만료·대사 3·오래 남은 건 경고, outbox 릴레이 1)이 서로 기다리지 않게 작업 수만큼
 
 
 # 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
