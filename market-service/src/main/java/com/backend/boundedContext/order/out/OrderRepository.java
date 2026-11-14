@@ -1,0 +1,147 @@
+package com.backend.boundedContext.order.out;
+
+import com.backend.boundedContext.order.domain.Order;
+import com.backend.shared.order.dto.OrderStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecificationExecutor<Order> {
+    @Query("""
+            select distinct i.optionId
+            from OrderItem i
+            where i.order.buyerId = :buyerId
+              and i.order.status in :statuses
+              and i.optionId in :optionIds
+            """)
+    List<Long> findOptionIdsInOrders(@Param("buyerId") Long buyerId,
+                                     @Param("optionIds") Collection<Long> optionIds,
+                                     @Param("statuses") Collection<OrderStatus> statuses);
+
+    @Query("""
+            select distinct i.order.id
+            from OrderItem i
+            where i.order.buyerId = :buyerId
+              and i.order.status in :statuses
+              and i.optionId in :optionIds
+            order by i.order.id
+            """)
+    List<Long> findOrderIdsContainingOptions(@Param("buyerId") Long buyerId,
+                                             @Param("optionIds") Collection<Long> optionIds,
+                                             @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 주문 생성 멱등 키로 이전 주문 조회
+    Optional<Order> findByBuyerIdAndIdempotencyKey(Long buyerId, String idempotencyKey);
+
+    // 본인 주문만, 항목까지 한 번에 조회
+    @EntityGraph(attributePaths = "items")
+    Optional<Order> findWithItemsByIdAndBuyerId(Long id, Long buyerId);
+
+    // 결제,만료 경합 방지-> 주문 행을 잠가서 조회
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id and o.buyerId = :buyerId")
+    Optional<Order> findByIdAndBuyerIdForUpdate(@Param("id") Long id, @Param("buyerId") Long buyerId);
+
+    // 구매자의 최근 주문
+    List<Order> findByBuyerId(Long buyerId, Pageable pageable);
+
+    // 구매자에게 해당 상태의 주문이 있는지
+    boolean existsByBuyerIdAndStatusIn(Long buyerId, Collection<OrderStatus> statuses);
+
+    // 판매자 상품이 들어간 주문이 있는지
+    @Query("""
+            select count(i) > 0
+            from OrderItem i
+            where i.sellerId = :sellerId
+              and i.order.status in :statuses
+            """)
+    boolean existsSalesBySellerIdAndStatusIn(@Param("sellerId") Long sellerId,
+                                             @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 자동 구매 확정 대상 주문 id
+    // 배송지가 있는 주문은 배송 완료 시각, 배송지 없는 주문(배송 기능 이전·프론트가 붙기 전)은 결제 시각이 before 이전인 것
+    // 배송지 있음 여부는 Order.hasShippingAddress()와 같이 수령인(receiver_name)으로 본다
+    @Query("""
+            select o.id
+            from Order o
+            where o.status = :status
+              and ((o.shippingAddress.receiverName is not null and o.deliveredAt <= :before)
+                or (o.shippingAddress.receiverName is null and o.paidAt <= :before))
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findAutoConfirmTargetIds(@Param("status") OrderStatus status,
+                                        @Param("before") LocalDateTime before,
+                                        @Param("afterId") Long afterId,
+                                        Pageable pageable);
+
+    // 주문 행을 잠가서 조회 (스케줄러용)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
+    // 결제 만료 처리 대상 주문 id 조회
+    @Query("""
+            select o.id
+            from Order o
+            where o.status in :statuses
+              and o.expiresAt <= :expiredBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findExpireTargetIds(@Param("statuses") Collection<OrderStatus> statuses,
+                                   @Param("expiredBefore") LocalDateTime expiredBefore,
+                                   @Param("afterId") Long afterId,
+                                   Pageable pageable);
+
+    // 결제 재확인 대상 주문 id 조회: PAYING이 된 지 일정 시간이 지난 주문 (인덱스 status, paying_started_at)
+    @Query("""
+            select o.id
+            from Order o
+            where o.status = com.backend.shared.order.dto.OrderStatus.PAYING
+              and o.payingStartedAt <= :startedBefore
+              and o.id > :afterId
+            order by o.id
+            """)
+    List<Long> findPayingRecheckTargetIds(@Param("startedBefore") LocalDateTime startedBefore,
+                                          @Param("afterId") Long afterId,
+                                          Pageable pageable);
+
+    // 상품이 하나라도 들어 있는 해당 상태의 주문 id 조회
+    @Query("""
+            select distinct i.order.id
+            from OrderItem i
+            where i.productId in :productIds
+              and i.order.status in :statuses
+            """)
+    List<Long> findIdsByProductIdsAndStatusIn(@Param("productIds") Collection<Long> productIds,
+                                              @Param("statuses") Collection<OrderStatus> statuses);
+
+    // 주문 여러 건을 id 순서대로 잠가서 조회
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id in :ids order by o.id")
+    List<Order> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
+
+    // 주문에 들어 있는 상품 id 조회
+    @Query("""
+            select distinct i.productId
+            from OrderItem i
+            where i.order.id = :orderId
+            """)
+    List<Long> findProductIdsByOrderId(@Param("orderId") Long orderId);
+
+    // 본인 주문에 들어 있는 상품 id
+    @Query("""
+            select distinct i.productId
+            from OrderItem i
+            where i.order.id = :orderId
+              and i.order.buyerId = :buyerId
+            """)
+    List<Long> findProductIdsByOrderIdAndBuyerId(@Param("orderId") Long orderId, @Param("buyerId") Long buyerId);
+}

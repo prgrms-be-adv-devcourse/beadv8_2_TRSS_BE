@@ -1,0 +1,86 @@
+# Slack 알림 메시지 형식. slack.yaml의 title·text가 이 템플릿을 쓴다.
+# 알림 하나 = 컨테이너·클래스·원인·배포 버전 하나이므로(slack.yaml의 group_by)
+# 알림만 보고 바로 대응할 수 있도록 원인·위치·배포 커밋·먼저 확인할 것·누적 건수와 Grafana 로그 링크를 보여 준다.
+#   건수: B(최근 5분, 알림 조건)·E(최근 1시간)·G(최근 24시간). rules.yaml의 refId와 맞춘다
+#   먼저 확인할 것: palette.slack.hint에서 원인(root_cause·error_type) 이름으로 고른다. 새로 겪은 장애는 여기에 추가한다
+# Loki 조회가 실패하면(rules.yaml의 execErrState) 라벨·건수가 없는 오류 알림이 오므로
+# 앱 ERROR로 오해하지 않게 "검사 실패" 메시지로 따로 보여 준다.
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: palette-slack
+    template: |
+      {{ define "palette.slack.title" -}}
+      {{ with .Alerts.Firing }}{{ with index . 0 -}}
+      {{ if .Labels.log_logger -}}
+      🚨 [{{ .Labels.container }}] ERROR {{ printf "%.0f" .Values.B }}건 (최근 5분)
+      {{- with index .Values "E" }} · 1시간 {{ printf "%.0f" . }}건{{ end }}
+      {{- with index .Values "G" }} · 24시간 {{ printf "%.0f" . }}건{{ end }}
+      {{- if gt (len $.Alerts.Firing) 1 }} · 첫 번째 경로 기준, 경로 {{ len $.Alerts.Firing }}곳 (경로별 건수는 아래){{ end }}
+      {{- else -}}
+      ⚠️ [palette] ERROR 알림 검사 실패
+      {{- end }}
+      {{- end }}{{ end }}
+      {{- end }}
+
+      {{ define "palette.slack.text" -}}
+      {{ range .Alerts.Firing -}}
+      {{ if .Labels.log_logger -}}
+      {{ $logger := .Labels.log_logger -}}
+      {{ $cause := reReplaceAll `.*\.` "" .Labels.root_cause -}}
+      {{ $type := reReplaceAll `.*\.` "" .Labels.error_type -}}
+      {{ $expr := printf `{container="%s"} | json | log_level="ERROR" | log_logger="%s"` .Labels.container $logger -}}
+      {{ if $cause }}{{ $expr = printf `%s |= "%s"` $expr $cause }}{{ end -}}
+      {{ $panes := printf `{"a":{"datasource":"loki","queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"%s"}],"range":{"from":"now-1h","to":"now"}}}` (reReplaceAll `"` `\"` $expr) -}}
+      • 원인: {{ if $cause }}`{{ $cause }}`{{ if ne $cause $type }}  ← `{{ $type }}`{{ end }}{{ else }}예외 없음 (로그 메시지 확인){{ end }}
+      • 위치: `{{ reReplaceAll `.*\.` "" $logger }}`{{ with .Labels.http_path }} · `{{ . }}`{{ end }}
+      {{ if gt (len $.Alerts.Firing) 1 }}• 건수: 최근 5분 {{ printf "%.0f" .Values.B }}건{{ with index .Values "E" }} · 1시간 {{ printf "%.0f" . }}건{{ end }}{{ with index .Values "G" }} · 24시간 {{ printf "%.0f" . }}건{{ end }}
+      {{ end -}}
+      • 배포 버전: {{ template "palette.slack.version" .Labels.service_version }}
+      • 먼저 확인: {{ template "palette.slack.hint" (printf "%s %s" $cause $type) }}
+      • 발생: {{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05" }} (KST)
+      • <{{ reReplaceAll `/$` "" $.ExternalURL }}/explore?schemaVersion=1&orgId=1&panes={{ urlquery $panes }}|Grafana에서 로그 보기>
+      {{ else -}}
+      • Loki 조회에 실패해 앱 ERROR 로그를 확인하지 못했습니다. 앱 오류가 아니라 모니터링 문제입니다.
+      • 발생: {{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05" }} (KST)
+      {{ with .Annotations.Error }}• 오류: `{{ . }}`
+      {{ end -}}
+      • 확인: 서버에서 `docker compose -f infra/compose.prod.yaml ps loki grafana`, `docker compose -f infra/compose.prod.yaml logs --tail 50 loki`
+      {{ end -}}
+      {{ end -}}
+      {{- end }}
+
+      {{/* 배포 커밋 SHA(로그의 service.version)를 GitHub 커밋 링크로 보여 준다. 커밋 화면에서 PR·작성자를 볼 수 있다 */}}
+      {{ define "palette.slack.version" -}}
+      {{ if match `^[0-9a-f]{7,40}$` . -}}
+      <https://github.com/prgrms-be-adv-devcourse/beadv8_2_TRSS_BE/commit/{{ . }}|`{{ . }}`> (커밋·PR 보기)
+      {{- else -}}
+      알 수 없음{{ with . }} (`{{ . }}`){{ end }}
+      {{- end }}
+      {{- end }}
+
+      {{/* 원인 예외 이름(근본 원인 + 맨 위 예외)으로 먼저 확인할 것을 고른다. 서버 명령은 레포 루트(~/palette)에서 실행한다 */}}
+      {{ define "palette.slack.hint" -}}
+      {{ if match `DeliveryTrackerUnauthenticated` . -}}
+      Delivery Tracker 인증 키가 만료됐을 수 있습니다(무료 플랜 21일). 콘솔에서 재발급해 infra/.env의 DELIVERY_TRACKER_CLIENT_ID·SECRET을 바꾸고 `docker compose -f infra/compose.prod.yaml up -d delivery`
+      {{- else if match `UnknownHostException` . -}}
+      다른 컨테이너 이름을 찾지 못했습니다. `docker compose -f infra/compose.prod.yaml ps -a`로 대상(postgres·kafka·market 등)이 떠 있는지 확인하세요
+      {{- else if match `Kafka|ConfigException` . -}}
+      Kafka 연결 문제입니다. `docker compose -f infra/compose.prod.yaml ps kafka`·`logs --tail 50 kafka`를 확인하고, 복구 뒤 outbox_event의 FAILED 이벤트를 다시 PENDING으로 돌리세요
+      {{- else if match `SQLTransientConnection|PSQLException|JDBCConnection|CannotCreateTransaction|DataAccessResource` . -}}
+      DB 연결 문제입니다. `docker compose -f infra/compose.prod.yaml ps postgres`·`logs --tail 50 postgres`로 상태와 커넥션 수를 확인하세요
+      {{- else if match `RedisConnection|RedisSystem` . -}}
+      Redis 연결 문제입니다. `docker compose -f infra/compose.prod.yaml ps redis`·`logs --tail 50 redis`를 확인하세요
+      {{- else if match `ResourceAccessException|ConnectException|HttpServerError|HttpClientError|SocketTimeout` . -}}
+      다른 서비스 내부 API 호출이 실패했습니다. 호출 대상 서비스 컨테이너의 상태(`ps`)와 로그를 확인하세요
+      {{- else if match `UnsupportedOperationException` . -}}
+      서비스 연결 전 임시 구현이 호출됐습니다. 로그 메시지의 서비스 연결 작업(이슈·PR) 진행 상황을 확인하세요
+      {{- else if match `OutOfMemoryError` . -}}
+      메모리 부족입니다. `docker stats --no-stream`으로 사용량을, compose.prod.yaml의 mem_limit을 확인하세요
+      {{- else if match `^ *$` . -}}
+      예외 없이 남긴 ERROR 로그입니다. 아래 링크에서 로그 메시지를 확인하세요
+      {{- else -}}
+      아래 링크에서 스택트레이스를 확인하고, 배포 직후라면 배포 커밋의 변경 사항을 먼저 보세요
+      {{- end }}
+      {{- end }}

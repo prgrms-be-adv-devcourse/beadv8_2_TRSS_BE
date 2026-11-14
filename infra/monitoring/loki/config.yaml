@@ -1,0 +1,40 @@
+# Loki 설정. 서버 한 대에서 혼자 도는 구성이라 로그를 컨테이너 볼륨(/loki)에 파일로 저장한다.
+# 서버 디스크가 50GB로 제한되어 있으니 보관 기간(retention_period)을 넘긴 로그는 compactor가 지운다.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 336h   # 14일. 늘리면 디스크 사용량도 그만큼 는다
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+
+analytics:
+  reporting_enabled: false

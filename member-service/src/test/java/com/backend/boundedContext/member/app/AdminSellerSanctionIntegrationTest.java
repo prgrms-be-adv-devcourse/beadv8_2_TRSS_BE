@@ -1,0 +1,155 @@
+package com.backend.boundedContext.member.app;
+
+import com.backend.boundedContext.member.app.dto.AdminSellerDetailDto;
+import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.domain.MemberErrorCode;
+import com.backend.boundedContext.member.domain.SellerStatusHistory;
+import com.backend.boundedContext.member.in.dto.SellerApplyRequest;
+import com.backend.boundedContext.member.out.MemberRepository;
+import com.backend.boundedContext.member.out.MemberSettlementPort;
+import com.backend.boundedContext.member.out.SellerRepository;
+import com.backend.boundedContext.member.out.SellerStatusHistoryRepository;
+import com.backend.global.exception.DomainException;
+import com.backend.global.exception.ErrorCode;
+import com.backend.global.outbox.OutboxEvent;
+import com.backend.global.outbox.OutboxEventRepository;
+import com.backend.global.outbox.OutboxEventStatus;
+import com.backend.shared.member.dto.MemberRole;
+import com.backend.shared.member.dto.SellerStatus;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 관리자 제재 (S10). 로컬 Docker PostgreSQL·Redis가 필요하다.
+ * 상품 중지·정산 보류는 제재 이벤트를 받은 상품·정산이 하므로, 제재 이벤트가 outbox에 남는지만 확인한다.
+ */
+@SpringBootTest
+class AdminSellerSanctionIntegrationTest {
+
+    @Autowired
+    private MemberSellerFacade memberSellerFacade;
+
+    @Autowired
+    private MemberRepository memberRepository;
+
+    @Autowired
+    private SellerRepository sellerRepository;
+
+    @Autowired
+    private SellerStatusHistoryRepository sellerStatusHistoryRepository;
+
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+
+    // 정산 내부 API를 HTTP로 부르므로, 통합 테스트에서는 회원의 정산 Port를 목으로 둔다 (미지급 금액 기본값 0)
+    @MockitoBean
+    private MemberSettlementPort memberSettlementPort;
+
+    private Long memberId;
+    private Long sellerId;
+    private String businessNumber;
+
+    @BeforeEach
+    void setUp() {
+        String email = "admin-seller-sanction-it-" + UUID.randomUUID() + "@palette.com";
+        memberId = memberRepository.save(Member.signUp(email, "encoded-password", "판매자")).getId();
+        businessNumber = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 10_000_000_000L));
+        sellerId = memberSellerFacade.applySeller(memberId, applyRequest()).sellerId();
+    }
+
+    @AfterEach
+    void cleanUp() {
+        outboxEventRepository.deleteAll(sellerOutbox());
+        sellerRepository.findById(sellerId).ifPresent(seller -> {
+            sellerStatusHistoryRepository.deleteAll(sellerStatusHistoryRepository.findAllBySellerIdOrderByIdAsc(sellerId));
+            sellerRepository.delete(seller);
+        });
+        memberRepository.deleteById(memberId);
+    }
+
+    @Test
+    @DisplayName("제재: SANCTIONED가 되고 사유가 이력에 남으며 제재 이벤트가 outbox에 PENDING으로 남는다. 사업자번호와 SELLER role은 남고, 판매는 막힌다")
+    void sanction() {
+        memberSellerFacade.approveSeller(sellerId);
+
+        AdminSellerDetailDto response = memberSellerFacade.sanctionSeller(sellerId, " 위조 상품 판매 ");
+
+        assertThat(response.status()).isEqualTo(SellerStatus.SANCTIONED);
+        assertThat(response.businessNumber()).isEqualTo(businessNumber);
+
+        SellerStatusHistory latest = sellerStatusHistoryRepository.findFirstBySellerIdOrderByIdDesc(sellerId).orElseThrow();
+        assertThat(latest.getFromStatus()).isEqualTo(SellerStatus.APPROVED);
+        assertThat(latest.getToStatus()).isEqualTo(SellerStatus.SANCTIONED);
+        assertThat(latest.getReason()).isEqualTo("위조 상품 판매");
+
+        assertThat(sellerOutbox()).singleElement()
+                .satisfies(outbox -> {
+                    assertThat(outbox.getEventType()).isEqualTo("SellerSanctionedEvent");
+                    assertThat(outbox.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+                    assertThat(outbox.getPayload()).contains("위조 상품 판매");
+                });
+        assertThat(memberRepository.findById(memberId).orElseThrow().getRole()).isEqualTo(MemberRole.USER);
+        assertError(() -> memberSellerFacade.getApprovedSellerByMemberId(memberId), MemberErrorCode.SELLER_NOT_APPROVED);
+    }
+
+    @Test
+    @DisplayName("제재: 철회 심사 중인 판매자도 바로 제재할 수 있다")
+    void sanction_withdrawRequested() {
+        memberSellerFacade.approveSeller(sellerId);
+        memberSellerFacade.requestWithdrawal(memberId, "폐업 예정");
+
+        AdminSellerDetailDto response = memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매");
+
+        assertThat(response.status()).isEqualTo(SellerStatus.SANCTIONED);
+        assertThat(response.histories()).last().extracting(AdminSellerDetailDto.History::fromStatus)
+                .isEqualTo(SellerStatus.WITHDRAW_REQUESTED);
+    }
+
+    @Test
+    @DisplayName("제재 뒤에는 다시 신청할 수 없다 (403 SELLER_SANCTIONED)")
+    void sanction_thenReapply() {
+        memberSellerFacade.approveSeller(sellerId);
+        memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매");
+
+        assertError(() -> memberSellerFacade.applySeller(memberId, applyRequest()), MemberErrorCode.SELLER_SANCTIONED);
+    }
+
+    @Test
+    @DisplayName("제재: 심사 대기 판매자는 제재할 수 없다 (409 SELLER_STATE_INVALID), 제재 이벤트도 남지 않는다")
+    void sanction_pending() {
+        assertError(() -> memberSellerFacade.sanctionSeller(sellerId, "위조 상품 판매"), MemberErrorCode.SELLER_STATE_INVALID);
+
+        assertThat(sellerRepository.findById(sellerId).orElseThrow().getStatus()).isEqualTo(SellerStatus.PENDING);
+        assertThat(sellerOutbox()).isEmpty();
+    }
+
+    private List<OutboxEvent> sellerOutbox() {
+        return outboxEventRepository.findAll().stream()
+                .filter(outbox -> outbox.getAggregateType().equals("SELLER") && outbox.getAggregateId().equals(sellerId))
+                .toList();
+    }
+
+    private SellerApplyRequest applyRequest() {
+        return new SellerApplyRequest("팔레트 뷰티", businessNumber, "홍길동",
+                "010-1234-5678", "국민은행", "123456-01-123456", "홍길동");
+    }
+
+    private static void assertError(ThrowingCallable action, ErrorCode errorCode) {
+        assertThatThrownBy(action)
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getResultCode()).isEqualTo(errorCode.resultCode()));
+    }
+}

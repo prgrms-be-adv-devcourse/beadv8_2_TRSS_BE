@@ -41,9 +41,28 @@ v1은 Spring Boot 단일 애플리케이션이지만 모듈 경계를 서비스 
 - 컨텍스트끼리는 `shared`의 이벤트·DTO로만 의존합니다.
 - 구매 확정·반품 승인처럼 시점이 다른 처리는 Outbox 이벤트로 연결합니다.
 
-![시스템 아키텍처](docs/palette_system_architecture.png)
-
 ## 프로젝트 구조
+
+MSA 전환 중이라 Gradle 멀티모듈입니다. 루트 `src`는 아직 서비스로 옮기지 않은 기존 모놀리스이고, 서비스 이동 PR마다 각 모듈로 옮겨지며 비워집니다.
+
+```
+beadv8_2_TRSS_BE
+├── settings.gradle.kts       # 모듈 등록
+├── build.gradle.kts          # 모든 모듈 공통 설정(allprojects) + 루트 모놀리스
+├── src                       # 기존 모놀리스 (common에 의존)
+├── common                    # 모든 서비스가 같이 쓰는 global·shared·standard
+├── gateway                   # API Gateway (예정)
+├── member-service            # 서비스 모듈 (예정)
+├── market-service
+├── payment-service
+├── settlement-service
+├── delivery-service
+├── notification-service
+├── ai-service
+└── infra                     # 실행·배포 환경 (Docker Compose, Nginx, 모니터링, 배포 스크립트)
+```
+
+루트 `src/main/java/com/backend`와 `common/src/main/java/com/backend`는 같은 패키지(`com.backend`)를 나눠 가집니다.
 
 ```
 src/main/java/com/backend
@@ -58,14 +77,14 @@ src/main/java/com/backend
 │       ├── app               #     유스케이스, 포트
 │       ├── domain            #     엔티티, 상태 규칙, ErrorCode
 │       └── out               #     Repository, 외부 연동 어댑터
-├── shared                    # 컨텍스트 간 이벤트·DTO
-├── global                    # 공통 설정
+├── shared                    # (common) 컨텍스트 간 이벤트·DTO
+├── global                    # (common) 공통 설정
 │   ├── batch                 #   Spring Batch 설정
 │   ├── eventPublisher        #   이벤트 발행
 │   ├── exception             #   DomainException, ErrorCode, GlobalExceptionHandler
 │   ├── jpa/entity            #   BaseEntity
 │   └── rsData                #   공통 응답 RsData
-└── standard                  # 유틸리티
+└── standard                  # (common) 유틸리티
 ```
 
 ## 실행 방법
@@ -85,12 +104,18 @@ cd beadv8_2_TRSS_BE
 ### 2. 데이터베이스 실행
 
 ```bash
-docker compose up -d
+docker compose -f infra/compose.yaml up -d
 ```
+
+Compose 파일을 `infra/`로 옮기기 전에 띄운 컨테이너가 남아 있으면 이름이 겹쳐 실행이 실패합니다. 처음 한 번만 `docker rm -f palette-postgres palette-redis palette-kafka`로 지우고 다시 실행합니다.
 
 PostgreSQL 17 컨테이너(`palette-postgres`)가 `localhost:5432`에 뜹니다. 기본 계정은 DB `palette` / 사용자 `palette` / 비밀번호 `palette`입니다.
 
+함께 Redis(`localhost:6379`)와 Kafka(`palette-kafka`, `localhost:9092`)도 뜹니다. Kafka는 Outbox 릴레이가 이벤트를 발행하는 곳입니다(개발 가이드 6.5).
+
 DB 테이블은 앱이 시작될 때 Flyway가 `src/main/resources/db/migration`의 마이그레이션으로 만듭니다.
+
+DB가 처음 만들어질 때 `infra/postgres/init/01-init-schemas.sh`가 서비스별 스키마와 계정(`member`/`member_user`, `market`, `payment`, `settlement`, `notification`, `ai`)과 모든 스키마를 읽기만 하는 `readonly_user`도 만듭니다. 로컬 비밀번호는 계정 이름과 같습니다(예: `member_user` / `member_user`). 지금 앱은 아직 `palette` 계정과 `public` 스키마를 씁니다. 기존 DB에 이 스키마들이 없다면 아래 "로컬 DB 초기화"로 다시 만들면 생깁니다.
 
 ### 3. 환경 변수 파일 만들기
 
@@ -105,7 +130,7 @@ cp .env.example .env
 IntelliJ에서는 공유된 실행 구성 `Application (local)`을 실행합니다(Active profiles: `local`). 실행 구성을 직접 만들 때도 Active profiles에 `local`을 넣습니다. 터미널에서는 실행할 때마다 아래처럼 실행합니다.
 
 ```bash
-SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+SPRING_PROFILES_ACTIVE=local ./gradlew :bootRun
 ```
 
 `local` 프로필은 SQL 로그 같은 로컬 전용 설정(`application-local.yaml`)을 켭니다.
@@ -128,8 +153,8 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 기존 DB에 Flyway 이력이 없거나 스키마가 맞지 않아 앱이 뜨지 않으면, DB 볼륨을 지우고 다시 만듭니다. **로컬 DB의 모든 데이터가 삭제됩니다.**
 
 ```bash
-docker compose down -v
-docker compose up -d
+docker compose -f infra/compose.yaml down -v
+docker compose -f infra/compose.yaml up -d
 ```
 
 ### 환경 변수

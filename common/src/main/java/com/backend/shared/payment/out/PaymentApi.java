@@ -1,0 +1,66 @@
+package com.backend.shared.payment.out;
+
+import java.util.List;
+import java.util.Optional;
+
+import com.backend.shared.payment.dto.PayCommand;
+import com.backend.shared.payment.dto.PayResultDto;
+import com.backend.shared.payment.dto.PaymentAttemptDto;
+import com.backend.shared.payment.dto.SettlementTransferCommand;
+import com.backend.shared.payment.dto.TransferResultDto;
+import com.backend.shared.payment.dto.WalletSummaryDto;
+
+/**
+ * 결제 컨텍스트가 다른 컨텍스트에 제공하는 내부 API.
+ * payment-service의 InternalPaymentController(/internal/v1/payments)가 HTTP로 제공한다.
+ * 부르는 서비스는 각자 HTTP 클라이언트로 부른다 (예: member-service의 MemberPaymentHttpAdapter)
+ */
+public interface PaymentApi {
+
+    // 잔액과 홀딩 중 금액 조회
+    WalletSummaryDto getWallet(Long memberId);
+
+    // 결과가 아직 정해지지 않은 충전 건(READY·PROCESSING·CANCELING)이 있는지. 회원 탈퇴 검사용 (반영 전이거나 취소가 거절되면 잔액이 다시 들어올 수 있음)
+    boolean hasPendingTopups(Long memberId);
+
+    /**
+     * 주문 결제: 구매자 지갑을 잠그고 지갑 → 홀딩, 원장 PAYMENT 기록.
+     * market은 HTTP(POST /internal/v1/payments/pay)로 부르므로 호출한 쪽 트랜잭션에 참여하지 않는다.
+     * 주문 쪽은 주문을 PAYING으로 커밋한 뒤 부르고, 결과는 별도 트랜잭션으로 반영한다(공유 계약 9.1).
+     * command.amount는 배송비를 포함한 결제 금액이다. 배송비(command.shippingFee)는 구매자 지갑 → 플랫폼 지갑(원장 SHIPPING_FEE)으로 옮기고,
+     * 나머지(amount − shippingFee)는 홀딩에 넣는다. 장바구니 쿠폰 지원금(command.couponSubsidyAmount)은 플랫폼 지갑 → 홀딩(원장 COUPON_SUBSIDY).
+     * 홀딩 금액 = amount − shippingFee + couponSubsidyAmount.
+     * 잔액 부족·주문 만료는 예외가 아니라 결과로 반환한다. 실패 기록은 별도 트랜잭션(REQUIRES_NEW)으로 남긴다.
+     * 주문 쪽은 결과가 PAID가 아니면 주문을 PAYMENT_FAILED로 커밋한 뒤 DomainException(402 INSUFFICIENT_BALANCE 등)을 던진다.
+     * 같은 idempotencyKey로 다시 호출하면 처음 결과를 그대로 반환하고, 아직 처리하지 않은 키면 그때 처리한다.
+     * 주문 쪽 재확인 스케줄러는 결과를 모르는 결제(응답 시간 초과 등)를 같은 키·같은 내용으로 다시 불러 확정한다.
+     */
+    PayResultDto pay(PayCommand command);
+
+    /**
+     * 결제 취소: 결제는 됐는데 주문 쪽 처리가 실패했을 때 홀딩 금액을 구매자 지갑으로 되돌린다 (주문 쪽 보상).
+     * 결제할 때 쓴 idempotencyKey로 찾으므로, 결제 결과를 받지 못한 경우(응답 시간 초과 등)에도 부를 수 있다.
+     * 이 키의 결제가 없거나, 실패 건이거나, 이미 취소됐으면 아무것도 하지 않는다. 여러 번 불러도 한 번만 취소된다.
+     * 정산 지급이 시작된 결제는 취소할 수 없다: 409-PAYMENT_NOT_CANCELABLE
+     */
+    void cancelPayment(String idempotencyKey);
+
+    /**
+     * 주문의 결제 시도 목록 (주문 상세의 결제 내역). 오래된 순, 실패 시도 포함.
+     * 내 주문인지는 주문 쪽에서 확인하고 호출한다. 결제 시도가 없으면 빈 목록을 반환한다.
+     * 실패 사유는 상태(FAILED_*)로만 알려 주고, 부족 금액은 담지 않는다.
+     */
+    List<PaymentAttemptDto> getPaymentAttempts(Long orderId);
+
+    /**
+     * 정산 지급: 홀딩 → 판매자 지갑(SETTLEMENT), 홀딩 → 관리자 지갑(FEE).
+     * 주문별 홀딩의 settled_amount를 늘리고, 다 차면 SETTLED로 바꾼다.
+     * 호출한 쪽 트랜잭션에 참여(REQUIRED)하고, 실패하면 DomainException을 던진다.
+     * 재시도해도 같은 실패: 404-WALLET_NOT_FOUND, 404-HOLDING_NOT_FOUND, 409-HOLDING_INSUFFICIENT, 409-TRANSFER_AMOUNT_MISMATCH
+     * idempotencyKey(SETTLEMENT-{settlementId})가 이미 처리됐으면 기존 결과를 반환한다.
+     */
+    TransferResultDto transfer(SettlementTransferCommand command);
+
+    /** 정산 지급 여부 조회 (재시도·대사용). 없으면 empty */
+    Optional<TransferResultDto> findTransfer(String idempotencyKey);
+}

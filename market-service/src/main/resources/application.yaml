@@ -1,0 +1,158 @@
+server:
+  port: ${MARKET_PORT:8082}   # 로컬에서 루트 모놀리스(8080)와 같이 띄울 수 있게 다른 포트를 쓴다
+
+spring:
+  application:
+    name: market-service
+
+  # 프로젝트 루트의 .env를 읽음 (없으면 무시). bootRun은 모듈 폴더에서 실행되므로 상위 폴더도 찾는다
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
+
+  # market 스키마만 쓴다. 운영에서는 market_user(자기 스키마 권한만 가진 계정)로 접속한다
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}?currentSchema=market
+    username: ${MARKET_DB_USERNAME:${DB_USERNAME:market_user}}
+    password: ${MARKET_DB_PASSWORD:${DB_PASSWORD:market_user}}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
+
+  flyway:
+    schemas: market
+    default-schema: market
+    # 운영 DB: 테이블을 public에서 market으로 옮긴 뒤 처음 뜰 때 V1(baseline)은 이미 적용된 것으로 기록하고 V2부터 실행한다
+    # 빈 DB(로컬·CI·새 서버): V1부터 실행한다
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  # 상품 이미지 업로드 크기. 대표 1장 + 상세 10장을 한 요청으로 받는다 (nginx client_max_body_size도 같이 맞춘다)
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 60MB
+
+  data:
+    # ES는 리포지토리 없이 ElasticsearchClient로 직접 다룬다 (JPA 리포지토리와 섞이지 않게 스캔도 끈다)
+    elasticsearch:
+      repositories:
+        enabled: false
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  # Outbox 릴레이가 이벤트 봉투를 발행하는 Kafka. 컨슈머는 seller.events(판매자 이벤트)와 delivery.events(배송 완료)를 받는다
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all                   # 브로커가 기록을 마친 뒤에 성공으로 본다(그때 outbox를 PUBLISHED로 바꿈)
+      properties:
+        enable.idempotence: true  # 프로듀서 재시도로 같은 메시지가 두 번 기록되지 않게
+        max.block.ms: 5000        # 브로커가 없을 때 send가 오래 막히지 않게(기본 60초)
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record            # 메시지 하나를 처리(커밋)한 뒤에 offset을 커밋한다
+
+  # 상품 검색 Elasticsearch (custom.product.search.engine=es일 때만 쓴다). 로컬은 기본값, 개발 서버는 서버 .env 값으로 접속한다
+  # 앱이 뜰 때는 접속하지 않으므로 ES가 꺼져 있어도 market은 뜨고, 검색은 DB 검색으로 대신한다
+  elasticsearch:
+    uris: ${SPRING_ELASTICSEARCH_URIS:http://localhost:9200}
+    username: ${SPRING_ELASTICSEARCH_USERNAME:elastic}
+    password: ${SPRING_ELASTICSEARCH_PASSWORD:elastic}
+    connection-timeout: 1s   # 검색 요청 안에서 부르므로 짧게 두고, 실패하면 DB 검색으로 대신한다
+    socket-timeout: 3s
+
+  task:
+    scheduling:
+      pool:
+        size: 5          # 스케줄 작업(주문 3, outbox 릴레이 1, 할인 경계 재색인 1)이 서로 기다리지 않게 작업 수만큼
+
+
+# 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
+custom:
+  jwt:
+    # 서명 키: 모든 서비스가 같은 값을 쓴다. 기본값 없이 환경변수(.env)로만 주입한다.
+    secret: ${JWT_SECRET}
+    accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  internal:
+    # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 모든 서비스가 같은 값을 쓰고, 기본값 없이 환경변수(.env)로만 주입한다.
+    # market이 받는 내부 API(/internal/v1/orders) 검사와 회원·결제·배송 내부 API 호출(MemberApiClient, PaymentApiClient, DeliveryApiClient)에 함께 쓴다
+    apiKey: ${INTERNAL_API_KEY}
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
+  product:
+    search:
+      engine: ${PRODUCT_SEARCH_ENGINE:es}   # 구매자 상품 검색 구현: es(Elasticsearch, ES 장애 때는 DB 검색으로 대신) | jpa(DB LIKE 검색, 테스트)
+      indexAlias: products                  # 검색·색인에 쓰는 alias. 실제 인덱스는 products_{만든 시각}이다 (market_es_user는 products로 시작하는 인덱스만 다룬다)
+      indexBatchSize: 500                   # 전체 재색인이 한 번에 읽어 bulk로 보내는 상품 수
+      discountBoundaryIntervalSeconds: 10   # 할인 경계 재색인 스케줄러 실행 간격(초). 할인이 시작·종료된 뒤 가격순에 반영되기까지 최대 이만큼 늦어진다
+      discountBoundaryOverlapSeconds: 30    # 지난 성공 실행 시각보다 이만큼 앞부터 다시 본다. 실행 지연·커밋 지연·서버 간 시계 차이로 놓치지 않게 겹쳐 읽는다
+      discountBoundaryLookbackMinutes: 5    # 앱을 띄운 뒤 첫 실행(지난 실행 시각이 없을 때)만 이만큼 돌아본다. 재시작·배포 동안 지난 경계를 채운다
+    image:
+      maxDetailImages: 10      # 상품 하나의 상세 이미지 최대 개수 (대표 이미지는 별도 1개)
+      storage: ${PRODUCT_IMAGE_STORAGE:local}   # 이미지 저장소: local(로컬 파일 시스템, 로컬 개발·테스트) | s3(S3 버킷, 배포 환경)
+      localDir: ${PRODUCT_IMAGE_DIR:./uploads}                          # local 저장 폴더 (Git에 올리지 않는다)
+      baseUrl: ${PRODUCT_IMAGE_BASE_URL:http://localhost:8082/images}   # local 이미지 URL 앞부분. 앱이 /images/**로 파일을 내려 준다
+      # s3 저장소 설정 (storage가 s3일 때만 쓴다). 인증은 액세스 키 없이 EC2 IAM 역할로 한다
+      s3:
+        bucket: ${PRODUCT_IMAGE_S3_BUCKET:}                  # 버킷 이름
+        region: ${PRODUCT_IMAGE_S3_REGION:ap-northeast-2}    # 버킷 리전 (서울)
+        baseUrl: ${PRODUCT_IMAGE_S3_BASE_URL:}               # 이미지 URL 앞부분 (예: https://{버킷}.s3.ap-northeast-2.amazonaws.com)
+  # 회원 내부 API(/internal/v1/members·sellers). member-service(8081)
+  member:
+    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
+    connectTimeoutMillis: 1000   # 회원 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 장바구니·주문 요청 안에서 부르므로 짧게 둔다
+  # 배송 내부 API(/internal/v1/deliveries). delivery-service(8085). 주문 상세의 배송 정보 조회에 쓴다
+  # 응답하지 못하면 주문 상세는 배송 정보 없이(deliveryUnavailable: true) 응답한다
+  delivery:
+    baseUrl: ${DELIVERY_SERVICE_URL:http://localhost:8085}
+    connectTimeoutMillis: 1000   # delivery 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 2000      # 응답 대기 제한 시간(밀리초). 주문 상세 요청 안에서 부르므로 짧게 둔다
+  # 결제 내부 API(/internal/v1/payments). payment-service(8083). 주문 결제(pay)·결제 취소(cancelPayment)·결제 내역 조회
+  # pay가 응답 시간 안에 오지 않으면 결과 불명으로 보고 주문을 PAYING으로 둔다. 재확인 스케줄러가 같은 키로 다시 불러 정리한다
+  # 결제 내역 조회가 실패하면 주문 상세는 결제 내역 없이(paymentUnavailable: true) 응답한다
+  payment:
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+    connectTimeoutMillis: 1000   # payment 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 5000      # 응답 대기 제한 시간(밀리초). 결제는 지갑 잠금을 기다릴 수 있어 다른 조회보다 길게 둔다. payingRecheckSeconds보다 짧아야 한다
+  order:
+    cartMaxQuantity: 99       # 장바구니 최대 수량
+    expireMinutes: 15          # 주문 생성 후 결제 제한 시간(분)
+    autoConfirmDays: 7         # 배송 완료 후(배송지 없는 주문은 결제 후) 자동 구매 확정(일)
+    autoConfirmIntervalSeconds: 3600   # 자동 구매 확정 스케줄러 실행 간격(초). 7일 경과 후 최대 이 시간만큼 늦게 확정된다
+    schedulerBatchSize: 100            # 주문 스케줄러(자동 구매 확정·결제 만료)가 한 번에 조회하는 주문 수
+    expireGraceMinutes: 1              # 결제 만료 시각 후 만료 취소까지 기다리는 시간(분)
+    expireIntervalSeconds: 60          # 결제 만료 취소 스케줄러 실행 간격(초)
+    payingRecheckSeconds: 30           # 결제 중(PAYING)이 된 뒤 이 시간(초)이 지나면 재확인 스케줄러가 같은 키로 결제를 다시 불러 정리한다
+    payingRecheckIntervalSeconds: 30   # 결제 재확인 스케줄러 실행 간격(초). 한 번에 schedulerBatchSize건씩 처리한다
+    payingAlertMinutes: 10             # 결제 중 상태가 이 시간(분) 넘게 정리되지 않으면 ERROR 로그로 알린다
+    couponEnabled: ${ORDER_COUPON_ENABLED:false}   # 주문에 쿠폰을 반영하는지. 결제(COUPON_SUBSIDY)와 정산(할인 후 금액)이 지원한 뒤에 켠다
+    shippingFee: 2500                  # 배송비(원). 주문당 한 번
+    freeShippingThreshold: 30000       # 무료 배송 기준(원). 상품 쿠폰 할인 후 상품 금액 합계가 이 금액 이상이면 배송비 0 (장바구니 쿠폰은 기준에 영향 없음)
+  outbox:
+    relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
+    relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
+    relayBatchSize: 100         # 릴레이가 한 번에 발행하는 최대 이벤트 수
+    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다(Kafka가 내려가 있는 건 세지 않음)
+    sendTimeoutMillis: 10000    # Kafka 브로커의 기록 확인(ack)을 기다리는 최대 시간(밀리초)
+    topicPartitions: 3          # 이벤트 토픽(<대상>.events) 파티션 수. 같은 aggregateId는 같은 파티션으로 가서 순서가 지켜진다
+  kafka:
+    consumer:
+      # 컨슈머가 실패한 메시지를 다시 처리하는 방식. 기본값이면 1·2·4·8초 간격으로 4번 더 처리하고(총 5번), 그래도 실패하면 <토픽>-dlt로 보낸다
+      maxRetries: 4                     # 처음 처리 뒤 다시 처리하는 횟수
+      retryInitialIntervalMillis: 1000  # 첫 재시도 전 대기(밀리초)
+      retryMultiplier: 2.0              # 재시도마다 대기 시간에 곱하는 값
+  scheduling:
+    enabled: true        # false면 모든 스케줄러가 멈춘다(통합 테스트용)

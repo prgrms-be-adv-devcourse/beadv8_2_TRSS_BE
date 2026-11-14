@@ -1,0 +1,52 @@
+package com.backend.boundedContext.member.app;
+
+import java.util.List;
+
+import org.springframework.stereotype.Component;
+
+import com.backend.boundedContext.member.app.dto.AdminMemberDetailDto;
+import com.backend.boundedContext.member.domain.Member;
+import com.backend.boundedContext.member.out.MemberOrderPort;
+import com.backend.boundedContext.member.out.MemberPaymentPort;
+import com.backend.global.exception.DomainException;
+import com.backend.shared.member.dto.SellerDto;
+import com.backend.shared.order.dto.OrderSummaryDto;
+import com.backend.shared.payment.dto.WalletSummaryDto;
+
+import lombok.RequiredArgsConstructor;
+
+@Component
+@RequiredArgsConstructor
+public class MemberGetMemberDetailUseCase {
+
+    private static final int RECENT_ORDER_LIMIT = 5;    // 관리자 화면에 보여 줄 최근 주문 수
+    private static final String WALLET_NOT_FOUND = "404-WALLET_NOT_FOUND";    // 결제 모듈의 지갑 없음 응답
+
+    private final MemberSupport memberSupport;
+    private final MemberGetSellerUseCase memberGetSellerUseCase;
+    private final MemberPaymentPort memberPaymentPort;
+    private final MemberOrderPort memberOrderPort;
+
+    // 관리자 회원 상세: 회원 기본 정보 + 판매자 상태 + 지갑 + 최근 주문
+    // 지갑·최근 주문은 화면 표시용이라, 결제·주문을 조회하지 못하면 그 영역만 비우고 회원 정보는 그대로 응답한다
+    public AdminMemberDetailDto getMemberDetail(Long memberId) {
+        Member member = memberSupport.getMember(memberId);
+        SellerDto seller = memberGetSellerUseCase.findSellerByMemberId(memberId).orElse(null);
+        WalletSummaryDto wallet = DisplayPortQueries.orNull(() -> findWallet(memberId));
+        List<OrderSummaryDto> recentOrders = DisplayPortQueries.orNull(() -> memberOrderPort.getRecentOrders(memberId, RECENT_ORDER_LIMIT));
+
+        return AdminMemberDetailDto.of(member, seller, wallet, recentOrders);
+    }
+
+    // 지갑이 없으면(가입 직후 지갑 생성 전·지갑을 만들지 않는 물류 담당자) null로 비움
+    private WalletSummaryDto findWallet(Long memberId) {
+        try {
+            return memberPaymentPort.getWallet(memberId);
+        } catch (DomainException e) {
+            if (WALLET_NOT_FOUND.equals(e.getResultCode())) {
+                return null;
+            }
+            throw e;
+        }
+    }
+}

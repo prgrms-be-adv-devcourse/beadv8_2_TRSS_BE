@@ -1,0 +1,239 @@
+package com.backend.boundedContext.order.app;
+
+import com.backend.shared.order.dto.CartLineDto;
+import com.backend.boundedContext.order.domain.ReturnFilter;
+import com.backend.boundedContext.order.domain.ReturnItemDecision;
+import com.backend.boundedContext.order.domain.ReturnReasonCode;
+import com.backend.boundedContext.order.in.dto.*;
+import com.backend.global.page.PageResponse;
+import com.backend.shared.order.dto.OrderCancelType;
+import com.backend.shared.order.dto.OrderSummaryDto;
+import com.backend.shared.order.dto.OrderStatus;
+import com.backend.shared.order.dto.ReviewableOrderItemDto;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 주문 컨텍스트 진입점
+ */
+@Service
+@RequiredArgsConstructor
+public class OrderFacade {
+
+    private final OrderGetCartUseCase orderGetCartUseCase;
+    private final OrderAddCartItemUseCase orderAddCartItemUseCase;
+    private final OrderUpdateCartItemUseCase orderUpdateCartItemUseCase;
+    private final OrderSelectAllCartItemsUseCase orderSelectAllCartItemsUseCase;
+    private final OrderDeleteCartItemsUseCase orderDeleteCartItemsUseCase;
+    private final OrderCreateOrderUseCase orderCreateOrderUseCase;
+    private final OrderGetOrdersUseCase orderGetOrdersUseCase;
+    private final OrderGetOrderDetailUseCase orderGetOrderDetailUseCase;
+    private final OrderPayOrderUseCase orderPayOrderUseCase;
+    private final OrderRecheckPayingOrdersUseCase orderRecheckPayingOrdersUseCase;
+    private final OrderCancelOrderUseCase orderCancelOrderUseCase;
+    private final OrderConfirmOrderUseCase orderConfirmOrderUseCase;
+    private final OrderRequestReturnUseCase orderRequestReturnUseCase;
+    private final OrderGetAdminReturnsUseCase orderGetAdminReturnsUseCase;
+    private final OrderApproveReturnUseCase orderApproveReturnUseCase;
+    private final OrderRejectReturnUseCase orderRejectReturnUseCase;
+    private final OrderAutoConfirmOrdersUseCase orderAutoConfirmOrdersUseCase;
+    private final OrderExpireOrdersUseCase orderExpireOrdersUseCase;
+    private final OrderGetRecentOrdersUseCase orderGetRecentOrdersUseCase;
+    private final OrderCheckActiveOrdersUseCase orderCheckActiveOrdersUseCase;
+    private final OrderGetSellerOrderItemsUseCase orderGetSellerOrderItemsUseCase;
+    private final OrderCancelPendingOrdersUseCase orderCancelPendingOrdersUseCase;
+    private final OrderMarkDeliveredUseCase orderMarkDeliveredUseCase;
+    private final OrderFindConfirmedOrderItemUseCase orderFindConfirmedOrderItemUseCase;
+    private final OrderGetCartItemsAmountUseCase orderGetCartItemsAmountUseCase;
+    private final OrderGetCartLinesUseCase orderGetCartLinesUseCase;
+
+    // 장바구니 조회
+    @Transactional(readOnly = true)
+    public CartResponse getCart(Long memberId) {
+        return orderGetCartUseCase.getCart(memberId);
+    }
+
+    // 장바구니 담기
+    @Transactional
+    public CartItemAddResponse addCartItem(Long memberId, Long optionId, int quantity) {
+        return orderAddCartItemUseCase.add(memberId, optionId, quantity);
+    }
+
+    // 장바구니 수량변경
+    @Transactional
+    public void updateCartItem(Long memberId, Long itemId, Integer quantity, Boolean selected) {
+        orderUpdateCartItemUseCase.update(memberId, itemId, quantity, selected);
+    }
+
+    // 장바구니 전체선택,해제
+    @Transactional
+    public void selectAllCartItems(Long memberId, boolean selected) {
+        orderSelectAllCartItemsUseCase.selectAll(memberId, selected);
+    }
+
+    // 장바구니 항목삭제
+    @Transactional
+    public void deleteCartItems(Long memberId, List<Long> itemIds) {
+        orderDeleteCartItemsUseCase.delete(memberId, itemIds);
+    }
+
+    // 주문생성
+    @Transactional
+    public OrderCreateResponse createOrder(Long buyerId, String idempotencyKey, List<Long> cartItemIds, long expectedTotalPrice,
+                                           ShippingAddressRequest shippingAddress, OrderCouponSelection coupons) {
+        return orderCreateOrderUseCase.create(buyerId, idempotencyKey, cartItemIds, expectedTotalPrice, shippingAddress, coupons);
+    }
+
+    // 주문목록 조회
+    @Transactional(readOnly = true)
+    public PageResponse<OrderSummaryResponse> getOrders(Long buyerId, List<OrderStatus> statuses, LocalDate from, LocalDate to, Pageable pageable) {
+        return orderGetOrdersUseCase.getOrders(buyerId, statuses, from, to, pageable);
+    }
+
+    // 주문 상세조회
+    @Transactional(readOnly = true)
+    public OrderDetailResponse getOrderDetail(Long buyerId, Long orderId) {
+        return orderGetOrderDetailUseCase.getOrderDetail(buyerId, orderId);
+    }
+
+    // 결제요청. 결제는 HTTP라 트랜잭션을 여기서 열지 않고 UseCase가 두 개로 나눠 연다 (PAYING 커밋 → 결제 요청 → 결과 반영)
+    public OrderPayResponse payOrder(Long buyerId, Long orderId) {
+        return orderPayOrderUseCase.pay(buyerId, orderId);
+    }
+
+    // 주문취소
+    @Transactional
+    public OrderCancelResponse cancelOrder(Long buyerId, Long orderId) {
+        return orderCancelOrderUseCase.cancel(buyerId, orderId);
+    }
+
+    // 구매확정 (수동)
+    @Transactional
+    public OrderConfirmResponse confirmOrder(Long buyerId, Long orderId) {
+        return orderConfirmOrderUseCase.confirm(buyerId, orderId);
+    }
+
+    // 반품 요청 (구매자)
+    @Transactional
+    public ReturnRequestResponse requestReturn(Long buyerId, Long orderId, ReturnReasonCode reasonCode, String reason) {
+        return orderRequestReturnUseCase.request(buyerId, orderId, reasonCode, reason);
+    }
+
+    // 관리자 반품 목록
+    @Transactional(readOnly = true)
+    public PageResponse<AdminReturnSummaryResponse> getAdminReturns(ReturnFilter filter, Pageable pageable) {
+        return orderGetAdminReturnsUseCase.getReturns(filter, pageable);
+    }
+
+    // 관리자 반품 승인: 주문 상태·재고 복원·반품 승인 이벤트를 한 트랜잭션으로
+    @Transactional
+    public ReturnResultResponse approveReturn(Long orderId, List<ReturnItemDecision> decisions) {
+        return orderApproveReturnUseCase.approve(orderId, decisions);
+    }
+
+    // 관리자 반품 거절: 기준일이 지났으면 같은 트랜잭션에서 구매 확정
+    @Transactional
+    public ReturnResultResponse rejectReturn(Long orderId, String reason) {
+        return orderRejectReturnUseCase.reject(orderId, reason);
+    }
+
+    // 자동 구매확정 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findAutoConfirmTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderAutoConfirmOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 자동 구매확정 한 건 (스케줄러)
+    @Transactional
+    public boolean autoConfirmOrder(Long orderId, LocalDateTime now) {
+        return orderAutoConfirmOrdersUseCase.autoConfirm(orderId, now);
+    }
+
+    // 배송 완료 반영 (delivery.events 컨슈머)
+    @Transactional
+    public void markDelivered(Long orderId, LocalDateTime deliveredAt) {
+        orderMarkDeliveredUseCase.markDelivered(orderId, deliveredAt);
+    }
+
+    // 결제 만료 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findExpireTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderExpireOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 결제 만료 취소 한 건 (스케줄러)
+    @Transactional
+    public boolean expireOrder(Long orderId, LocalDateTime now) {
+        return orderExpireOrdersUseCase.expire(orderId, now);
+    }
+
+    // 결제 재확인 대상 주문 id 조회 (스케줄러)
+    @Transactional(readOnly = true)
+    public List<Long> findPayingRecheckTargetIds(LocalDateTime now, Long afterId, int limit) {
+        return orderRecheckPayingOrdersUseCase.findTargetIds(now, afterId, limit);
+    }
+
+    // 결제 재확인 한 건 (스케줄러). 결제 요청이 HTTP라 트랜잭션은 UseCase가 결과 반영 때만 연다
+    public boolean recheckPayingOrder(Long orderId, LocalDateTime now) {
+        return orderRecheckPayingOrdersUseCase.recheck(orderId, now);
+    }
+
+    // 최근 주문 목록 (OrderApi)
+    @Transactional(readOnly = true)
+    public List<OrderSummaryDto> getRecentOrders(Long buyerId, int limit) {
+        return orderGetRecentOrdersUseCase.getRecentOrders(buyerId, limit);
+    }
+
+    // 구매자 진행 중 주문 여부 (OrderApi)
+    @Transactional(readOnly = true)
+    public boolean hasActiveOrders(Long buyerId) {
+        return orderCheckActiveOrdersUseCase.hasActiveOrders(buyerId);
+    }
+
+    // 판매자 진행 중 판매 여부 (OrderApi)
+    @Transactional(readOnly = true)
+    public boolean hasActiveSales(Long sellerId) {
+        return orderCheckActiveOrdersUseCase.hasActiveSales(sellerId);
+    }
+
+    // 구매자 본인의 구매 확정 주문 항목 (OrderApi)
+    @Transactional(readOnly = true)
+    public Optional<ReviewableOrderItemDto> findConfirmedOrderItem(Long buyerId, Long orderItemId) {
+        return orderFindConfirmedOrderItemUseCase.find(buyerId, orderItemId);
+    }
+
+    // 판매자 주문 항목 조회
+    @Transactional(readOnly = true)
+    public PageResponse<SellerOrderItemResponse> getSellerOrderItems(Long memberId, OrderStatus status,
+                                                                     LocalDate from, LocalDate to,
+                                                                     String keyword, Pageable pageable) {
+        return orderGetSellerOrderItemsUseCase.getSellerOrderItems(memberId, status, from, to, keyword, pageable);
+    }
+
+    // 상품 판매 중지 및 삭제 시 결제 대기 주문 취소+재고 복원 (OrderApi). 결제 중(PAYING) 주문은 취소하지 않는다
+    // (결제 시작 때 판매 가능을 확인했으므로 결제되면 PAID로 둔다)
+    @Transactional
+    public int cancelPendingOrders(Collection<Long> productIds, OrderCancelType cancelType) {
+        return orderCancelPendingOrdersUseCase.cancel(productIds, cancelType, LocalDateTime.now());
+    }
+
+    // 장바구니 항목들의 현재 상품 금액 합계 (OrderApi, 장바구니 쿠폰 예상 할인액 계산용)
+    @Transactional(readOnly = true)
+    public long getCartItemsAmount(Long buyerId, Collection<Long> cartItemIds) {
+        return orderGetCartItemsAmountUseCase.getAmount(buyerId, cartItemIds);
+    }
+
+    // 장바구니 항목들의 현재 가격 정보 (OrderApi, 상품 쿠폰 코드 검증용)
+    @Transactional(readOnly = true)
+    public List<CartLineDto> getCartLines(Long buyerId, Collection<Long> cartItemIds) {
+        return orderGetCartLinesUseCase.getLines(buyerId, cartItemIds);
+    }
+}
