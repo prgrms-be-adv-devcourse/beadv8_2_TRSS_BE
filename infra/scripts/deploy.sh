@@ -12,7 +12,7 @@ set -euo pipefail
 
 # 앱 서비스 목록. compose.prod.yaml의 서비스 이름이고, 소스 폴더는 <이름>-service, 컨테이너는 palette-<이름>이다.
 # 서비스가 분리되면 여기에 추가한다.
-APP_SERVICES=(member market payment settlement delivery notification)
+APP_SERVICES=(member market payment settlement delivery notification ai)
 
 # 모든 앱 이미지에 들어가는 파일. 하나라도 바뀌면 앱을 전부 다시 빌드한다.
 #   common/(공통 코드), Gradle 설정, Dockerfile, infra/compose.prod.yaml(앱 build.args 등이 여기 있어 바뀌면 이미지를 다시 만든다)

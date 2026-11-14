@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 # 운영 배포용 앱 이미지. JDK 이미지에서 jar를 빌드하고, 실행 이미지에는 JRE와 jar만 담는다.
 #
-# 서비스 6개(compose.prod.yaml의 member·market·payment·settlement·delivery·notification)가 이 파일 하나로 이미지를 만든다.
+# 서비스 7개(compose.prod.yaml의 member·market·payment·settlement·delivery·notification·ai)가 이 파일 하나로 이미지를 만든다.
 # 1단계(build)는 MODULE과 상관없이 모든 서비스에서 똑같아서, compose가 여러 개를 같이 빌드하면
 # Docker(BuildKit)가 같은 작업으로 보고 한 번만 실행한다. 2단계에서 MODULE로 자기 jar만 가져간다.
 
-# 1단계: 빌드 (서비스 6개 공통, 한 번만 실행)
+# 1단계: 빌드 (서비스 7개 공통, 한 번만 실행)
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace
 
@@ -30,8 +30,9 @@ COPY payment-service/src payment-service/src
 COPY settlement-service/src settlement-service/src
 COPY delivery-service/src delivery-service/src
 COPY notification-service/src notification-service/src
+COPY ai-service/src ai-service/src
 
-# Gradle을 한 번만 띄워 실행 jar 6개를 같이 만든다. common은 한 번만 컴파일해 6개가 같이 쓴다.
+# Gradle을 한 번만 띄워 실행 jar 7개를 같이 만든다. common은 한 번만 컴파일해 7개가 같이 쓴다.
 #   --parallel   : 서로 기다릴 필요 없는 서비스 컴파일을 Gradle 하나 안에서 동시에 돌린다
 #   --build-cache: 이전 배포와 코드가 같은 모듈은 컴파일 결과를 캐시에서 꺼내 쓴다
 #   -x test      : 테스트는 CI에서 돌리므로 생략한다
@@ -40,7 +41,7 @@ COPY notification-service/src notification-service/src
 #   지우려면 서버에서 docker builder prune
 # SERVICES: 만들 jar 목록. 기본은 전부. deploy.sh가 바뀐 앱만 빌드할 때 --build-arg로 그 앱만 넘긴다(예: "market-service").
 #   한 번의 배포에서 빌드하는 이미지는 모두 같은 값을 받으므로, 이 단계는 여전히 한 번만 돈다.
-ARG SERVICES="member-service market-service payment-service settlement-service delivery-service notification-service"
+ARG SERVICES="member-service market-service payment-service settlement-service delivery-service notification-service ai-service"
 RUN --mount=type=cache,target=/root/.gradle \
     chmod +x gradlew \
     && ./gradlew --no-daemon --parallel --build-cache -x test \
@@ -71,7 +72,7 @@ USER app
 ARG APP_VERSION=unknown
 ENV LOGGING_STRUCTURED_ECS_SERVICE_VERSION=${APP_VERSION}
 
-# member-service 8081, market-service 8082, payment-service 8083, settlement-service 8084, delivery-service 8085, notification-service 8086
+# member-service 8081, market-service 8082, payment-service 8083, settlement-service 8084, delivery-service 8085, notification-service 8086, ai-service 8087
 # (각 application.yaml의 server.port)
-EXPOSE 8081 8082 8083 8084 8085 8086
+EXPOSE 8081 8082 8083 8084 8085 8086 8087
 ENTRYPOINT ["java", "-jar", "app.jar"]

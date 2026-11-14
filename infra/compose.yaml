@@ -4,7 +4,7 @@ name: palette
 
 services:
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17-trixie   # postgres 17 + pgvector 확장(AI 추천 임베딩). postgres:17과 같은 Debian trixie(glibc 2.41)라 기존 데이터·정렬 규칙이 그대로 맞는다. 기본 pg17 태그는 bookworm(glibc 2.36)이라 쓰지 않는다
     container_name: palette-postgres
     environment:
       POSTGRES_DB: ${DB_NAME:-palette}

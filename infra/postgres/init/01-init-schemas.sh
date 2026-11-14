@@ -44,6 +44,13 @@ create_service_schema delivery   "${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD�
 create_service_schema notification "${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD가 없습니다}"
 create_service_schema ai         "${AI_DB_PASSWORD:?AI_DB_PASSWORD가 없습니다}"
 
+# AI 추천의 임베딩 저장·유사도 검색용 pgvector 확장. postgres 이미지가 pgvector/pgvector여야 한다.
+# 확장은 superuser만 만들 수 있어 Flyway(ai_user)가 아니라 여기서 만든다.
+# ai_user의 search_path가 ai뿐이라 vector 타입도 ai 스키마에 둔다.
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+     -c "CREATE EXTENSION IF NOT EXISTS vector SCHEMA ai;"
+echo "✔ vector 확장 (ai 스키마)"
+
 # 모든 스키마를 읽기만 하는 계정. 팀원이 개발 서버 데이터를 확인할 때 쓴다(서버는 dbtunnel 터널로 접속).
 # 스키마마다 지금 있는 테이블 + 앞으로 그 주인이 만들 테이블(DEFAULT PRIVILEGES)에 읽기 권한을 준다.
 create_readonly_user() {

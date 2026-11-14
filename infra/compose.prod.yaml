@@ -69,7 +69,8 @@ services:
         {"name":"payment","url":"/v3/api-docs/payment"},
         {"name":"settlement","url":"/v3/api-docs/settlement"},
         {"name":"delivery","url":"/v3/api-docs/delivery"},
-        {"name":"notification","url":"/v3/api-docs/notification"}]
+        {"name":"notification","url":"/v3/api-docs/notification"},
+        {"name":"ai","url":"/v3/api-docs/ai"}]
     mem_limit: 64m
 
   # 회원·인증·판매자(member-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
@@ -326,8 +327,44 @@ services:
       kafka:
         condition: service_healthy
 
+  # AI 추천(ai-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 ai 스키마에 ai_user로 접속한다(DB_USERNAME과 다른 계정). pgvector 확장은 postgres/init/01-init-schemas.sh가 ai 스키마에 만든다.
+  # 상품 변경(product.events)을 Kafka로 받아 추천용 상품 사본·성분 태그·임베딩을 만든다.
+  ai:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: ai-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-ai
+    container_name: palette-ai
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      AI_DB_USERNAME: ${AI_DB_USERNAME:?AI_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # notification과 같은 768m(힙 576MB)
+    mem_limit: 768m
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8087 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # ai는 Redis를 쓰지 않는다
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17-trixie   # postgres 17 + pgvector 확장(AI 추천 임베딩). postgres:17과 같은 Debian trixie(glibc 2.41)라 기존 데이터·정렬 규칙이 그대로 맞는다. 기본 pg17 태그는 bookworm(glibc 2.36)이라 쓰지 않는다
     container_name: palette-postgres
     restart: unless-stopped
     logging: *default-logging
