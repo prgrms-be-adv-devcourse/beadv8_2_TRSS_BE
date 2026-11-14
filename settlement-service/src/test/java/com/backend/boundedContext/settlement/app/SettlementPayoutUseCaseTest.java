@@ -39,6 +39,7 @@ import java.util.function.Supplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -524,8 +525,8 @@ class SettlementPayoutUseCaseTest {
     }
 
     @Test
-    @DisplayName("지급은 됐는데 그사이 관리자가 보류(HOLD)했으면 상태를 바꾸지 않고 확인 필요 이력을 남긴다")
-    void complete_afterHold_keepsHoldAndRecords() {
+    @DisplayName("지급은 됐는데 그사이 보류(HOLD)됐어도, 금액이 같으면 PAID로 맞추고 보류 사유는 이력에 남긴다")
+    void complete_afterHold_paid() {
         Settlement s = saveReady();
         paymentApi.beforeReturn = () -> {
             s.markFailed("결과 확인: 결제 원장에 지급 기록 없음", LocalDateTime.now(), 3, 10);
@@ -534,11 +535,97 @@ class SettlementPayoutUseCaseTest {
 
         SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
 
+        assertTrue(result.isPaid());
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+        assertEquals(500L, s.getWalletTxId());
+        assertNull(s.getHoldReason());
+        SettlementProcessHistory last = histories.get(histories.size() - 1);
+        assertEquals(SettlementHistoryResult.SUCCEEDED, last.getResult());
+        assertTrue(last.getFailReason().contains("관리자 보류"));
+    }
+
+    @Test
+    @DisplayName("지급은 됐는데 보류 중이고 금액도 정산서와 다르면, 상태를 바꾸지 않고 확인 필요 이력을 남긴다")
+    void complete_afterHold_amountDiffers_keepsHold() {
+        Settlement s = saveReady();
+        paymentApi.beforeReturn = () -> {
+            s.markFailed("결과 확인: 결제 원장에 지급 기록 없음", LocalDateTime.now(), 3, 10);
+            s.hold("관리자 보류");
+        };
+        paymentApi.overridePayout = 17_000L;
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
         assertFalse(result.processed());
         assertEquals(SettlementStatus.HOLD, s.getStatus());
         SettlementProcessHistory last = histories.get(histories.size() - 1);
         assertEquals(SettlementHistoryResult.SKIPPED, last.getResult());
         assertTrue(last.getFailReason().contains("확인 필요"));
+    }
+
+    @Test
+    @DisplayName("FAILED 재시도 전에 결제 원장에 이전 지급이 있으면, 판매자가 그사이 제재됐어도 HOLD가 아니라 PAID로 확정하고 다시 요청하지 않는다")
+    void payout_failedButAlreadyTransferred_paidWithoutTransfer() {
+        Settlement s = saveFailedDue();
+        seller = () -> new SellerDto(SELLER_ID, SELLER_MEMBER_ID, "팔레트상점", SellerStatus.SANCTIONED);
+        paymentApi.ledger = new TransferResultDto("SETTLEMENT-31", 501L, 18_000L, 2_000L, LocalDateTime.now());
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
+
+        assertTrue(result.isPaid());
+        assertEquals(SettlementStatus.PAID, s.getStatus());
+        assertEquals(501L, s.getWalletTxId());
+        assertEquals(0, paymentApi.transferCalls);
+        assertEquals(SettlementHistoryResult.SUCCEEDED, histories.get(histories.size() - 1).getResult());
+    }
+
+    @Test
+    @DisplayName("관리자 재처리(MANUAL_REQUIRED)도 결제 원장에 이전 지급이 있으면 PAID로 확정한다")
+    void retryManually_alreadyTransferred_paid() {
+        Settlement s = saveReady();
+        s.markManualRequired("결과 확인: 결제 원장에 지급 기록 없음");
+        paymentApi.ledger = new TransferResultDto("SETTLEMENT-31", 501L, 18_000L, 2_000L, LocalDateTime.now());
+
+        SettlementPayoutResult result = useCase.retryManually(SETTLEMENT_ID, "지급 여부 확인");
+
+        assertTrue(result.isPaid());
+        assertEquals(0, paymentApi.transferCalls);
+        assertEquals("지급 여부 확인", histories.get(histories.size() - 1).getAdminReason());
+    }
+
+    @Test
+    @DisplayName("결제 원장의 이전 지급 금액이 정산서와 다르면 다시 요청하지 않고 MANUAL_REQUIRED")
+    void payout_failedButTransferAmountDiffers_manual() {
+        Settlement s = saveFailedDue();
+        paymentApi.ledger = new TransferResultDto("SETTLEMENT-31", 501L, 17_000L, 2_000L, LocalDateTime.now());
+
+        useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
+
+        assertEquals(SettlementStatus.MANUAL_REQUIRED, s.getStatus());
+        assertEquals(0, paymentApi.transferCalls);
+    }
+
+    @Test
+    @DisplayName("결제 원장 확인이 실패하면(연결 전 임시 구현 등) 지금처럼 같은 멱등 키로 지급을 요청한다")
+    void payout_failed_ledgerLookupFails_proceeds() {
+        Settlement s = saveFailedDue();
+        paymentApi.findError = () -> new UnsupportedOperationException("연결 전");
+
+        SettlementPayoutResult result = useCase.payout(SETTLEMENT_ID, SettlementTrigger.RETRY_SCHEDULER, null, null);
+
+        assertTrue(result.isPaid());
+        assertEquals(1, paymentApi.transferCalls);
+        assertEquals("SETTLEMENT-31", paymentApi.lastCommand.idempotencyKey());
+    }
+
+    @Test
+    @DisplayName("처음 지급하는 READY 정산서는 결제 원장을 미리 조회하지 않는다")
+    void payout_ready_noLedgerLookup() {
+        saveReady();
+
+        useCase.payout(SETTLEMENT_ID, SettlementTrigger.MONTHLY_JOB, null, null);
+
+        assertEquals(0, paymentApi.findCalls);
     }
 
     /** 재시도할 수 있는 4xx 거절(결제가 판단을 마쳐 돈이 움직이지 않음) */
@@ -552,6 +639,14 @@ class SettlementPayoutUseCaseTest {
             public String name() { return name; }
             public String msg() { return msg; }
         };
+    }
+
+    /** 한 번 실패하고 다음 재시도 일시가 지난 FAILED 정산서 */
+    private Settlement saveFailedDue() {
+        Settlement s = saveReady();
+        s.markFailed("응답 시간 초과 뒤 재확인: 지급 기록 없음", LocalDateTime.now(), 3, 10);
+        ReflectionTestUtils.setField(s, "nextRetryAt", LocalDateTime.now().minusSeconds(1));
+        return s;
     }
 
     /** 지급을 요청했는데 결과를 모르는 PROCESSING 정산서 (5분 넘게 지남) */
@@ -604,6 +699,7 @@ class SettlementPayoutUseCaseTest {
         Runnable beforeReturn;
         Long overridePayout;
         TransferResultDto ledger;
+        Supplier<RuntimeException> findError;
         SettlementTransferCommand lastCommand;
         int transferCalls;
         int findCalls;
@@ -625,6 +721,7 @@ class SettlementPayoutUseCaseTest {
                 "transfer", args -> paymentApi.transfer((SettlementTransferCommand) args[0]),
                 "findTransfer", args -> {
                     paymentApi.findCalls++;
+                    if (paymentApi.findError != null) throw paymentApi.findError.get();
                     return Optional.ofNullable(paymentApi.ledger);
                 }));
     }

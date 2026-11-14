@@ -35,6 +35,7 @@ import java.util.Optional;
  *
  * 결제는 다른 서비스(HTTP)라 "같은 트랜잭션에서 함께 롤백"이 성립하지 않는다. 그래서 지급을 세 구간으로 나눈다(3차 코드리뷰 변경 제안 2).
  *
+ * ⓪ 이전에 지급을 시도한 정산서(FAILED·MANUAL_REQUIRED)는 결제 원장부터 확인(잠금 밖). 이미 지급됐으면 다시 요청하지 않고 확정
  * ① 선점 (짧은 트랜잭션)
  *    판매자 조회(잠금 밖) → 정산서 잠금 → 지급 가능한 상태인지 → 판매자 제재면 HOLD로 끝 → 원장 재대조 불일치가 남았으면 HOLD로 끝
  *    → 정산서 합계 = 후보 합계 확인 → PROCESSING(선점 시각, 관리자 재처리 여부 기록)으로 커밋
@@ -42,7 +43,7 @@ import java.util.Optional;
  *    SettlementPaymentPort.transfer(멱등 키 SETTLEMENT-{id})
  * ③ 결과 기록 (짧은 트랜잭션)
  *    성공: PROCESSING이면 금액 확인 후 PAID. 응답이 늦어 재확인이 먼저 FAILED·MANUAL_REQUIRED로 바꿨어도 PAID로 확정
- *          (그사이 HOLD가 됐으면 바꾸지 않고 에러 로그·이력으로 확인 요청)
+ *          (그사이 HOLD가 됐어도 금액이 같으면 PAID로 맞추고 보류 사유는 이력에)
  *    결제가 확실히 거절(4xx): FAILED(재시도 불가 코드면 MANUAL_REQUIRED)
  *    결과 모름(응답 없음, 5xx 등): PROCESSING으로 둔다 → 재확인 스케줄러가 findTransfer로 확정(reconcileProcessing)
  *
@@ -104,10 +105,16 @@ public class SettlementPayoutUseCase {
                                          String adminReason) {
         boolean manualRetry = trigger == SettlementTrigger.ADMIN && batchExecutionId == null;
 
+        // 이전에 지급을 시도한 정산서는 다시 요청하기 전에 결제 원장부터 본다(잠금 밖)
+        Settlement current = settlementSupport.getSettlement(settlementId);
+        Optional<SettlementPayoutResult> confirmed = confirmEarlierTransfer(current, trigger, manualRetry,
+                batchExecutionId, adminReason);
+        if (confirmed.isPresent()) return confirmed.get();
+
         // ① 선점. 판매자 조회(HTTP)는 행 잠금 전에 끝낸다
         Prepared prepared;
         try {
-            SellerDto seller = settlementMemberPort.getSeller(settlementSupport.getSettlement(settlementId).getSellerId());
+            SellerDto seller = settlementMemberPort.getSeller(current.getSellerId());
             prepared = newTransaction.execute(status ->
                     prepare(settlementId, seller, trigger, manualRetry, batchExecutionId, adminReason));
         } catch (RuntimeException e) {
@@ -136,6 +143,59 @@ public class SettlementPayoutUseCase {
         // ③ 결과 기록
         return newTransaction.execute(status -> complete(settlementId, attemptNo, transferred, trigger,
                 batchExecutionId, adminReason));
+    }
+
+    /**
+     * 이전 시도가 이미 지급됐는지 결제 원장으로 확인한다(FAILED·MANUAL_REQUIRED 중 지금 지급할 수 있는 정산서만)
+     * 재확인이 결제 커밋 전에 돌아 FAILED가 됐고 그 요청의 응답도 받지 못했다면, 실제로는 지급된 정산서다.
+     * 이 확인 없이 ①로 가면 그사이 제재·원장 불일치가 생긴 경우 transfer를 부르지 않고 HOLD로 끝나, 지급된 정산서가 HOLD에 남는다.
+     * 지급 기록이 있으면 금액이 같을 때 PAID, 다르면 MANUAL_REQUIRED로 확정하고 다시 요청하지 않는다.
+     * 기록이 없거나 원장 조회가 실패하면(연결 전 임시 구현 포함) 비어 있는 값을 돌려줘 지금처럼 지급을 진행한다(같은 멱등 키라 안전).
+     */
+    private Optional<SettlementPayoutResult> confirmEarlierTransfer(Settlement current, SettlementTrigger trigger,
+                                                                    boolean manualRetry, Long batchExecutionId,
+                                                                    String adminReason) {
+        boolean triedBefore = current.getStatus() == SettlementStatus.FAILED
+                || current.getStatus() == SettlementStatus.MANUAL_REQUIRED;
+        if (!triedBefore || !current.isPayable(manualRetry, LocalDateTime.now())) return Optional.empty();
+
+        Optional<TransferResultDto> ledger;
+        try {
+            ledger = settlementPaymentPort.findTransfer(current.getIdempotencyKey());
+        } catch (RuntimeException e) {
+            log.warn("지급 전 결제 원장 확인 실패, 그대로 지급을 진행 settlementId={} [{}]", current.getId(),
+                    errorCodeOf(e));
+            return Optional.empty();
+        }
+        if (ledger.isEmpty()) return Optional.empty();
+
+        TransferResultDto transferred = ledger.get();
+        Long settlementId = current.getId();
+        return Optional.of(newTransaction.execute(status -> {
+            LocalDateTime now = LocalDateTime.now();
+            Settlement settlement = settlementSupport.getSettlementWithLock(settlementId);
+            if (settlement.getStatus() != SettlementStatus.FAILED
+                    && settlement.getStatus() != SettlementStatus.MANUAL_REQUIRED) {
+                return SettlementPayoutResult.skipped(settlement);   // 원장을 보는 사이 다른 작업이 먼저 바꿨다
+            }
+            int attemptNo = settlement.nextAttemptNo();
+            if (settlement.matchesTransfer(transferred.payoutAmount(), transferred.feeAmount())) {
+                settlement.markPaid(transferred.walletTransactionId(), now);
+                settlementProcessHistoryRepository.save(SettlementProcessHistory.payout(settlementId, attemptNo,
+                        trigger, SettlementHistoryResult.SUCCEEDED, null,
+                        "이전 지급 요청이 결제에 반영된 것을 원장에서 확인해 PAID(다시 요청하지 않음)", adminReason,
+                        batchExecutionId, now));
+                log.info("정산 지급 전 원장 확인: 이전 요청이 이미 지급됨 settlementId={} trigger={}", settlementId, trigger);
+            } else {
+                DomainException mismatch = new DomainException(SettlementErrorCode.SETTLEMENT_AMOUNT_MISMATCH);
+                settlement.markManualRequired(mismatch.getMsg());
+                settlementProcessHistoryRepository.save(SettlementProcessHistory.payout(settlementId, attemptNo,
+                        trigger, SettlementHistoryResult.MANUAL_REQUIRED, mismatch.getResultCode(),
+                        "지급 전 원장 확인: 이전 지급 금액이 정산서와 다름", adminReason, batchExecutionId, now));
+                log.error("정산 지급 전 원장 확인: 이전 지급 금액이 정산서와 다름 settlementId={}", settlementId);
+            }
+            return SettlementPayoutResult.of(settlement, attemptNo, true);
+        }));
     }
 
     /**
@@ -243,19 +303,10 @@ public class SettlementPayoutUseCase {
                     adminReason, batchExecutionId, now));
             return SettlementPayoutResult.skipped(settlement);
         }
-        if (current != SettlementStatus.PROCESSING && current != SettlementStatus.FAILED
-                && current != SettlementStatus.MANUAL_REQUIRED) {
-            // 지급은 됐는데 그사이 관리자가 보류(HOLD)했다. 상태를 바꾸지 않고 사람이 확인하게 남긴다
-            settlementProcessHistoryRepository.save(SettlementProcessHistory.payout(settlementId, attemptNo, trigger,
-                    SettlementHistoryResult.SKIPPED, null,
-                    "지급됐지만 정산서가 %s 상태라 PAID로 바꾸지 않음(확인 필요) walletTxId=%s".formatted(
-                            current, transferred.walletTransactionId()),
-                    adminReason, batchExecutionId, now));
-            log.error("정산 지급은 됐지만 정산서가 {} 상태라 PAID로 바꾸지 못함 settlementId={} walletTxId={}",
-                    current, settlementId, transferred.walletTransactionId());
-            return SettlementPayoutResult.skipped(settlement);
+        if (current == SettlementStatus.HOLD) {
+            return completeWhileHeld(settlement, attemptNo, transferred, trigger, batchExecutionId, adminReason, now);
         }
-        // FAILED·MANUAL_REQUIRED: 응답이 늦어 재확인이 "지급 기록 없음"으로 먼저 실패 처리했다.
+        // READY·FAILED·MANUAL_REQUIRED: 응답이 늦어 재확인이 "지급 기록 없음"으로 먼저 실패 처리했다(그 뒤 보류 해제로 READY 포함).
         // 결제 응답이 이 정산서 멱등 키로 지급됐다는 근거이므로 아래에서 PROCESSING과 같이 확정한다
         // 같은 멱등 키의 지급 내역이 이미 있었는데 금액이 다르면 재시도 불가(돈은 이미 움직였으므로 사람이 확인)
         if (!settlement.matchesTransfer(transferred.payoutAmount(), transferred.feeAmount())) {
@@ -275,6 +326,35 @@ public class SettlementPayoutUseCase {
                 SettlementHistoryResult.SUCCEEDED, null, null, adminReason, batchExecutionId, now));
         log.info("정산 지급 완료 settlementId={} trigger={} attempt={} payout={} fee={}",
                 settlementId, trigger, attemptNo, settlement.getPayoutAmount(), settlement.getTotalFee());
+        return SettlementPayoutResult.of(settlement, attemptNo, true);
+    }
+
+    /**
+     * ③ 지급은 됐는데 그사이 정산서가 보류(HOLD)됐다(재확인이 먼저 FAILED로 바꾼 뒤 관리자·제재 보류)
+     * 돈이 이미 판매자에게 갔으므로 금액이 같으면 PAID로 맞추고 보류 사유는 이력에 남긴다(HOLD로 두면 미정산 금액에 계속 잡힌다).
+     * 금액이 다르면 HOLD에서는 MANUAL_REQUIRED로 바꿀 수 없으므로 상태를 그대로 두고 에러 로그·이력으로 확인을 요청한다
+     */
+    private SettlementPayoutResult completeWhileHeld(Settlement settlement, int attemptNo, TransferResultDto transferred,
+                                                     SettlementTrigger trigger, Long batchExecutionId,
+                                                     String adminReason, LocalDateTime now) {
+        Long settlementId = settlement.getId();
+        String holdReason = settlement.getHoldReason();
+        if (!settlement.matchesTransfer(transferred.payoutAmount(), transferred.feeAmount())) {
+            settlementProcessHistoryRepository.save(SettlementProcessHistory.payout(settlementId, attemptNo, trigger,
+                    SettlementHistoryResult.SKIPPED, SettlementErrorCode.SETTLEMENT_AMOUNT_MISMATCH.resultCode(),
+                    "지급됐지만 금액이 정산서와 다르고 보류 중이라 상태를 바꾸지 않음(확인 필요) walletTxId=%s"
+                            .formatted(transferred.walletTransactionId()),
+                    adminReason, batchExecutionId, now));
+            log.error("정산 지급은 됐지만 금액이 다르고 보류 중이라 상태를 바꾸지 못함 settlementId={} walletTxId={}",
+                    settlementId, transferred.walletTransactionId());
+            return SettlementPayoutResult.skipped(settlement);
+        }
+        settlement.markPaidWhileHeld(transferred.walletTransactionId(), now);
+        settlementProcessHistoryRepository.save(SettlementProcessHistory.payout(settlementId, attemptNo, trigger,
+                SettlementHistoryResult.SUCCEEDED, null,
+                "보류 중이었지만 지급 응답으로 지급을 확인해 PAID(보류 사유: %s)".formatted(holdReason),
+                adminReason, batchExecutionId, now));
+        log.warn("보류 중이던 정산서가 이미 지급돼 PAID로 맞춤 settlementId={} holdReason={}", settlementId, holdReason);
         return SettlementPayoutResult.of(settlement, attemptNo, true);
     }
 

@@ -231,6 +231,22 @@ public class Settlement extends BaseIdAndTime {
     }
 
     /**
+     * 보류(HOLD) 중 지급 확인: 이 정산서 멱등 키의 지급 결과(결제 응답)로 이미 지급된 것을 확인했을 때만 쓴다
+     * HOLD는 "지급하지 않는다"는 뜻이지만 돈이 이미 움직였으므로 상태를 사실에 맞춘다(남겨 두면 미정산 금액에 계속 잡힌다)
+     * 보류 사유는 지우고, 호출한 쪽이 이력에 남긴다. 일반 지급 경로의 HOLD → PAID는 여전히 막는다({@link #markPaid})
+     */
+    public void markPaidWhileHeld(Long walletTxId, LocalDateTime paidAt) {
+        requireStatus(SettlementStatus.HOLD);
+        this.holdReason = null;
+        this.processingStartedAt = null;
+        this.processingManual = false;
+        this.status = SettlementStatus.PAID;
+        this.walletTxId = walletTxId;
+        this.paidAt = paidAt;
+        this.nextRetryAt = null;
+    }
+
+    /**
      * ② 자동 지급 실패 기록
      * 실패 횟수가 maxAttempts에 닿으면 MANUAL_REQUIRED, 아니면 FAILED + 다음 재시도 일시
      * 다음 재시도 일시는 실패 시각을 분 단위로 자른 뒤 간격을 더한다.

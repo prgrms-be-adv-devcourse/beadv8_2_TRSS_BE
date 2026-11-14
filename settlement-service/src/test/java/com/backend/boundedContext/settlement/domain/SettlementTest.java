@@ -210,6 +210,20 @@ class SettlementTest {
     }
 
     @Test
+    @DisplayName("보류 중 지급 확인은 HOLD에서만 PAID로 바꾸고 보류 사유를 지운다(다른 상태는 409)")
+    void markPaidWhileHeld() {
+        Settlement held = settlementIn(SettlementStatus.HOLD);
+        held.markPaidWhileHeld(501L, NOW);
+        assertEquals(SettlementStatus.PAID, held.getStatus());
+        assertEquals(501L, held.getWalletTxId());
+        assertNull(held.getHoldReason());
+
+        Settlement ready = settlementIn(SettlementStatus.READY);
+        assertThrows(DomainException.class, () -> ready.markPaidWhileHeld(501L, NOW));
+        assertEquals(SettlementStatus.READY, ready.getStatus());
+    }
+
+    @Test
     @DisplayName("보류 해제는 HOLD → READY, 사유를 지운다")
     void release() {
         Settlement s = Settlement.create(7L, "2026-09", "제재");
