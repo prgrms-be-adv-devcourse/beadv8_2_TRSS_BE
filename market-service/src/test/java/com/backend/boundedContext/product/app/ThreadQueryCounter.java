@@ -6,9 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 측정 테스트용. Hibernate가 SQL을 준비할 때마다 부르는 스레드에 기록한다.
- * Hibernate 통계는 앱 전체 값이라 스케줄러 쿼리가 섞이므로, 측정하는 스레드의 쿼리만 센다.
- * {@code hibernate.session_factory.statement_inspector} 속성에 이 클래스 이름을 주면 Hibernate가 만든다.
+ * 쿼리 수를 세는 테스트용 (측정 테스트, 상세 쿼리 수 테스트). Hibernate가 SQL을 준비할 때마다 부르는 스레드에 기록한다.
+ * Hibernate 통계는 앱 전체 값이라 스케줄러 쿼리가 섞이므로, {@link #record}로 켠 스레드의 쿼리만 센다.
+ * 테스트 설정(application.properties)의 {@code hibernate.session_factory.statement_inspector}에 이 클래스 이름을 줘 Hibernate가 만든다.
  */
 public class ThreadQueryCounter implements StatementInspector {
     private static final ThreadLocal<List<String>> RECORDED = new ThreadLocal<>();

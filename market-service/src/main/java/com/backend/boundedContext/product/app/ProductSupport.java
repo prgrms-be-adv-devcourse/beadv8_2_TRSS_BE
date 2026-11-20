@@ -240,7 +240,7 @@ public class ProductSupport {
 
     /** 구매자에게 보여 줄 수 있는 상품. 없거나, 판매 중이 아니거나, 카테고리가 사용 중지면 404. */
     public Product getDisplayableProduct(Long productId) {
-        return productRepository.findById(productId)
+        return productRepository.findDisplayCandidateById(productId)
                 .filter(Product::isDisplayable)
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
@@ -333,11 +333,12 @@ public class ProductSupport {
         Category category = product.getCategory();
         List<OptionStock> stocks = getOptionStocksByProductId(Set.of(productId)).getOrDefault(productId, List.of());
         LocalDateTime now = LocalDateTime.now();
+        ProductImageSupport.DisplayImages images = productImageSupport.getDisplayImages(productId);
 
         return new SellerProductFormDto(
                 product.getId(), product.getName(), product.getPrice(), product.getDescription(),
                 category.getParent().getId(), category.getId(),
-                productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId),
+                images.thumbnail(), images.details(),
                 product.getOptionNames(), stocks.stream().map(SellerOptionDto::from).toList(),
                 productDiscountSupport.getPendingDiscounts(productId, now).stream()
                         .map(discount -> SellerDiscountDto.from(discount, now)).toList(),

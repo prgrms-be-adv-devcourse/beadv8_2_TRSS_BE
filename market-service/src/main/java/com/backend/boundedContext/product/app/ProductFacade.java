@@ -162,14 +162,12 @@ public class ProductFacade {
         productRecommendSupport.compute(memberId);
     }
 
-    /** 로그인하지 않은 구매자의 상품 상세 (찜 여부는 false) */
-    @Transactional(readOnly = true)
+    /** 로그인하지 않은 구매자의 상품 상세 (찜 여부는 false). 트랜잭션은 유스케이스가 나눠 잡는다 (상호명 조회를 트랜잭션 밖에서 하려고) */
     public ProductDetailDto getProductDetail(Long productId) {
         return productGetProductDetailUseCase.getProductDetail(productId, null);
     }
 
-    /** 구매자 상품 상세. memberId가 null이 아니면 그 회원의 찜 여부를 채운다 */
-    @Transactional(readOnly = true)
+    /** 구매자 상품 상세. memberId가 null이 아니면 그 회원의 찜 여부를 채운다. 트랜잭션은 유스케이스가 나눠 잡는다 */
     public ProductDetailDto getProductDetail(Long productId, Long memberId) {
         return productGetProductDetailUseCase.getProductDetail(productId, memberId);
     }

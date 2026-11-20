@@ -17,6 +17,13 @@ import java.util.Optional;
 public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
 
     /**
+     * 구매자에게 보여 줄지 판단하고 보여 줄 상품. 판단(카테고리 사용 여부)과 상세 화면(소분류·대분류 이름)이 늘 카테고리를 쓰므로
+     * 소분류·대분류를 함께 읽는다. 대분류가 없는 소분류는 없지만 안전하게 left join으로 둔다.
+     */
+    @Query("select p from Product p join fetch p.category c left join fetch c.parent where p.id = :id")
+    Optional<Product> findDisplayCandidateById(Long id);
+
+    /**
      * 상품을 ID 순으로 읽기 잠금(SELECT ... FOR SHARE)한다.
      * 재고를 바꾸는 동안 판매 중지·삭제가 끼어들지 못하게 막고, 주문끼리는 서로 막지 않는다.
      */

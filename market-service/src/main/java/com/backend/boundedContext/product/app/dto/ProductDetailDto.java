@@ -45,4 +45,10 @@ public record ProductDetailDto(
         double averageRating,
         String ingredientsText
 ) {
+    /** 상호명만 바꾼 복사본 (DB 값을 읽은 뒤 트랜잭션 밖에서 상호명을 채울 때) */
+    public ProductDetailDto withBusinessName(String businessName) {
+        return new ProductDetailDto(productId, name, description, price, salePrice, discountRate, discountEndsAt,
+                parentCategoryId, parentCategoryName, categoryId, categoryName, sellerId, businessName, thumbnailUrl,
+                imageUrls, soldOut, optionNames, options, wished, wishCount, reviewCount, averageRating, ingredientsText);
+    }
 }

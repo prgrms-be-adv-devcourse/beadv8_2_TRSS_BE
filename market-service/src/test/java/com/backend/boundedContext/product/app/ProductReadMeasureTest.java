@@ -24,8 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * ES가 죽었을 때 검색은 설정이 달라 {@link ProductReadEsDownMeasureTest}가 잰다.
  */
 @Tag("measure")
-@SpringBootTest(properties = "spring.jpa.properties.hibernate.session_factory.statement_inspector="
-        + "com.backend.boundedContext.product.app.ThreadQueryCounter")
+@SpringBootTest   // 쿼리 수는 테스트 설정(application.properties)의 ThreadQueryCounter로 센다
 class ProductReadMeasureTest extends ProductReadMeasureSupport {
     /** 회원 서비스 지연 (응답 제한 3초보다 짧게 둔다) */
     private static final long SLOW_MILLIS = 2_000;
