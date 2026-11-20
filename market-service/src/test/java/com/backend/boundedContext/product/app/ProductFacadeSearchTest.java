@@ -37,6 +37,7 @@ import com.backend.boundedContext.review.domain.Review;
 import com.backend.boundedContext.review.out.ReviewRepository;
 import com.backend.shared.review.out.ReviewApi;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -104,6 +105,9 @@ class ProductFacadeSearchTest {
 
     @Autowired
     private ProductPolicy productPolicy;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @MockitoBean
     private MemberApi memberApi;
@@ -394,7 +398,7 @@ class ProductFacadeSearchTest {
         List<Long> staleIds = List.of(stopped.getId(), onSale.getId(), deleted.getId(), inactiveCategory.getId(), Long.MAX_VALUE);
         ProductSearchPort staleIndex = (query, pageable) -> new PageImpl<>(staleIds, pageable, staleIds.size());
         ProductSearchProductsUseCase useCase = new ProductSearchProductsUseCase(
-                productSupport, productSummarySupport, staleIndex, productPopularKeywordSupport);
+                productSupport, productSummarySupport, staleIndex, productPopularKeywordSupport, transactionManager);
 
         PageResponse<ProductSummaryDto> result = useCase.searchProducts(KEY, null, ProductSort.LATEST, true, false, PageRequest.of(0, 20));
 
@@ -420,7 +424,7 @@ class ProductFacadeSearchTest {
         };
         ProductSearchProductsUseCase useCase = new ProductSearchProductsUseCase(
                 productSupport, productSummarySupport, productSearchPort,
-                new ProductPopularKeywordSupport(recordingPort, productPolicy));
+                new ProductPopularKeywordSupport(recordingPort, productPolicy), transactionManager);
 
         useCase.searchProducts("  " + KEY.toUpperCase() + " 크림 ", null, null, true, false, PageRequest.of(0, 20));   // 앞뒤 공백, 대문자
         useCase.searchProducts(KEY, null, null, true, false, PageRequest.of(1, 20));          // 다음 페이지

@@ -131,7 +131,7 @@ public class ProductFacade {
         productChanged(productResumeAllBySellerUseCase.resumeAllBySeller(sellerId));
     }
 
-    @Transactional(readOnly = true)
+    /** 상품 검색. 비슷한 상품과 같이 트랜잭션을 잡지 않는다 (ES 검색·상호명 조회를 트랜잭션 밖에서 하려고 유스케이스가 나눠 잡는다) */
     public PageResponse<ProductSummaryDto> searchProducts(String keyword, Long categoryId, ProductSort sort,
                                                           boolean excludeSoldOut, boolean discountedOnly, Pageable pageable) {
         return productSearchProductsUseCase.searchProducts(keyword, categoryId, sort, excludeSoldOut, discountedOnly, pageable);

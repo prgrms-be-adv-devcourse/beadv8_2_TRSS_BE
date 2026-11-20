@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -31,6 +32,7 @@ public class ProductJpaSearchAdapter implements ProductSearchPort {
     private final ProductRepository productRepository;
 
     @Override
+    @Transactional(readOnly = true)   // 검색은 트랜잭션 없이 불린다. ES 검색이 실패해 대신할 때도 이 조회만 짧게 잡는다
     public Page<Long> searchProductIds(ProductSearchQuery query, Pageable pageable) {
         LocalDateTime now = LocalDateTime.now();
         Specification<Product> spec = Specification.allOf(

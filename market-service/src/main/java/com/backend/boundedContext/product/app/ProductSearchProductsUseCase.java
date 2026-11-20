@@ -5,19 +5,29 @@ import com.backend.boundedContext.product.domain.ProductSort;
 import com.backend.boundedContext.product.out.ProductSearchPort;
 import com.backend.boundedContext.product.out.ProductSearchQuery;
 import com.backend.global.page.PageResponse;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 상품 검색. 트랜잭션을 잡지 않고 DB 읽기만 각각 짧은 읽기 트랜잭션에서 한다 (비슷한 상품과 같은 구조).
+ * <ul>
+ *   <li>소분류 읽기: 이 클래스의 읽기 트랜잭션</li>
+ *   <li>검색: 트랜잭션 밖. ES가 실패해 DB 검색으로 대신하면 DB 검색 구현이 자기 읽기 트랜잭션을 잡는다</li>
+ *   <li>화면 값: {@link ProductSummarySupport}가 DB 값은 읽기 트랜잭션에서, 상호명은 그 뒤 트랜잭션 밖에서 채운다</li>
+ *   <li>인기 검색어 기록: Redis라 트랜잭션이 필요 없다</li>
+ * </ul>
+ * ES나 회원 서비스가 느려도 그동안 DB 커넥션을 잡고 있지 않는다.
+ */
 @Service
-@RequiredArgsConstructor
 public class ProductSearchProductsUseCase {
     /** 검색 한 페이지의 최대 크기 (전역 최대 100보다 작게 둔다) */
     static final int MAX_PAGE_SIZE = 50;
@@ -26,6 +36,19 @@ public class ProductSearchProductsUseCase {
     private final ProductSummarySupport productSummarySupport;
     private final ProductSearchPort productSearchPort;
     private final ProductPopularKeywordSupport productPopularKeywordSupport;
+    private final TransactionTemplate readOnlyTransaction;
+
+    public ProductSearchProductsUseCase(ProductSupport productSupport, ProductSummarySupport productSummarySupport,
+                                        ProductSearchPort productSearchPort,
+                                        ProductPopularKeywordSupport productPopularKeywordSupport,
+                                        PlatformTransactionManager transactionManager) {
+        this.productSupport = productSupport;
+        this.productSummarySupport = productSummarySupport;
+        this.productSearchPort = productSearchPort;
+        this.productPopularKeywordSupport = productPopularKeywordSupport;
+        this.readOnlyTransaction = new TransactionTemplate(transactionManager);
+        this.readOnlyTransaction.setReadOnly(true);
+    }
 
     /**
      * 판매 중이고 사용 중인 카테고리의 상품을 검색한다.
@@ -40,7 +63,8 @@ public class ProductSearchProductsUseCase {
                                                           boolean excludeSoldOut, boolean discountedOnly, Pageable pageable) {
         Pageable page = PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), MAX_PAGE_SIZE));
 
-        List<Long> categoryIds = productSupport.getDisplayableCategoryIds(categoryId);   // 없는 카테고리면 404
+        List<Long> categoryIds = readOnlyTransaction.execute(
+                status -> productSupport.getDisplayableCategoryIds(categoryId));   // 없는 카테고리면 404
         if (categoryIds.isEmpty()) {
             return PageResponse.from(Page.empty(page));
         }
@@ -55,7 +79,7 @@ public class ProductSearchProductsUseCase {
                 .map(summaries::get)
                 .filter(Objects::nonNull)
                 .toList();
-        // 화면 값까지 만든 뒤에 센다. 상호명 조회 실패 등으로 응답하지 못한 검색은 세지 않는다
+        // 화면 값까지 만든 뒤에 센다. 응답하지 못한 검색(DB 오류 등)은 세지 않는다
         productPopularKeywordSupport.recordSearch(normalizedKeyword, page.getPageNumber(), productIds.getTotalElements(),
                 LocalDateTime.now());
         return new PageResponse<>(items, productIds.getNumber(), productIds.getSize(),
