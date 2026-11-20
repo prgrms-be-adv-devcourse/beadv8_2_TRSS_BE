@@ -3506,6 +3506,398 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_member"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "member가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"member-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_member"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "member 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"member-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_market"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "market가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"market-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_market"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "market 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"market-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_payment"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "payment가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"payment-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_payment"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "payment 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"payment-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_settlement"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "settlement가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"settlement-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_settlement"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "settlement 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"settlement-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_delivery"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "delivery가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"delivery-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_delivery"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "delivery 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"delivery-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_notification"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "notification가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"notification-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_notification"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "notification 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"notification-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in_ai"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "ai가 받은 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"ai-service\" && kind = server }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fin_ai"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "ai 실패한 요청 보기",
+                    "url": "",
+                    "internal": {
+                      "datasourceUid": "tempo",
+                      "datasourceName": "Tempo",
+                      "query": {
+                        "refId": "A",
+                        "queryType": "traceql",
+                        "query": "{ resource.service.name = \"ai-service\" && kind = server && status = error }",
+                        "limit": 20,
+                        "tableType": "traces"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
