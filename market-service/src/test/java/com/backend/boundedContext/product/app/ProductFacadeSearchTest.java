@@ -143,6 +143,21 @@ class ProductFacadeSearchTest {
     }
 
     @Test
+    @DisplayName("회원 서비스가 실패해도 검색은 성공하고, 상호명만 비운다")
+    void searchWithoutBusinessNameWhenMemberFails() {
+        Product cream = create(skincare, KEY + " 크림", 25_000, 10);
+        given(memberApi.getSellers(anyCollection())).willThrow(new IllegalStateException("member down"));
+
+        PageResponse<ProductSummaryDto> result = search(KEY, null, ProductSort.LATEST, true);
+
+        assertThat(result.items()).singleElement().satisfies(item -> {
+            assertThat(item.productId()).isEqualTo(cream.getId());
+            assertThat(item.sellerId()).isEqualTo(SELLER_ID);
+            assertThat(item.businessName()).isNull();
+        });
+    }
+
+    @Test
     @DisplayName("검색어의 %, _ 는 와일드카드가 아니라 글자로 찾는다")
     void searchKeywordEscape() {
         Product percent = create(skincare, KEY + " 100% 수분", 10_000, 10);
@@ -411,8 +426,7 @@ class ProductFacadeSearchTest {
         useCase.searchProducts(KEY, null, null, true, false, PageRequest.of(1, 20));          // 다음 페이지
         useCase.searchProducts(KEY + " 없는말", null, null, true, false, PageRequest.of(0, 20));   // 0건
         useCase.searchProducts(null, skincare.getId(), null, true, false, PageRequest.of(0, 20));   // 카테고리만
-        given(memberApi.getSellers(anyCollection())).willThrow(new IllegalStateException("member down"));
-        assertThatThrownBy(() -> useCase.searchProducts(KEY, null, null, true, false, PageRequest.of(0, 20)));   // 응답 실패
+        assertThatThrownBy(() -> useCase.searchProducts(KEY, Long.MAX_VALUE, null, true, false, PageRequest.of(0, 20)));   // 응답 실패 (없는 카테고리)
 
         assertThat(recorded).containsExactly(KEY + " 크림");
     }

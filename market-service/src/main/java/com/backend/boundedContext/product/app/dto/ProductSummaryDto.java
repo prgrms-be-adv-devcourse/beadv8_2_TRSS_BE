@@ -25,4 +25,9 @@ public record ProductSummaryDto(
         long reviewCount,
         double averageRating
 ) {
+    /** 상호명만 바꾼 복사본 (DB 값을 읽은 뒤 트랜잭션 밖에서 상호명을 채울 때) */
+    public ProductSummaryDto withBusinessName(String businessName) {
+        return new ProductSummaryDto(productId, name, price, salePrice, discountRate, sellerId, businessName,
+                thumbnailUrl, soldOut, remainingStock, reviewCount, averageRating);
+    }
 }
