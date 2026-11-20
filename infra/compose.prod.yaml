@@ -1,0 +1,493 @@
+# 운영 서버(EC2) 전용 구성. 로컬 개발은 compose.yaml을 쓴다.
+# 실행(레포 루트에서): docker compose -f infra/compose.prod.yaml up -d --build
+# 값은 같은 폴더(infra/)의 .env에서 읽는다(.env.prod.example 참고). .env는 서버에만 두고 커밋하지 않는다.
+# 이 파일의 상대 경로(./nginx, ./monitoring, ..)는 이 파일이 있는 infra/ 기준이다.
+# 외부에는 nginx 80(HTTP)·443(HTTPS)번만 연다. 앱끼리는 Docker 내부 네트워크로 통신한다.
+#
+# 데이터를 가진 postgres·redis·kafka(·elasticsearch)는 데이터 서버(EC2-B, compose.data.yaml)에 있다(TRSS-320).
+# 앱은 .env의 DATA_HOST(데이터 서버 내부 IP)로 붙고, Redis는 REDIS_PASSWORD로 로그인한다. 둘 다 비어 있으면 compose가 시작하지 않는다.
+#
+# ai-service는 이 파일에 없다. 같은 서버의 k3s(쿠버네티스)에서 돈다(TRSS-327, infra/k8s/ai/).
+# Compose와 k3s는 서로의 내부망 이름을 모르므로, 이 서버 내부 IP(.env의 APP_SERVER_IP)에 연 포트로 서로 부른다.
+#   gateway → ai : APP_SERVER_IP:30087 (k3s NodePort)
+#   ai → member  : APP_SERVER_IP:8081 (아래 member의 ports)
+name: palette
+
+# 컨테이너 로그(docker logs) 파일 크기 제한. 없으면 서버 디스크(50GB)를 계속 차지한다.
+# 오래 보관할 로그는 Loki(monitoring/loki/config.yaml, 14일)에서 본다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Spring 앱(gateway·payment·member·market·settlement·delivery·notification)이 제대로 실행됐는지 확인한다. scripts/deploy.sh는 이 상태(healthy)를 보고 배포 성공을 판단한다.
+# 앱마다 컨테이너 안에서 로그인 없이 열리는 Swagger 문서(/v3/api-docs)가 200인지 본다.
+#   정산처럼 로그인 없이 열리는 API가 없는 앱도 같은 방식으로 확인하려고 nginx를 거치지 않는다.
+# 실행 이미지에 curl이 없어도 되게 bash로 HTTP 요청을 직접 보낸다. 포트만 앱마다 다르다(각 서비스의 test).
+#   첫 줄(상태)만 읽고 끊으면 앱이 본문을 보내다 Broken pipe ERROR를 남기므로, 본문까지 끝까지 읽고 판단한다.
+#   $$는 compose가 $를 변수로 바꾸지 않게 하는 표기다(bash에는 $로 전달된다).
+x-app-healthcheck: &app-healthcheck
+  interval: 10s
+  # 막 뜬 앱은 첫 /v3/api-docs 생성(전체 API 스캔)에 5초 넘게 걸릴 수 있다.
+  # 시간이 다 되면 Docker가 요청을 끊어 앱에 Broken pipe가 나므로 넉넉히 기다린다(평소 응답은 1초 미만)
+  timeout: 15s
+  retries: 3
+  # 앱이 뜨는 동안 실패해도 unhealthy로 세지 않는다. 이 시간 안에 응답하면 바로 healthy가 된다.
+  # 앱 여러 개가 함께 재시작되면 CPU를 나눠 써서 하나가 2분 넘게 걸린다(5개 동시: 124~150초, 6개 동시: 189초). 그보다 넉넉하게 둔다
+  # 정말 안 뜨는 앱은 이 시간이 지나야 실패로 잡히지만, 배포 대기 상한(deploy.sh wait_limit 600초)보다는 짧다
+  start_period: 300s
+
+services:
+  nginx:
+    image: nginx:stable
+    container_name: palette-nginx
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      # HTTPS. 인증서를 발급하기 전에는 nginx가 443을 듣지 않아 연결이 거절된다(nginx/default.conf의 HTTPS 순서 참고)
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Let's Encrypt 발급·갱신 확인용 파일을 두는 폴더. certbot이 쓰고 nginx는 읽기만 한다.
+      # 서버에서만 생기는 파일이라 커밋하지 않는다(.gitignore)
+      - ./certbot/www:/var/www/certbot:ro
+      # certbot이 서버의 /etc/letsencrypt에 저장한 인증서. nginx는 읽기만 한다.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # 프론트 빌드 결과(dist). 이 레포 밖(~/palette-web)에 두어 git pull과 섞이지 않게 한다.
+      # 폴더가 없으면 Docker가 빈 폴더를 만들어 화면이 403이 되므로, 프론트 파일을 먼저 올린다.
+      - ../../palette-web:/usr/share/nginx/html:ro
+    # 앱·grafana 주소는 요청할 때 찾으므로(nginx/default.conf의 resolver) 앱보다 먼저 떠도 되고, 앱이 꺼져 있어도 nginx는 뜬다.
+    # 그래서 앱에 depends_on을 걸지 않는다. 앱이 아직 뜨는 중이면 그 경로만 502가 난다
+
+  # Swagger 화면만 띄우는 컨테이너. 앱 하나가 죽어도 다른 서비스 문서는 볼 수 있게 앱 밖에 둔다.
+  # nginx가 /swagger-ui를 여기로 넘기고, 각 문서(/v3/api-docs/{서비스})는 nginx가 서비스로 넘긴다(nginx/default.conf)
+  swagger:
+    image: swaggerapi/swagger-ui:v5.17.14
+    container_name: palette-swagger
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      BASE_URL: /swagger-ui   # nginx가 /swagger-ui를 떼지 않고 넘기므로 같은 경로 아래에서 동작한다
+      URLS_PRIMARY_NAME: member   # 처음 열 때 선택된 서비스. 로그인(토큰 발급)부터 하므로 member
+      URLS: >-
+        [{"name":"member","url":"/v3/api-docs/member"},
+        {"name":"market","url":"/v3/api-docs/market"},
+        {"name":"payment","url":"/v3/api-docs/payment"},
+        {"name":"settlement","url":"/v3/api-docs/settlement"},
+        {"name":"delivery","url":"/v3/api-docs/delivery"},
+        {"name":"notification","url":"/v3/api-docs/notification"},
+        {"name":"ai","url":"/v3/api-docs/ai"}]
+    mem_limit: 64m
+
+  # API 게이트웨이(gateway 모듈). nginx가 백엔드 요청(/api/, /webhooks/, /v3/api-docs, 상품 이미지)을 모두 여기로 넘기고,
+  # gateway가 로그인 필요 경로의 JWT를 먼저 검사한 뒤 서비스별로 나눠 보낸다(gateway/src/main/resources/application.yaml).
+  # 같은 Dockerfile에서 MODULE만 바꿔 빌드한다. DB·Redis·Kafka는 쓰지 않는다.
+  gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: gateway
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-gateway
+    container_name: palette-gateway
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env   # JWT_SECRET (서비스와 같은 값)
+    environment:
+      # 경로를 나눠 보낼 서비스 주소. Docker 내부망 이름으로 부른다
+      MEMBER_SERVICE_URL: http://member:8081
+      MARKET_SERVICE_URL: http://market:8082
+      PAYMENT_SERVICE_URL: http://payment:8083
+      SETTLEMENT_SERVICE_URL: http://settlement:8084
+      DELIVERY_SERVICE_URL: http://delivery:8085
+      NOTIFICATION_SERVICE_URL: http://notification:8086
+      # ai는 k3s에 있어 Docker 내부망 이름으로는 못 찾는다. k3s가 이 서버 30087번에 연 문(NodePort)으로 부른다(infra/k8s/ai/service.yaml)
+      AI_SERVICE_URL: http://${APP_SERVER_IP:?APP_SERVER_IP(이 서버 내부 IP)가 .env에 없습니다}:30087
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # 모든 요청이 거쳐 가 네트워크 버퍼(힙 밖)를 더 쓴다. 다른 앱과 같은 1g(힙 768MB)
+    mem_limit: 1g
+    # 다른 앱처럼 /v3/api-docs를 부르면 gateway가 payment로 넘겨 버리므로, gateway 자신의 상태(관리 포트 9091)를 본다
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9091 && printf 'GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 서비스에 depends_on을 걸지 않는다. 서비스가 꺼져 있어도 gateway는 뜨고 그 서비스 경로만 실패한다(nginx와 같은 방식)
+
+  # 회원·인증·판매자(member-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 member 스키마에 member_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 처음 띄우기 전에 운영 DB의 회원 테이블을 public에서 member로 옮겨야 한다(member-service V1 파일 주석 참고).
+  #   옮기기 전에 뜨면 빈 member 스키마에 V1으로 빈 테이블을 만들어 버린다.
+  member:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: member-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-member
+    container_name: palette-member
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      DB_PORT: 5432
+      # 이메일 인증코드·로그인 실패 횟수·Refresh Token을 Redis에 둔다
+      REDIS_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      REDIS_PORT: 6379
+      # Spring이 spring.data.redis.password로 읽는다. 데이터 서버 Redis에 건 비밀번호(compose.data.yaml)와 같은 값
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD가 .env에 없습니다}
+      KAFKA_BOOTSTRAP_SERVERS: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      MEMBER_DB_USERNAME: ${MEMBER_DB_USERNAME:?MEMBER_DB_USERNAME이 .env에 없습니다}
+      # 회원이 부르는 다른 서비스 내부 API 주소. Docker 내부망으로 직접 부른다
+      # 주문 내부 API(/internal/v1/orders): 탈퇴 검사, 판매자 철회 승인, 관리자 회원 상세
+      MARKET_SERVICE_URL: http://market:8082
+      # 정산 내부 API(/internal/v1/settlements): 판매자 철회 요청·승인, 판매자 회원 탈퇴의 미지급 금액 확인
+      SETTLEMENT_SERVICE_URL: http://settlement:8084
+      # 결제 내부 API(/internal/v1/payments): 탈퇴 검사, 관리자 회원 상세
+      PAYMENT_SERVICE_URL: http://payment:8083
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      CUSTOM_AUTH_ACCEPTBEARERTOKEN: "false"   # 운영은 gateway가 넘긴 회원 헤더만 받는다(common JwtTokenFilter). 설정 이름 custom.auth.acceptBearerToken
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # k3s의 ai가 크리에이터 추천에서 member 내부 API를 부른다. k3s 파드는 Docker 내부망 이름을 몰라서 이 서버 내부 IP에 연다.
+    # 인터넷 쪽에는 열리지 않는다(내부 IP에만 열고, 보안 그룹도 8081을 열지 않는다)
+    ports:
+      - "${APP_SERVER_IP:?APP_SERVER_IP(이 서버 내부 IP)가 .env에 없습니다}:8081:8081"
+    # market·settlement와 같은 1g(힙 768MB)
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+
+  # 상품·주문(market-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 market 스키마에 market_user로 접속한다(DB_USERNAME과 다른 계정).
+  market:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: market-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-market
+    container_name: palette-market
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}:9092
+      # 인기 검색어(시간 단위 ZSET)를 Redis에 둔다. 키는 product:popular-keyword:로 시작해 회원 키와 섞이지 않는다
+      REDIS_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD가 .env에 없습니다}   # member와 같다
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      MARKET_DB_USERNAME: ${MARKET_DB_USERNAME:?MARKET_DB_USERNAME이 .env에 없습니다}
+      # 회원 내부 API(/internal/v1/members·sellers)를 부르는 member-service 주소
+      # Docker 내부망으로 직접 부르고 nginx를 거치지 않는다. 키(INTERNAL_API_KEY)는 .env에서 읽는다
+      MEMBER_SERVICE_URL: http://member:8081
+      # 결제 내부 API(/internal/v1/payments)를 부르는 payment-service 주소 (주문 결제·취소, 결제 시도 조회)
+      # PaymentApiClient가 custom.payment.baseUrl로 읽는다. 결제 결과를 모르면 주문을 PAYING으로 두고 재확인 스케줄러가 정리한다
+      PAYMENT_SERVICE_URL: http://payment:8083
+      # 배송 내부 API(/internal/v1/deliveries)를 부르는 delivery-service 주소 (주문 상세의 배송 정보)
+      # 응답하지 못하면 주문 상세는 배송 정보 없이(deliveryUnavailable: true) 응답한다
+      DELIVERY_SERVICE_URL: http://delivery:8085
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      CUSTOM_AUTH_ACCEPTBEARERTOKEN: "false"   # 운영은 gateway가 넘긴 회원 헤더만 받는다(common JwtTokenFilter). 설정 이름 custom.auth.acceptBearerToken
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # 서버 8GB를 다른 앱(각 1g)·Kafka(1g)·DB·모니터링과 나눠 쓴다
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+
+  # 예치금·충전·결제·정산 지급(payment-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # 루트 모놀리스(app)가 하던 마지막 기능이라, 결제가 분리되면서 app 컨테이너를 이 서비스로 바꿨다.
+  # DB는 payment 스키마에 payment_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 처음 띄우기 전에 운영 DB의 결제 테이블을 public에서 payment로 옮겨야 한다(payment-service V1 파일 주석 참고).
+  #   옮기기 전에 뜨면 빈 payment 스키마에 V1으로 빈 테이블을 만들어 버린다.
+  payment:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: payment-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-payment
+    container_name: palette-payment
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      # .env의 값보다 우선한다. 컨테이너끼리는 서비스 이름으로 찾는다.
+      DB_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}:9092
+      # 비어 있으면 기본값(로컬 계정)으로 접속하므로 반드시 넣는다
+      PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME:?PAYMENT_DB_USERNAME이 .env에 없습니다}
+      # 결제가 회원 내부 API(/internal/v1/members)를 부를 member-service 주소 (충전 전 회원 확인, 관리자 결제·충전 조회의 이메일)
+      MEMBER_SERVICE_URL: http://member:8081
+      # nginx가 넘긴 X-Forwarded-* 헤더로 원래 요청 주소·프로토콜을 판단한다.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      CUSTOM_AUTH_ACCEPTBEARERTOKEN: "false"   # 운영은 gateway가 넘긴 회원 헤더만 받는다(common JwtTokenFilter). 설정 이름 custom.auth.acceptBearerToken
+      # 로그를 한 줄짜리 JSON(ECS)으로 찍는다. 스택트레이스가 한 건으로 묶여 Loki에서 레벨·클래스로 걸러진다.
+      # 로컬은 이 값이 없어 지금처럼 사람이 읽는 형식으로 찍힌다.
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # JVM 힙은 이 값의 75%(Dockerfile의 MaxRAMPercentage). member·market·settlement와 같은 1g(힙 768MB)
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8083 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 결제는 Redis를 쓰지 않는다
+
+  # 정산(settlement-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 settlement 스키마에 settlement_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 처음 띄우기 전에 운영 DB의 정산 테이블을 public에서 settlement로 옮겨야 한다(settlement-service V1 파일 주석 참고).
+  #   옮기기 전에 뜨면 빈 settlement 스키마에 V1으로 빈 테이블을 만들어 버린다.
+  # 회원, 결제와 HTTP로 연결돼 정산 스케줄러는 기본으로 켜져 있다. 문제가 생기면 .env에 SETTLEMENT_SCHEDULING_ENABLED=false로 끈다.
+  settlement:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: settlement-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-settlement
+    container_name: palette-settlement
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      SETTLEMENT_DB_USERNAME: ${SETTLEMENT_DB_USERNAME:?SETTLEMENT_DB_USERNAME이 .env에 없습니다}
+      # 회원 내부 API(/internal/v1/sellers)를 부르는 member-service 주소 (판매자 조회, 제재 여부 확인)
+      MEMBER_SERVICE_URL: http://member:8081
+      # 결제 내부 API(/internal/v1/payments/transfers)를 부르는 payment-service 주소 (정산금 지급, 지급 내역 조회)
+      PAYMENT_SERVICE_URL: http://payment:8083
+      # 지급 재시도 간격(분). 로컬, 테스트는 10, 개발 서버는 운영처럼 2시간
+      SETTLEMENT_RETRY_INTERVAL_MINUTES: "120"
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      CUSTOM_AUTH_ACCEPTBEARERTOKEN: "false"   # 운영은 gateway가 넘긴 회원 헤더만 받는다(common JwtTokenFilter). 설정 이름 custom.auth.acceptBearerToken
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # market과 같은 1g(힙 768MB). 월 1회 배치와 관리자 조회뿐이라 평소 사용량은 market(약 430MB)과 비슷하다
+    mem_limit: 1g
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+
+  # 배송(delivery-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 delivery 스키마에 delivery_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 새 스키마라 테이블 이전은 없다. 처음 띄우기 전에 운영 DB에 delivery 스키마·계정만 만든다(postgres/init/01-init-schemas.sh).
+  # 결제한 주문(OrderPaidEvent)을 Kafka로 받아 배송을 만들고, 배송 완료(DeliveryCompletedEvent)를 market에 보낸다.
+  # Delivery Tracker 값(DELIVERY_TRACKER_*)은 .env에서 읽는다. 비어 있으면 delivery가 뜨지 않는다.
+  delivery:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: delivery-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-delivery
+    container_name: palette-delivery
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      DELIVERY_DB_USERNAME: ${DELIVERY_DB_USERNAME:?DELIVERY_DB_USERNAME이 .env에 없습니다}
+      # 상품 내부 API(/internal/v1/products/options)를 부르는 market-service 주소 (물류 목록·상세의 상품 대표 이미지)
+      # Docker 내부망으로 직접 부른다. 응답하지 못하면 물류 응답은 이미지 없이(thumbnailUrl: null) 나간다
+      MARKET_SERVICE_URL: http://market:8082
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      CUSTOM_AUTH_ACCEPTBEARERTOKEN: "false"   # 운영은 gateway가 넘긴 회원 헤더만 받는다(common JwtTokenFilter). 설정 이름 custom.auth.acceptBearerToken
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # 다른 앱(1g)보다 작은 768m(힙 576MB). 송장 등록·배송 조회와 스케줄러뿐이라 요청이 적고, 서버 8GB에 앱이 5개가 되어 줄인다
+    mem_limit: 768m
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 배송은 Redis를 쓰지 않는다
+
+  # 구매자 알림(notification-service). 같은 Dockerfile에서 MODULE만 바꿔 빌드한다.
+  # DB는 notification 스키마에 notification_user로 접속한다(DB_USERNAME과 다른 계정).
+  # 새 스키마라 테이블 이전은 없다. 처음 띄우기 전에 운영 DB에 notification 스키마·계정만 만든다(postgres/init/01-init-schemas.sh).
+  # 주문 완료(order.events)·배송 시작·완료(delivery.events)를 Kafka로 받아 알림을 저장한다. 다른 서비스를 HTTP로 부르지 않는다.
+  notification:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: notification-service
+        # 배포 커밋(deploy.sh가 넘김). 이미지에 넣어 로그 service.version으로 남긴다(Dockerfile 참고)
+        APP_VERSION: ${APP_VERSION:-unknown}
+    image: palette-notification
+    container_name: palette-notification
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      DB_HOST: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: ${DATA_HOST:?DATA_HOST(데이터 서버 내부 IP)가 .env에 없습니다}:9092
+      # 비어 있으면 DB_USERNAME(palette)으로 접속해 테이블 주인이 바뀌므로 반드시 넣는다
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME:?NOTIFICATION_DB_USERNAME이 .env에 없습니다}
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      CUSTOM_AUTH_ACCEPTBEARERTOKEN: "false"   # 운영은 gateway가 넘긴 회원 헤더만 받는다(common JwtTokenFilter). 설정 이름 custom.auth.acceptBearerToken
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    # delivery와 같은 768m(힙 576MB). 512m는 힙 밖 메모리(약 128MB)가 모자라 부하 때 강제 종료될 수 있다.
+    # 비슷한 앱(delivery·payment)이 평소 350~370MB를 쓴다(11/10 docker stats). 서버 8GB에 앱이 6개라 1g보다 작게 둔다
+    mem_limit: 768m
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8086 && printf 'GET /v3/api-docs HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r status <&3 && cat <&3 >/dev/null && [[ $$status =~ ^HTTP/[0-9.]+\\ 200 ]]"]
+    # 알림은 Redis를 쓰지 않는다
+
+  # ── 로그 모니터링: Alloy(수집) → Loki(저장) → Grafana(조회·Slack 알림) ──
+  # Grafana는 nginx를 거쳐 http://{EC2_HOST}/grafana/ 로 연다(nginx/default.conf). 3000번은 외부에 열지 않는다.
+  # nginx가 안 될 때는 SSH 터널로도 볼 수 있다.
+  #   ssh -L 3000:localhost:3000 {EC2_USER}@{EC2_HOST} 후 http://localhost:3000/grafana/
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: palette-loki
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./monitoring/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    # 데이터 서버의 Alloy가 로그를 보내는 입구. MONITORING_BIND_IP(이 서버 내부 IP)에만 열고, 보안 그룹이 데이터 서버만 허용한다.
+    # 비워 두면 서버 안(127.0.0.1)에서만 열린다
+    ports:
+      - "${MONITORING_BIND_IP:-127.0.0.1}:3100:3100"
+    mem_limit: 512m
+
+  # ── 메트릭: Alloy(앱 actuator·cadvisor·호스트 지표 수집) → Prometheus(저장) → Grafana ──
+  # 스크랩하지 않고 Alloy가 보내는 것(remote write)만 받는다. 데이터 서버의 Alloy도 보내므로 내부 IP에만 연다(loki와 같은 방식)
+  prometheus:
+    image: prom/prometheus:v3.5.0   # LTS
+    container_name: palette-prometheus
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=4GB   # 디스크 50GB 안전장치. 먼저 닿는 쪽이 적용된다
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus   # 이미지의 /prometheus가 nobody 소유라 새 볼륨도 그 권한(서버 chown 불필요)
+    ports:
+      - "${MONITORING_BIND_IP:-127.0.0.1}:9090:9090"
+    mem_limit: 512m
+
+  alloy:
+    image: grafana/alloy:v1.10.0
+    container_name: palette-alloy
+    restart: unless-stopped
+    logging: *default-logging
+    # storage.path: 어디까지 보냈는지 기억해, 재시작해도 로그를 중복으로 보내지 않는다
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    # config.alloy는 데이터 서버와 같이 쓰는 파일이라 이 서버의 값을 여기서 넘긴다(config.alloy 머리말 참고)
+    environment:
+      COMPOSE_PROJECT: palette
+      SERVER_NAME: app
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+      PROMETHEUS_URL: http://prometheus:9090/api/v1/write
+    # 컨테이너 지표(cadvisor)는 호스트 cgroup·Docker 저장소를 읽어야 해서 privileged가 필요하다(Alloy 문서).
+    # 이미 docker.sock을 갖고 있어(호스트 root와 같은 권한) 권한 차이는 작다. 마운트는 모두 읽기 전용
+    privileged: true
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+      # 아래는 메트릭용: cadvisor(컨테이너)·unix(호스트) 지표
+      - /:/rootfs:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /proc:/host/proc:ro
+    mem_limit: 384m   # 로그 + cadvisor + 호스트 지표 + remote write 버퍼
+    depends_on:
+      - loki
+      - prometheus
+
+  # ── 추적: 앱(Micrometer Tracing) → Tempo(저장·서비스 지도 지표) → Grafana (TRSS-335) ──
+  # 요청 하나가 gateway → 서비스 → 서비스로 갈 때 구간별 기록(span)을 받는다. 앱은 Dockerfile의 기본 주소(tempo:4318)로 보낸다
+  # Tempo는 uid 10001로 도는데 새 볼륨은 root 소유라 쓰지 못한다. 뜨기 전에 볼륨 주인만 바꾸고 끝나는 컨테이너
+  # Tempo 이미지에는 셸·chown이 없어서(최소 이미지) chown이 있는 busybox로 한다
+  tempo-init:
+    image: busybox:1.36.1
+    user: root
+    entrypoint: ["chown", "10001:10001", "/var/tempo"]
+    volumes:
+      - tempo-data:/var/tempo
+    restart: "no"
+
+  tempo:
+    image: grafana/tempo:2.10.10
+    container_name: palette-tempo
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo   # 추적 저장(3일 보관, tempo.yaml block_retention)
+    # k3s의 ai 파드는 Compose 이름(tempo)을 못 찾아 이 서버 내부 IP로 보낸다. loki·prometheus처럼 내부 IP에만 연다
+    ports:
+      - "${MONITORING_BIND_IP:-127.0.0.1}:4318:4318"
+    # 요청이 적어 보통 100~300MB. 넘으면 보관 기간(block_retention)이나 샘플링을 줄인다
+    mem_limit: 384m
+    depends_on:
+      tempo-init:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+
+  grafana:
+    # 12.2부터 알림 규칙 파일의 keepFiringFor(해결 판단 유예)를 읽는다(monitoring/grafana/provisioning/alerting/rules.yaml)
+    image: grafana/grafana:12.2.0
+    container_name: palette-grafana
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD가 .env에 없습니다}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # 브라우저로 여는 주소. Slack 알림의 "Grafana에서 로그 보기" 링크도 이 주소로 만들어진다.
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:?GRAFANA_ROOT_URL이 .env에 없습니다}
+      # ROOT_URL의 경로(/grafana/) 아래에서 동작한다. nginx는 /grafana를 떼지 않고 그대로 넘긴다.
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # monitoring/grafana/provisioning/alerting/slack.yaml이 읽는다
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?SLACK_BOT_TOKEN이 .env에 없습니다}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    mem_limit: 256m
+    depends_on:
+      - loki
+      - prometheus
+
+volumes:
+  loki-data:
+  prometheus-data:
+  alloy-data:
+  grafana-data:
+  tempo-data:

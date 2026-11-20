@@ -1,0 +1,11 @@
+# Alloy가 보낸 메트릭(앱 JVM·HTTP, 컨테이너, 호스트). 알림 규칙을 만들면 uid "prometheus"로 찾는다
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    editable: false
+    jsonData:
+      timeInterval: 15s

@@ -1,0 +1,135 @@
+server:
+  port: ${AI_PORT:8087}   # 로컬에서 다른 서비스와 같이 띄울 수 있게 서비스마다 다른 포트를 쓴다
+
+spring:
+  application:
+    name: ai-service
+
+  # 프로젝트 루트의 .env를 읽음 (없으면 무시). bootRun은 모듈 폴더에서 실행되므로 상위 폴더도 찾는다
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
+
+  # ai 스키마만 쓴다. 운영에서는 ai_user(자기 스키마 권한만 가진 계정)로 접속한다
+  # pgvector 확장(vector 타입)도 ai 스키마에 있다(postgres/init/01-init-schemas.sh가 만든다)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}?currentSchema=ai
+    username: ${AI_DB_USERNAME:${DB_USERNAME:ai_user}}
+    password: ${AI_DB_PASSWORD:${DB_PASSWORD:ai_user}}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
+
+  flyway:
+    schemas: ai
+    default-schema: ai
+
+  data:
+    # 챗봇 회원별 요청 횟수
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  # 상품 변경 이벤트(product.events)를 받는다(groupId ai-service)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all                   # 브로커가 기록을 마친 뒤에 성공으로 본다
+      properties:
+        enable.idempotence: true  # 프로듀서 재시도로 같은 메시지가 두 번 기록되지 않게
+        max.block.ms: 5000        # 브로커가 없을 때 send가 오래 막히지 않게(기본 60초)
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record            # 메시지 하나를 처리(커밋)한 뒤에 offset을 커밋한다
+
+  # 상품 변경 이벤트를 받은 뒤 임베딩을 채우는 스케줄러 1개
+  task:
+    scheduling:
+      pool:
+        size: 1
+
+  # 임베딩(OpenAI text-embedding-3-small)과 챗봇 답변용 채팅 모델만 쓴다. 이미지·음성·모더레이션 자동 설정은 끈다
+  ai:
+    model:
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+    openai:
+      api-key: ${OPENAI_API_KEY}   # 기본값 없음. 서버 .env에만 둔다(없으면 앱이 뜨지 않는다)
+      embedding:
+        options:
+          model: text-embedding-3-small
+          dimensions: 1536         # V3의 vector(1536)과 같아야 한다
+      chat:
+        timeout: 10s               # 챗봇 답변 대기 제한. 넘기면 가장 비슷한 FAQ 답변으로 대신한다
+        max-retries: 0             # OpenAI SDK 재시도(기본 3번)를 끈다. 실패하면 기다리지 않고 FAQ 답변으로 대신한다
+        options:
+          model: gpt-4o-mini
+          temperature: 0.2         # FAQ 내용을 벗어나지 않게 낮게 둔다
+          max-completion-tokens: 500   # 답변 길이 상한(한국어 몇 문단)
+
+
+# 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
+custom:
+  jwt:
+    # 서명 키: 모든 서비스가 같은 값을 쓴다. 기본값 없이 환경변수(.env)로만 주입한다.
+    secret: ${JWT_SECRET}
+    accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  internal:
+    # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 모든 서비스가 같은 값을 쓰고, 기본값 없이 환경변수(.env)로만 주입한다.
+    apiKey: ${INTERNAL_API_KEY}
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
+  outbox:
+    # ai는 이벤트를 발행하지 않으므로 릴레이 스케줄러를 등록하지 않는다.
+    # outbox_event 테이블은 common의 OutboxEvent 엔티티 검증(ddl-auto: validate) 때문에 V1에 둔다
+    relayEnabled: false
+    relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초)
+    relayBatchSize: 100         # 릴레이가 한 번에 발행하는 최대 이벤트 수
+    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다(Kafka가 내려가 있는 건 세지 않음)
+    sendTimeoutMillis: 10000    # Kafka 브로커의 기록 확인(ack)을 기다리는 최대 시간(밀리초)
+    topicPartitions: 3          # 이벤트 토픽(<대상>.events) 파티션 수. 같은 aggregateId는 같은 파티션으로 가서 순서가 지켜진다
+  member:
+    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
+    connectTimeoutMillis: 1000   # 회원 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 2000      # 응답 대기 제한 시간(밀리초). 설문 저장·크리에이터 추천 요청 안에서 부르므로 짧게 둔다
+  recommend:
+    embeddingIntervalMillis: 5000   # 비어 있는 임베딩(상품·설문)을 채우는 간격(밀리초)
+    embeddingBatchSize: 20          # 한 번에 임베딩하는 상품·설문 수
+    embeddingRetryDelayMinutes: 1,5,30,60  # 임베딩이 실패한 상품·설문을 다시 시도하기까지 기다리는 시간(분). n번째 실패 뒤 n번째 값, 그 뒤로는 마지막 값
+    embeddingFailureAlertAttempts: 3       # 연속 실패가 이 횟수에 처음 닿으면 ERROR 로그 1회(Slack 알림)
+    preferredIngredientWeight: 0.05 # 추천 점수 가점: 겹친 선호 성분 1개마다
+    interestCategoryWeight: 0.05    # 추천 점수 가점: 관심 카테고리 상품
+  faq:
+    embeddingIntervalMillis: 5000   # 비어 있는 FAQ 임베딩을 채우는 간격(밀리초)
+    embeddingBatchSize: 20          # 한 번에 임베딩하는 FAQ 수
+    searchTopK: 3                   # 검색에서 가져오는 FAQ 최대 수(유사도 높은 순)
+    similarityThreshold: 0.35       # 이 코사인 유사도보다 낮은 FAQ는 관련 없다고 보고 버림. 실측(검색어 다시 쓰기 후): 정답 FAQ는 대부분 0.4 이상, 관련 없는 질문은 0.2~0.45라 정답을 놓치지 않는 쪽으로 둠(관련 없는 FAQ가 걸려도 답변 프롬프트가 지어내지 않게 막음)
+  chat:
+    historyMessages: 6              # 프롬프트에 넣는 같은 대화의 최근 메시지 수(질문·답변 합산, 6 = 최근 3번 주고받은 것)
+    searchHistoryQuestions: 1       # 검색어 다시 쓰기가 실패했을 때 FAQ 검색어 앞에 붙이는 같은 대화의 최근 질문 수(이어지는 질문도 맞는 FAQ를 찾게)
+    rateLimitCount: 10              # 회원별로 rateLimitWindow 동안 보낼 수 있는 챗봇 질문 수. 넘으면 429
+    rateLimitWindow: 1m             # 요청 수를 세는 시간. 첫 질문부터 이 시간이 지나면 다시 0부터 센다
+  scheduling:
+    enabled: true        # false면 모든 스케줄러가 멈춘다(통합 테스트용)
+  kafka:
+    consumer:
+      # 컨슈머가 실패한 메시지를 다시 처리하는 방식. 기본값이면 1·2·4·8초 간격으로 4번 더 처리하고(총 5번), 그래도 실패하면 <토픽>-dlt로 보낸다
+      maxRetries: 4                     # 처음 처리 뒤 다시 처리하는 횟수
+      retryInitialIntervalMillis: 1000  # 첫 재시도 전 대기(밀리초)
+      retryMultiplier: 2.0              # 재시도마다 대기 시간에 곱하는 값

@@ -1,0 +1,19 @@
+# Grafana가 뜰 때 Loki를 데이터 소스로 자동 등록한다. 알림 규칙(alerting/)이 uid "loki"로 이 소스를 찾는다.
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: false
+    jsonData:
+      # 앱 로그(ECS JSON)의 trace.id를 누르면 Tempo에서 그 요청의 전체 경로가 열린다(TRSS-335)
+      # $$는 provisioning 파일에서 $를 그대로 쓰는 표기(환경변수로 읽지 않게)
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace\.id":"(\w+)"'
+          datasourceUid: tempo
+          url: "$${__value.raw}"

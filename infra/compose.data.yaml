@@ -1,0 +1,186 @@
+# 데이터 서버(EC2-B) 전용 구성.
+# 실행(EC2-B, 레포 루트에서): docker compose -f infra/compose.data.yaml up -d --build
+# 값은 EC2-B의 infra/.env에서 읽는다(.env.data.example 참고). .env는 서버에만 두고 커밋하지 않는다.
+# 앱 서버(EC2-A)의 compose.prod.yaml과 프로젝트 이름이 달라서, 앱 배포(deploy.sh)가 이 컨테이너를 건드리지 않는다.
+# 서버 준비(Docker·스왑·vm.max_map_count)는 scripts/setup-data-server.sh로 먼저 한다.
+#
+# 데이터를 가진 컨테이너(elasticsearch·postgres·redis·kafka)를 모은다(TRSS-320). 포트는 모두 이 서버 내부 IP(DATA_BIND_IP)에만 열고,
+# 보안 그룹이 앱 서버(EC2-A)만 허용한다. 앱 서버는 .env의 DATA_HOST에 이 서버 내부 IP를 넣어 붙는다(compose.prod.yaml 머리말).
+name: palette-data
+
+# 컨테이너 로그 크기 제한 (compose.prod.yaml과 같은 값)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  elasticsearch:
+    build: ./elasticsearch
+    image: palette-elasticsearch
+    container_name: palette-elasticsearch
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      # 노드가 1대뿐이라 다른 노드를 찾는 과정 없이 혼자 클러스터가 된다
+      discovery.type: single-node
+      # 최소(Xms)와 최대(Xmx)를 같게 둬서, 실행 중에 힙 크기를 늘리고 줄이느라 멈추는 일이 없게 한다
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
+      # 기본 관리자 계정(elastic)의 비밀번호. 처음 뜰 때 이 값으로 정해진다
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?ELASTIC_PASSWORD가 없습니다}
+      xpack.security.enabled: "true"
+      # 인증(비밀번호)은 켜고 암호화(HTTPS)는 끈다. 트래픽은 같은 VPC 안에서만 오가고 보안 그룹이 EC2-A만 허용한다.
+      # 끈다고 적지 않으면 ES가 처음 뜰 때 인증서를 만들어 9200을 HTTPS로 바꾸고, http:// 주소로는 접속이 안 된다
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      # 힙을 실제 메모리에 고정한다. 힙 일부가 스왑(디스크)으로 밀려나면 검색이 몇 초씩 멈출 수 있다
+      bootstrap.memory_lock: "true"
+    # 위의 메모리 고정을 컨테이너에 허용한다. 이 설정이 없으면 고정에 실패하고 ES가 경고를 남긴다
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    # 힙(768MB) 말고도 ES는 힙 밖에서 메모리를 더 쓴다(네트워크 버퍼, nori 사전 등). 그래서 힙의 2배쯤 둔다
+    mem_limit: 1536m
+    ports:
+      # 서버의 모든 네트워크가 아니라 내부 IP에서만 받는다. 보안 그룹이 바깥을 한 번 더 막는다
+      - "${DATA_BIND_IP:?DATA_BIND_IP가 없습니다}:9200:9200"
+    volumes:
+      # 색인 데이터. 컨테이너를 지우고 다시 만들어도 남는다
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # 비밀번호를 켰으므로 인증을 넣는다(없으면 401이라 계속 unhealthy). $$는 compose가 아니라 컨테이너 안에서 변수를 풀라는 뜻이다.
+      # 노드가 1대면 복제본을 둘 곳이 없어 green이 될 수 없으므로 yellow를 정상으로 본다
+      test: ["CMD-SHELL", "curl -fs -u elastic:$${ELASTIC_PASSWORD} 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      # ES는 뜨는 데 수십 초가 걸린다. 이 시간 동안의 실패는 unhealthy로 세지 않는다
+      start_period: 60s
+
+  # 이미지·설정은 compose.prod.yaml의 postgres와 같다. 앱 서버의 데이터 볼륨을 그대로 복사해 오므로(TRSS-320) 이미지 태그가 정확히 같아야 한다
+  postgres:
+    image: pgvector/pgvector:pg17-trixie
+    container_name: palette-postgres
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME이 .env에 없습니다}
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME이 .env에 없습니다}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD가 .env에 없습니다}
+      TZ: UTC
+      # 서비스별 DB 계정 비밀번호(postgres/init/01-init-schemas.sh가 빈 DB에서 계정을 만들 때 쓴다)
+      MEMBER_DB_PASSWORD: ${MEMBER_DB_PASSWORD:?MEMBER_DB_PASSWORD가 .env에 없습니다}
+      MARKET_DB_PASSWORD: ${MARKET_DB_PASSWORD:?MARKET_DB_PASSWORD가 .env에 없습니다}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD가 .env에 없습니다}
+      SETTLEMENT_DB_PASSWORD: ${SETTLEMENT_DB_PASSWORD:?SETTLEMENT_DB_PASSWORD가 .env에 없습니다}
+      DELIVERY_DB_PASSWORD: ${DELIVERY_DB_PASSWORD:?DELIVERY_DB_PASSWORD가 .env에 없습니다}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD가 .env에 없습니다}
+      AI_DB_PASSWORD: ${AI_DB_PASSWORD:?AI_DB_PASSWORD가 .env에 없습니다}
+      READONLY_DB_PASSWORD: ${READONLY_DB_PASSWORD:?READONLY_DB_PASSWORD가 .env에 없습니다}
+    ports:
+      - "${DATA_BIND_IP:?DATA_BIND_IP가 없습니다}:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # DB가 비어 있을 때만 실행된다. 복사해 온 볼륨에는 이미 데이터가 있어 실행되지 않는다
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    # 앱 7개 × 연결 최대 10개(Hikari 기본)가 동시에 무거운 쿼리를 돌려도 버틸 만큼
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Refresh Token·이메일 인증코드·인기 검색어·챗봇 요청 횟수. 네트워크를 건너 접속하므로 비밀번호를 건다
+  redis:
+    image: redis:7.4
+    container_name: palette-redis
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD가 .env에 없습니다}
+    # 재시작해도 값이 남게 디스크에 기록한다(appendonly). 비밀번호를 명령줄에 바로 적지 않고 컨테이너 안 환경변수로 넘긴다
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    ports:
+      - "${DATA_BIND_IP:?DATA_BIND_IP가 없습니다}:6379:6379"
+    volumes:
+      - redis-data:/data
+    # 키가 수십 개뿐이라 넉넉하다
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Outbox 릴레이가 이벤트를 발행하는 Kafka. 설정은 compose.prod.yaml의 kafka와 같고, 앱 서버가 접속할 주소만 다르다.
+  # 데이터는 옮기지 않고 빈 채로 시작한다: 이벤트 원본은 각 서비스의 outbox_event에 있고, 컨슈머는 auto-offset-reset: earliest라 처음부터 읽는다
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: palette-kafka
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      # 클라이언트가 처음 붙은 뒤 "이 주소로 다시 접속하라"고 받는 주소. 앱 서버에서 닿는 내부 IP여야 한다
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${DATA_BIND_IP:?DATA_BIND_IP가 없습니다}:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 72
+      KAFKA_LOG_RETENTION_BYTES: 536870912
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${DATA_BIND_IP:?DATA_BIND_IP가 없습니다}:9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # 이 서버 컨테이너 로그·지표를 앱 서버의 Loki·Prometheus로 보낸다. 설정 파일은 앱 서버와 같이 쓴다(config.alloy 머리말)
+  alloy:
+    image: grafana/alloy:v1.10.0
+    container_name: palette-alloy
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    environment:
+      COMPOSE_PROJECT: palette-data
+      SERVER_NAME: data
+      # 앱 서버 내부 IP. 앱 서버 compose.prod.yaml의 MONITORING_BIND_IP와 같은 값
+      LOKI_URL: http://${MONITORING_HOST:?MONITORING_HOST가 없습니다}:3100/loki/api/v1/push
+      PROMETHEUS_URL: http://${MONITORING_HOST:?MONITORING_HOST가 없습니다}:9090/api/v1/write
+    # 마운트·권한 이유는 compose.prod.yaml의 alloy와 같다
+    privileged: true
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+      - /:/rootfs:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /proc:/host/proc:ro
+    mem_limit: 384m
+
+volumes:
+  es-data:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  alloy-data:

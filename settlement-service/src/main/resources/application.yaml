@@ -1,0 +1,122 @@
+server:
+  port: ${SETTLEMENT_PORT:8084}   # 로컬에서 루트 모놀리스(8080)와 같이 띄울 수 있게 다른 포트를 쓴다
+
+spring:
+  application:
+    name: settlement-service
+
+  # 프로젝트 루트의 .env를 읽음 (없으면 무시). bootRun은 모듈 폴더에서 실행되므로 상위 폴더도 찾는다
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
+
+  # settlement 스키마만 쓴다. 운영에서는 settlement_user(자기 스키마 권한만 가진 계정)로 접속한다
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:palette}?currentSchema=settlement
+    username: ${SETTLEMENT_DB_USERNAME:${DB_USERNAME:settlement_user}}
+    password: ${SETTLEMENT_DB_PASSWORD:${DB_PASSWORD:settlement_user}}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway(db/migration)로만 바꾸고, 엔티티와 다르면 앱 시작을 막는다.
+
+  flyway:
+    schemas: settlement
+    default-schema: settlement
+    # 운영 DB: 테이블을 public에서 settlement로 옮긴 뒤 처음 뜰 때 V1(baseline)은 이미 적용된 것으로 기록하고 V2부터 실행한다
+    #   V1의 테이블이 settlement에 모두 있어야 한다. 옮기지 못하는 outbox_event·processed_event 처리 등 이전 절차는 V1 파일 주석 참고
+    # 빈 DB(로컬·CI·새 서버): V1부터 실행한다
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  batch:
+    jdbc:
+      initialize-schema: never   # 배치 메타 테이블도 Flyway(V1__settlement_baseline.sql)로만 만든다
+    job:
+      enabled: false             # 앱 시작 시 Job 자동 실행 금지. 정산 Job은 스케줄러·관리자 요청으로만 실행한다
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+  # Outbox 릴레이가 이벤트 봉투를 발행하는 Kafka. 정산은 order.events를 받는다(SettlementEventListener, groupId settlement)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all                   # 브로커가 기록을 마친 뒤에 성공으로 본다(그때 outbox를 PUBLISHED로 바꿈)
+      properties:
+        enable.idempotence: true  # 프로듀서 재시도로 같은 메시지가 두 번 기록되지 않게
+        max.block.ms: 5000        # 브로커가 없을 때 send가 오래 막히지 않게(기본 60초)
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record            # 메시지 하나를 처리(커밋)한 뒤에 offset을 커밋한다
+
+  task:
+    scheduling:
+      pool:
+        size: 5          # 스케줄 작업(월 정산, 지급 재시도, 원장 재대조, 운영 알림 등 정산 작업과 outbox 릴레이)이 서로 오래 기다리지 않게. 월 정산 Job이 오래 돌아도 나머지가 멈추지 않는다
+
+
+# 정책 값. 코드에 숫자를 직접 쓰지 않고 각 컨텍스트의 <Ctx>Policy에서 읽는다.
+custom:
+  jwt:
+    # 서명 키: 모든 서비스가 같은 값을 쓴다. 기본값 없이 환경변수(.env)로만 주입한다.
+    secret: ${JWT_SECRET}
+    accessTokenExpireMinutes: 30          # Access Token 유효 시간(분)
+  internal:
+    # 서비스 간 호출(/internal/**) 인증 키. X-Internal-Key 헤더로 보낸다. 모든 서비스가 같은 값을 쓰고, 기본값 없이 환경변수(.env)로만 주입한다.
+    # 정산이 받는 내부 API(/internal/v1/settlements) 검사와 회원, 결제 내부 API 호출(MemberApiClient, PaymentApiClient)에 함께 쓴다
+    apiKey: ${INTERNAL_API_KEY}
+  # 회원 내부 API(/internal/v1/sellers). member-service(8081). 판매자 상태(제재 여부), 지급 대상 회원 ID, 상호명 조회
+  member:
+    baseUrl: ${MEMBER_SERVICE_URL:http://localhost:8081}
+    connectTimeoutMillis: 1000   # 회원 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 3000      # 응답 대기 제한 시간(밀리초). 판매자 조회는 가벼워 짧게 둔다
+  # 결제 내부 API(/internal/v1/payments/transfers). payment-service(8083). 정산 지급(transfer), 지급 내역 조회(findTransfer)
+  # 응답 시간 안에 오지 않으면 결과 모름으로 보고 정산서를 PROCESSING으로 둔다. 재확인 스케줄러가 같은 키로 지급 내역을 조회해 확정한다
+  payment:
+    baseUrl: ${PAYMENT_SERVICE_URL:http://localhost:8083}
+    connectTimeoutMillis: 1000   # 결제 서비스 접속 제한 시간(밀리초)
+    readTimeoutMillis: 10000     # 응답 대기 제한 시간(밀리초). 지급은 홀딩, 지갑 잠금을 기다릴 수 있어 길게 둔다. processingRecheckMinutes보다 충분히 짧아야 한다
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}   # 프론트 주소(쉼표로 구분)
+  settlement:
+    feeRate: 10                # 수수료율(%)
+    payDayOfMonth: 10          # 매월 정산일
+    maxAttempts: 3             # 최초 1회 + 재시도 2회
+    retryIntervalMinutes: ${SETTLEMENT_RETRY_INTERVAL_MINUTES:10}   # 재시도 간격(분). 로컬, 테스트 10, 개발 서버 120(compose.prod.yaml)
+    batchChunkSize: 100        # 월 정산 Job이 한 번에 처리하는 판매자·정산서 수
+    retryBatchSize: 50         # 재시도 스케줄러가 한 번에 처리하는 정산서 수
+    maxSearchMonths: 12        # 정산서 목록 기간 조회·엑셀 다운로드에서 한 번에 볼 수 있는 최대 개월 수
+    processingRecheckMinutes: 5  # 지급 요청 결과 모름(PROCESSING) 뒤 몇 분 지나면 재확인 스케줄러가 결제 원장으로 확정할지
+    exportMaxRows: 200000      # 엑셀 다운로드 한 번에 담을 최대 품목 수(넘으면 파일을 만들기 전에 400 SETTLEMENT_EXPORT_TOO_LARGE)
+    ledgerRecheck:
+      enabled: ${SETTLEMENT_LEDGER_RECHECK_ENABLED:true}   # 원장 재대조(매일 03:35)와 출력 대사(매일 03:45). 결제 지급 내역 조회(findTransfer)로 확인한다
+      lookbackDays: 2          # 지급일이 오늘부터 며칠 전까지인 PAID 정산서를 다시 읽을지(2 = T+1, 늦은 시각 지급 포함)
+  outbox:
+    relayEnabled: true          # false면 릴레이 스케줄러를 등록하지 않는다(테스트에서 끔: src/test/resources/application.properties)
+    relayIntervalMillis: 1000   # Outbox 릴레이 실행 간격(밀리초). 이벤트가 리스너에 닿기까지 최대 이만큼 늦어진다
+    relayBatchSize: 100         # 릴레이가 한 번에 발행하는 최대 이벤트 수
+    maxRetryCount: 5            # 발행 실패를 이 횟수만큼 겪으면 FAILED로 두고 더 이상 발행하지 않는다(Kafka가 내려가 있는 건 세지 않음)
+    sendTimeoutMillis: 10000    # Kafka 브로커의 기록 확인(ack)을 기다리는 최대 시간(밀리초)
+    topicPartitions: 3          # 이벤트 토픽(<대상>.events) 파티션 수. 같은 aggregateId는 같은 파티션으로 가서 순서가 지켜진다
+  kafka:
+    consumer:
+      # 컨슈머가 실패한 메시지를 다시 처리하는 방식. 기본값이면 1·2·4·8초 간격으로 4번 더 처리하고(총 5번), 그래도 실패하면 <토픽>-dlt로 보낸다
+      maxRetries: 4                     # 처음 처리 뒤 다시 처리하는 횟수
+      retryInitialIntervalMillis: 1000  # 첫 재시도 전 대기(밀리초)
+      retryMultiplier: 2.0              # 재시도마다 대기 시간에 곱하는 값
+  scheduling:
+    # false면 모든 스케줄러(월 정산, 지급 재시도, 결과 모름 재확인, 원장 재대조, 운영 알림, outbox 릴레이)가 멈춘다.
+    # 회원, 결제와 HTTP로 연결돼 기본으로 켠다. 문제가 생기면 서버 .env에 SETTLEMENT_SCHEDULING_ENABLED=false 한 줄로 끈다(코드 배포 없이)
+    enabled: ${SETTLEMENT_SCHEDULING_ENABLED:true}

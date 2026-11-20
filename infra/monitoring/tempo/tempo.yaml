@@ -1,0 +1,49 @@
+# Tempo: 서비스들이 보낸 추적(요청 하나가 거친 서비스·구간 기록)을 저장하고, Grafana에서 그림으로 본다(TRSS-335).
+# - 받기: OTLP HTTP 4318. compose 앱은 tempo:4318, k3s ai는 앱 서버 내부 IP:4318로 보낸다(주소는 Dockerfile·ai deployment)
+# - 저장: 이 서버 디스크(볼륨 tempo-data), 3일만 보관
+# - 지표 만들기(metrics-generator): "누가 누구를 불렀나"(service graph)와 구간별 요청·시간(span metrics)을
+#   Prometheus에 보낸다. Grafana 서비스 지도가 이 지표로 그려진다
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  # 받은 추적을 메모리에 모았다가 블록으로 디스크에 쓰는 주기. 짧게 둬서 메모리를 적게 쓴다
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # 디스크가 차지 않게 3일 지난 추적은 지운다
+    block_retention: 72h
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+overrides:
+  defaults:
+    metrics_generator:
+      # service-graphs: 서비스 지도(HTTP 부른 쪽↔받은 쪽, Kafka 보낸 쪽↔받은 쪽) / span-metrics: 구간별 요청 수·시간
+      processors: [service-graphs, span-metrics]

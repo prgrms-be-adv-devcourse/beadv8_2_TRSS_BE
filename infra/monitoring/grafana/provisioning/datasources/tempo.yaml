@@ -1,0 +1,28 @@
+# Tempo(추적)를 데이터 소스로 등록한다(TRSS-335).
+# - serviceMap: 서비스 지도는 Tempo가 Prometheus에 보낸 service graph 지표로 그린다
+# - tracesToLogsV2: 추적 화면에서 그 요청의 로그(Loki)로 간다. 로그에 찍힌 traceId로 찾는다
+apiVersion: 1
+datasources:
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      tracesToLogsV2:
+        datasourceUid: loki
+        # 구간 앞뒤로 조금 넓혀 찾는다(로그 시각과 구간 시각이 조금 어긋날 수 있다)
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+        filterByTraceID: true
+        # 추적의 서비스 이름(service.name = spring.application.name)을 Loki의 service 라벨과 맞춘다
+        tags:
+          - key: service.name
+            value: service

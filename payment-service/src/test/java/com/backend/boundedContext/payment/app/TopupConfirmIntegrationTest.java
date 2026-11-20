@@ -1,0 +1,258 @@
+package com.backend.boundedContext.payment.app;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.app.dto.TopupPrepareDto;
+import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.domain.TopupStatus;
+import com.backend.boundedContext.payment.domain.Wallet;
+import com.backend.boundedContext.payment.domain.WalletTransaction;
+import com.backend.boundedContext.payment.domain.WalletTransactionType;
+import com.backend.boundedContext.payment.out.PaymentMemberPort;
+import com.backend.boundedContext.payment.out.TopupRepository;
+import com.backend.boundedContext.payment.out.WalletRepository;
+import com.backend.boundedContext.payment.out.WalletTransactionRepository;
+import com.backend.boundedContext.payment.out.toss.TossPaymentResponse;
+import com.backend.boundedContext.payment.out.toss.TossPaymentsClient;
+import com.backend.boundedContext.payment.out.toss.TossTimeoutException;
+import com.backend.global.exception.DomainException;
+import com.backend.boundedContext.payment.support.TestPgCircuitBreakers;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+
+/**
+ * 충전 준비 → 승인 흐름을 실제 DB로 확인한다 (토스 클라이언트만 mock, 토스 어댑터·PG 포트는 실제 빈).
+ * 잠금으로 같은 승인 요청이 한 번만 반영되는지, 금액 불일치 실패 기록이 커밋되는지 본다.
+ * 로컬 Docker PostgreSQL이 필요하다.
+ */
+@SpringBootTest(properties = "custom.scheduling.enabled=false")   // 테스트 중 스케줄러가 테스트 데이터를 바꾸지 않게 끔
+class TopupConfirmIntegrationTest {
+
+    private static final long AMOUNT = 20_000;
+    private static final String PAYMENT_KEY = "pk_test_integration";
+    private static final OffsetDateTime APPROVED_AT = OffsetDateTime.of(2026, 10, 13, 10, 0, 0, 0, ZoneOffset.ofHours(9));
+
+    @Autowired
+    private CircuitBreakerRegistry circuitBreakerRegistry;
+
+    @Autowired
+    private PaymentFacade paymentFacade;
+
+    @Autowired
+    private WalletRepository walletRepository;
+
+    @Autowired
+    private TopupRepository topupRepository;
+
+    @Autowired
+    private WalletTransactionRepository walletTransactionRepository;
+
+    @MockitoBean
+    private TossPaymentsClient tossPaymentsClient;
+
+    @MockitoBean   // 회원 서비스 대신 쓰는 목. checkActiveMember는 아무것도 하지 않으므로 활성 회원으로 통과한다
+    private PaymentMemberPort memberPort;
+
+    // 회원은 회원 서비스에 있어 ID만 정하고, 활성 회원 확인은 위 목(memberPort)이 통과시킨다
+    private Long memberId;
+    private String paymentKey;
+
+    private Wallet wallet;
+    private String orderId;
+
+    @BeforeEach
+    void setUp() {
+        TestPgCircuitBreakers.resetAll(circuitBreakerRegistry);
+        memberId = randomMemberId();
+        paymentKey = PAYMENT_KEY + "-" + memberId;
+        wallet = walletRepository.save(Wallet.create(memberId));
+        TopupPrepareDto prepared = paymentFacade.prepareTopup(memberId, AMOUNT);
+        orderId = prepared.orderId();
+    }
+
+    @AfterEach
+    void cleanUp() {
+        walletTransactionRepository.deleteAll(transactionsOfWallet());
+        topupRepository.deleteAll(topupRepository.findAll().stream()
+                .filter(topup -> topup.getMemberId().equals(memberId)).toList());
+        walletRepository.deleteById(wallet.getId());
+    }
+
+    @Test
+    @DisplayName("승인 성공: 충전 건 DONE, 지갑 잔액, 원장 CHARGE가 함께 저장된다")
+    void confirm_success() {
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willReturn(tossDone());
+
+        TopupConfirmDto result = paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT);
+
+        assertThat(result.status()).isEqualTo(TopupStatus.DONE);
+        assertThat(result.balance()).isEqualTo(AMOUNT);
+
+        Topup topup = savedTopup();
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.DONE);
+        assertThat(topup.getPaymentKey()).isEqualTo(paymentKey);
+        assertThat(topup.getRemainingAmount()).isEqualTo(AMOUNT);
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isEqualTo(AMOUNT);
+
+        List<WalletTransaction> transactions = transactionsOfWallet();
+        assertThat(transactions).hasSize(1);
+        assertThat(transactions.get(0).getType()).isEqualTo(WalletTransactionType.CHARGE);
+        assertThat(transactions.get(0).getAmount()).isEqualTo(AMOUNT);
+        assertThat(transactions.get(0).getBalanceAfter()).isEqualTo(AMOUNT);
+        assertThat(transactions.get(0).getIdempotencyKey()).isEqualTo(topup.chargeIdempotencyKey());
+    }
+
+    @Test
+    @DisplayName("동시 승인: 같은 요청이 동시에 두 번 와도 둘 다 200이고, 토스는 한 번만 호출되고 잔액도 한 번만 늘어난다")
+    void confirm_concurrent() throws Exception {
+        // 첫 요청이 토스 호출 중인 동안 두 번째 요청이 들어오도록 응답을 늦춘다
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willAnswer(invocation -> {
+            Thread.sleep(300);
+            return tossDone();
+        });
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        Callable<Object> confirm = () -> {
+            start.await();
+            try {
+                return paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT);
+            } catch (DomainException e) {
+                return e.getResultCode();
+            }
+        };
+        List<Future<Object>> futures = new ArrayList<>();
+        futures.add(executor.submit(confirm));
+        futures.add(executor.submit(confirm));
+        start.countDown();
+
+        List<Object> results = new ArrayList<>();
+        for (Future<Object> future : futures) {
+            results.add(future.get(10, TimeUnit.SECONDS));
+        }
+        executor.shutdown();
+
+        // 늦게 선점을 시도한 요청은 재요청으로 처리돼 PROCESSING(첫 요청이 토스 호출 중) 또는 DONE(첫 요청이 끝남)을 받음
+        assertThat(results).allMatch(TopupConfirmDto.class::isInstance);
+        assertThat(results).map(result -> ((TopupConfirmDto) result).status()).contains(TopupStatus.DONE)
+                .allMatch(status -> status == TopupStatus.DONE || status == TopupStatus.PROCESSING);
+        verify(tossPaymentsClient, times(1)).confirm(anyString(), anyString(), anyLong());
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isEqualTo(AMOUNT);
+        assertThat(transactionsOfWallet()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("승인 재요청: 승인이 끝난 뒤 같은 요청이 다시 오면 토스를 다시 부르지 않고 DONE과 지금 잔액을 돌려준다")
+    void confirm_replayAfterDone() {
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willReturn(tossDone());
+        paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT);
+
+        TopupConfirmDto replay = paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT);
+
+        assertThat(replay.status()).isEqualTo(TopupStatus.DONE);
+        assertThat(replay.orderId()).isEqualTo(orderId);
+        assertThat(replay.balance()).isEqualTo(AMOUNT);
+        verify(tossPaymentsClient, times(1)).confirm(anyString(), anyString(), anyLong());
+        assertThat(transactionsOfWallet()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("금액 불일치: 토스를 호출하지 않고 400, FAILED_AMOUNT_MISMATCH는 롤백되지 않고 남는다")
+    void confirm_amountMismatch() {
+        assertThatThrownBy(() -> paymentFacade.confirmTopup(memberId, paymentKey, orderId, 10_000))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-AMOUNT_MISMATCH");
+
+        verify(tossPaymentsClient, never()).confirm(anyString(), eq(orderId), anyLong());
+        Topup topup = savedTopup();
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.FAILED_AMOUNT_MISMATCH);
+        assertThat(topup.getFailReason()).contains("20000", "10000");
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
+        assertThat(transactionsOfWallet()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단(가상계좌): 예치금에 반영하지 않고 PG 전액 취소 후 FAILED_METHOD_NOT_ALLOWED, 400")
+    void confirm_notAllowedMethod() {
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willReturn(tossDoneBy("가상계좌"));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString())).willReturn(tossDoneBy("가상계좌"));
+
+        assertThatThrownBy(() -> paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        Topup topup = savedTopup();
+        assertThat(topup.getStatus()).isEqualTo(TopupStatus.FAILED_METHOD_NOT_ALLOWED);
+        assertThat(topup.getCanceledAmount()).isEqualTo(AMOUNT);
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
+        assertThat(transactionsOfWallet()).isEmpty();
+        verify(tossPaymentsClient, times(1)).cancel(paymentKey, AMOUNT, "충전에 허용하지 않은 결제 수단", "TOPUP-" + topup.getId() + "-METHOD-CANCEL-1");
+    }
+
+    @Test
+    @DisplayName("허용하지 않은 결제 수단: PG 취소 응답을 못 받으면 METHOD_CANCELING으로 남고 예치금은 그대로 0, 탈퇴 대기 대상")
+    void confirm_notAllowedMethod_cancelUnknown() {
+        given(tossPaymentsClient.confirm(paymentKey, orderId, AMOUNT)).willReturn(tossDoneBy("가상계좌"));
+        given(tossPaymentsClient.cancel(anyString(), anyLong(), anyString(), anyString()))
+                .willThrow(new TossTimeoutException(new RuntimeException("Read timed out")));
+
+        assertThatThrownBy(() -> paymentFacade.confirmTopup(memberId, paymentKey, orderId, AMOUNT))
+                .isInstanceOf(DomainException.class)
+                .extracting("resultCode").isEqualTo("400-TOPUP_METHOD_NOT_ALLOWED");
+
+        assertThat(savedTopup().getStatus()).isEqualTo(TopupStatus.METHOD_CANCELING);
+        assertThat(walletRepository.findByMemberId(memberId).orElseThrow().getBalance()).isZero();
+        assertThat(paymentFacade.hasPendingTopups(memberId)).isTrue();
+    }
+
+    private TossPaymentResponse tossDoneBy(String method) {
+        return new TossPaymentResponse(paymentKey, orderId, "DONE", AMOUNT, method, APPROVED_AT, null);
+    }
+
+    private TossPaymentResponse tossDone() {
+        return new TossPaymentResponse(paymentKey, orderId, "DONE", AMOUNT, "카드", APPROVED_AT, null);
+    }
+
+    private Topup savedTopup() {
+        return topupRepository.findByOrderIdAndMemberId(orderId, memberId).orElseThrow();
+    }
+
+    private List<WalletTransaction> transactionsOfWallet() {
+        return walletTransactionRepository.findAll().stream()
+                .filter(transaction -> transaction.getWallet().getId().equals(wallet.getId()))
+                .toList();
+    }
+
+    // 다른 테스트·시드와 겹치지 않는 회원 ID (지갑의 member_id 유니크). 회원은 회원 서비스에 있어 ID만 정한다
+    private static Long randomMemberId() {
+        return ThreadLocalRandom.current().nextLong(5_000_000_000L, 6_000_000_000L);
+    }
+}

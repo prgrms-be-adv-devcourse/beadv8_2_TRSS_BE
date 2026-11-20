@@ -1,0 +1,267 @@
+package com.backend.boundedContext.payment.app;
+
+import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.backend.boundedContext.payment.app.dto.TopupConfirmDto;
+import com.backend.boundedContext.payment.domain.PaymentErrorCode;
+import com.backend.boundedContext.payment.domain.Topup;
+import com.backend.boundedContext.payment.domain.TopupManualCheckReason;
+import com.backend.boundedContext.payment.domain.TopupManualResolveAction;
+import com.backend.boundedContext.payment.domain.TopupStatus;
+import com.backend.boundedContext.payment.domain.Wallet;
+import com.backend.boundedContext.payment.domain.WalletTransactionType;
+import com.backend.boundedContext.payment.out.TopupRepository;
+import com.backend.boundedContext.payment.out.WalletRepository;
+import com.backend.boundedContext.payment.out.WalletTransactionRepository;
+import com.backend.boundedContext.payment.out.pg.PgPaymentMethod;
+import com.backend.boundedContext.payment.out.pg.PgPaymentRef;
+import com.backend.boundedContext.payment.out.pg.PgPaymentResult;
+import com.backend.boundedContext.payment.out.pg.TopupGateways;
+import com.backend.global.exception.DomainException;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 충전 승인의 DB 트랜잭션 구간
+ * 전체 승인 흐름은 Facade에서 조율하되, Facade 전체를 하나의 트랜잭션으로 묶지는 않음
+ * Tx1 → PG 호출(트랜잭션 밖) → Tx2 중 DB 작업만 각각 짧은 트랜잭션으로 실행하기 위해 별도 빈으로 분리
+ * (같은 클래스 내부 호출은 Spring 프록시를 거치지 않아 메서드의 @Transactional이 적용되지 않음)
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class PaymentTopupConfirmProcessor {
+
+    // 충전에 허용하는 결제 수단. 남은 금액을 PG 부분 취소로 돌려줄 수 있는 수단만 허용
+    private static final Set<PgPaymentMethod> ALLOWED_METHODS = EnumSet.of(PgPaymentMethod.CARD, PgPaymentMethod.EASY_PAY, PgPaymentMethod.TRANSFER);
+
+    private final TopupRepository topupRepository;
+    private final WalletRepository walletRepository;
+    private final WalletTransactionRepository walletTransactionRepository;
+    private final TopupGateways topupGateways;
+
+    /**
+     * Tx1: PG 승인 호출 전 충전 건을 PROCESSING으로 선점
+     * 1. 충전 건 행 잠금 조회 (조건에 memberId 포함, 남의 충전 건이면 404)
+     * 2. READY가 아니면 같은 요청의 재요청인지 확인 (상태는 그대로)
+     *    - 결제키·금액이 같고 DONE·PROCESSING이면 처음 결과를 REPLAYED로 반환 (PG를 다시 부르지 않음)
+     *    - 그 밖(결제키·금액이 다름, 실패·취소 상태)은 409 TOPUP_ALREADY_PROCESSED
+     * 3. 이미 다른 충전 건에 쓰인 결제키면 409 TOPUP_ALREADY_PROCESSED
+     * 4. 충전 건의 PG가 연동되지 않았으면 IllegalStateException (상태는 그대로)
+     * 5. 저장 금액 ≠ 요청 금액이면 FAILED_AMOUNT_MISMATCH로 기록하고 결과로 반환 (예외를 던지지 않아 기록이 커밋됨)
+     * 6. READY → PROCESSING, 결제키 저장
+     */
+    @Transactional
+    public TopupConfirmStartResult start(Long memberId, String orderId, String paymentKey, long amount) {
+        Topup topup = topupRepository.findByOrderIdAndMemberIdForUpdate(orderId, memberId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+
+        if (topup.getStatus() != TopupStatus.READY) {
+            return replay(topup, paymentKey, amount);
+        }
+        if (topupRepository.existsByPaymentKey(paymentKey)) {
+            throw new DomainException(PaymentErrorCode.TOPUP_ALREADY_PROCESSED);
+        }
+
+        topupGateways.checkSupported(topup.getPgProvider());
+
+        if (topup.getAmount() != amount) {
+            topup.fail(TopupStatus.FAILED_AMOUNT_MISMATCH, "충전 준비 금액과 승인 요청 금액이 다릅니다. (준비 " + topup.getAmount() + "원, 요청 " + amount + "원)");
+            return new TopupConfirmStartResult(topup.getId(), topup.getPgProvider(), TopupConfirmStartResult.Outcome.AMOUNT_MISMATCH, null, null);
+        }
+
+        topup.markProcessing(paymentKey, LocalDateTime.now());
+        return new TopupConfirmStartResult(topup.getId(), topup.getPgProvider(), TopupConfirmStartResult.Outcome.STARTED, null, PgPaymentRef.from(topup));
+    }
+
+    /**
+     * 승인 재요청: 새로고침·중복 클릭으로 같은 요청이 다시 오면 처음 결과를 돌려줌 (주문번호를 멱등 키로 씀)
+     * - DONE: 승인 완료. 잔액은 지금 지갑 잔액 (그사이 예치금을 썼으면 처음 응답과 다를 수 있음)
+     * - PROCESSING: 결과 확인 중
+     * 실패 상태는 처음 오류 응답을 다시 만들 수 없고, 취소가 시작된 건은 승인 완료로 답할 수 없어 409
+     */
+    private TopupConfirmStartResult replay(Topup topup, String paymentKey, long amount) {
+        boolean sameRequest = paymentKey.equals(topup.getPaymentKey()) && topup.getAmount() == amount;
+        if (sameRequest && topup.getStatus() == TopupStatus.DONE) {
+            return TopupConfirmStartResult.replayed(TopupConfirmDto.of(topup, topup.getWallet().getBalance()), topup.getPgProvider());
+        }
+        if (sameRequest && topup.getStatus() == TopupStatus.PROCESSING) {
+            return TopupConfirmStartResult.replayed(TopupConfirmDto.processing(topup.getId(), topup.getOrderId(), topup.getAmount()), topup.getPgProvider());
+        }
+        throw new DomainException(PaymentErrorCode.TOPUP_ALREADY_PROCESSED);
+    }
+
+    /**
+     * Tx2 (승인 성공): PG가 승인한 충전 건을 예치금에 반영. 대사 스케줄러도 같은 메서드로 반영
+     * 1. 충전 건 행 잠금 조회. PROCESSING이 아니면 이미 반영된 것으로 보고 현재 상태만 반환
+     *    (승인 응답과 스케줄러가 같은 충전 건을 동시에 반영하려 해도 한 번만 반영됨)
+     * 2. 지갑 잠금 조회 → 원장 CHARGE 기록(잔액 증가) → 충전 건 DONE
+     * 3. 허용하지 않은 결제 수단(카드·간편결제·계좌이체 외)이면 경고 로그
+     *    (승인 응답·대사가 이 메서드 전에 걸러 PG 전액 취소하므로 정상이면 오지 않음. 혹시 오면 반영은 그대로 진행)
+     * 잠금 순서: 충전 건 → 지갑
+     */
+    @Transactional
+    public TopupConfirmDto complete(Long topupId, PgPaymentResult result) {
+        if (!result.isApproved()) {
+            throw new IllegalArgumentException("승인 완료된 PG 결제만 반영할 수 있습니다: " + result.status());
+        }
+
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        Wallet wallet = walletRepository.findByMemberIdForUpdate(topup.getMemberId())
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.WALLET_NOT_FOUND));
+
+        if (topup.getStatus() != TopupStatus.PROCESSING) {
+            return TopupConfirmDto.of(topup, wallet.getBalance());
+        }
+
+        if (result.totalAmount() != topup.getAmount()) {
+            log.error("PG 승인 금액이 충전 금액과 다릅니다. topupId={}, 충전 {}원, PG {}원",
+                    topupId, topup.getAmount(), result.totalAmount());
+        }
+        if (!ALLOWED_METHODS.contains(result.method())) {
+            log.warn("허용하지 않은 결제 수단으로 충전이 승인됐습니다. topupId={}, method={}", topupId, result.method());
+        }
+
+        walletTransactionRepository.save(wallet.change(WalletTransactionType.CHARGE, topup.getAmount(), topup.getId(), topup.chargeIdempotencyKey()));
+        topup.approve(result.approvedAt() != null ? result.approvedAt() : LocalDateTime.now());
+
+        return TopupConfirmDto.of(topup, wallet.getBalance());
+    }
+
+    // 충전에 허용하는 결제 수단인지. 허용하지 않으면 예치금에 반영하지 않고 PG 전액 취소함
+    public static boolean isAllowedMethod(PgPaymentMethod method) {
+        return ALLOWED_METHODS.contains(method);
+    }
+
+    /**
+     * 허용하지 않은 결제 수단으로 승인된 충전 건의 전액 취소 시작: PROCESSING → METHOD_CANCELING
+     * 예치금에 반영하지 않으므로 지갑은 잠그지 않음
+     * PROCESSING이 아니면(승인 응답과 대사 중 다른 쪽이 먼저 처리) 아무것도 하지 않고 빈 값 반환 (같은 결제에 PG 취소가 두 번 가지 않게)
+     */
+    @Transactional
+    public Optional<TopupMethodCancelStart> startMethodCancel(Long topupId) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (topup.getStatus() != TopupStatus.PROCESSING) {
+            return Optional.empty();
+        }
+        topup.startMethodCancel();
+        return Optional.of(new TopupMethodCancelStart(topup.getId(), topup.getPgProvider(), PgPaymentRef.from(topup),
+                topup.getAmount(), topup.getCancelAttempts(), topup.methodCancelIdempotencyKey()));
+    }
+
+    /**
+     * 허용하지 않은 결제 수단 전액 취소 확정: METHOD_CANCELING → FAILED_METHOD_NOT_ALLOWED
+     * 이 회차가 아직 진행 중일 때만 반영 (이미 확정됐거나 재시도로 회차가 바뀌었으면 아무것도 하지 않음)
+     */
+    @Transactional
+    public void completeMethodCancel(Long topupId, int attempt, String reason) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (topup.isMethodCancelingAttempt(attempt)) {
+            topup.completeMethodCancel(reason, LocalDateTime.now());
+        }
+    }
+
+    /**
+     * 허용하지 않은 결제 수단 취소 재시도 시작: 이 회차가 아직 진행 중이면 회차를 1 늘려 새 멱등 키를 돌려줌
+     * 그사이 회차가 바뀌었거나 이미 확정됐으면 빈 값 반환 (같은 회차를 두 번 재시도하지 않게)
+     */
+    @Transactional
+    public Optional<TopupMethodCancelStart> retryMethodCancel(Long topupId, int attempt) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (!topup.isMethodCancelingAttempt(attempt)) {
+            return Optional.empty();
+        }
+        topup.retryMethodCancel();
+        return Optional.of(new TopupMethodCancelStart(topup.getId(), topup.getPgProvider(), PgPaymentRef.from(topup),
+                topup.getAmount(), topup.getCancelAttempts(), topup.methodCancelIdempotencyKey()));
+    }
+
+    /**
+     * 대사가 자동으로 정할 수 없는 허용하지 않은 결제 수단 취소 건을 수동 확인으로 표시하고, 표시했으면 true
+     * 이 회차가 아직 진행 중이고 표시 전일 때만 표시함
+     */
+    @Transactional
+    public boolean markMethodCancelManualCheck(Long topupId, int attempt, TopupManualCheckReason reason) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        if (!topup.isMethodCancelingAttempt(attempt) || topup.needsManualCheck()) {
+            return false;
+        }
+        topup.markManualCheck(reason, LocalDateTime.now());
+        return true;
+    }
+
+    /**
+     * 관리자 정리 (METHOD_CANCELING 수동 확인 건): PG에서 전액 취소된 것을 확인해 FAILED_METHOD_NOT_ALLOWED로 확정
+     */
+    @Transactional
+    public TopupStatus confirmMethodCancelManually(Long topupId, String reason) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        topup.startManualResolve(TopupManualResolveAction.CONFIRM_METHOD_CANCEL);
+        topup.completeMethodCancel(reason, LocalDateTime.now());
+        return topup.getStatus();
+    }
+
+    /**
+     * 관리자 정리 (METHOD_CANCELING 수동 확인 건): 표시를 지우고 회차를 1 늘려 PG 전액 취소를 다시 보낼 값을 돌려줌
+     * 다시 보낸 취소가 끝나지 않으면 METHOD_CANCELING 대사가 다시 조회하고, 그래도 정할 수 없으면 다시 표시함
+     */
+    @Transactional
+    public TopupMethodCancelStart startManualMethodCancelRetry(Long topupId) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+        topup.startManualResolve(TopupManualResolveAction.RETRY_METHOD_CANCEL);
+        topup.retryMethodCancel();
+        return new TopupMethodCancelStart(topup.getId(), topup.getPgProvider(), PgPaymentRef.from(topup), topup.getAmount(), topup.getCancelAttempts(), topup.methodCancelIdempotencyKey());
+    }
+
+    /**
+     * 허용하지 않은 결제 수단 취소 결과 확인 대상: 기준 시각 이전부터 METHOD_CANCELING으로 남은 충전 건 (오래된 순, 위치 다음부터 최대 limit건)
+     */
+    @Transactional(readOnly = true)
+    public List<TopupMethodCancelTarget> findMethodCancelTargets(LocalDateTime cutoff, TopupReconcileCursor after, int limit) {
+        return topupRepository.findStale(TopupStatus.METHOD_CANCELING, cutoff, after.updatedAt(), after.topupId(), PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupMethodCancelTarget(topup.getId(), PgPaymentRef.from(topup), topup.getPgProvider(), topup.getAmount(), topup.getCancelAttempts(), topup.getUpdatedAt()))
+                .toList();
+    }
+
+    /**
+     * Tx2 (승인 실패 확정): PROCESSING 충전 건을 실패로 기록
+     * PROCESSING이 아니면 이미 결과가 반영된 것으로 보고 아무것도 하지 않음
+     */
+    @Transactional
+    public void fail(Long topupId, TopupStatus failStatus, String reason) {
+        Topup topup = topupRepository.findByIdForUpdate(topupId)
+                .orElseThrow(() -> new DomainException(PaymentErrorCode.TOPUP_NOT_FOUND));
+
+        if (topup.getStatus() != TopupStatus.PROCESSING) {
+            return;
+        }
+        topup.fail(failStatus, reason);
+    }
+
+    /**
+     * 결과 확인 대상: 기준 시각 이전부터 PROCESSING으로 남은 충전 건 (오래된 순, 위치 다음부터 최대 limit건)
+     * PG 조회는 트랜잭션 밖에서 하므로 엔티티 대신 ID·결제키·PG·수정 시각만 넘김
+     */
+    @Transactional(readOnly = true)
+    public List<TopupReconcileTarget> findReconcileTargets(LocalDateTime cutoff, TopupReconcileCursor after, int limit) {
+        return topupRepository.findStale(TopupStatus.PROCESSING, cutoff, after.updatedAt(), after.topupId(), PageRequest.of(0, limit)).stream()
+                .map(topup -> new TopupReconcileTarget(topup.getId(), PgPaymentRef.from(topup), topup.getPgProvider(), topup.getUpdatedAt()))
+                .toList();
+    }
+}

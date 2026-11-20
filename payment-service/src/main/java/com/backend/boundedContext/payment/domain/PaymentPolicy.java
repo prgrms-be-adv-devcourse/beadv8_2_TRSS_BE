@@ -1,0 +1,97 @@
+package com.backend.boundedContext.payment.domain;
+
+import java.time.Duration;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import com.backend.global.exception.DomainException;
+
+@Component
+public class PaymentPolicy {
+
+    private final long topupUnit;
+    private final long topupMax;
+    private final Duration topupReadyTtl;
+    private final Duration topupReconcileDelay;
+    private final int topupReconcileBatchSize;
+    private final int topupReconcileUnknownStreak;
+    private final Duration topupStuckWarnAfter;
+    private final Long adminMemberId;
+    private final long returnPickupFee;
+
+    public PaymentPolicy(
+            @Value("${custom.payment.topupUnit}") long topupUnit,
+            @Value("${custom.payment.topupMax}") long topupMax,
+            @Value("${custom.payment.topupReadyExpireMinutes}") long topupReadyExpireMinutes,
+            @Value("${custom.payment.topupReconcileDelayMinutes}") long topupReconcileDelayMinutes,
+            @Value("${custom.payment.topupReconcileBatchSize}") int topupReconcileBatchSize,
+            @Value("${custom.payment.topupReconcileUnknownStreak}") int topupReconcileUnknownStreak,
+            @Value("${custom.payment.topupStuckWarnMinutes}") long topupStuckWarnMinutes,
+            @Value("${custom.payment.adminMemberId}") Long adminMemberId,
+            @Value("${custom.payment.returnPickupFee}") long returnPickupFee
+    ) {
+        this.topupUnit = topupUnit;
+        this.topupMax = topupMax;
+        this.topupReadyTtl = Duration.ofMinutes(topupReadyExpireMinutes);
+        this.topupReconcileDelay = Duration.ofMinutes(topupReconcileDelayMinutes);
+        this.topupReconcileBatchSize = topupReconcileBatchSize;
+        // 0 이하면 결과 모름이 나와도 멈추지 않아 장애 중 회차가 길어지므로 기동 단계에서 막음
+        if (topupReconcileUnknownStreak < 1) {
+            throw new IllegalArgumentException("custom.payment.topupReconcileUnknownStreak는 1 이상이어야 합니다: " + topupReconcileUnknownStreak);
+        }
+        this.topupReconcileUnknownStreak = topupReconcileUnknownStreak;
+        this.topupStuckWarnAfter = Duration.ofMinutes(topupStuckWarnMinutes);
+        this.adminMemberId = adminMemberId;
+        this.returnPickupFee = returnPickupFee;
+    }
+
+    // 충전 금액: 충전 단위의 배수이면서 충전 단위 이상, 최대 금액 이하
+    public void validateTopupAmount(long amount) {
+        if (amount < topupUnit || amount > topupMax || amount % topupUnit != 0) {
+            throw new DomainException(PaymentErrorCode.TOPUP_AMOUNT_INVALID);
+        }
+    }
+
+    // 잔액 부족 시 충전 권장액: 부족액을 충전 단위로 올린 금액 (예: 18,000 → 20,000, 20,000 → 20,000)
+    // 정수 나눗셈만으로 올림: (부족액 + 단위 - 1) / 단위 * 단위
+    public long recommendedChargeAmount(long shortage) {
+        if (shortage <= 0) return 0;
+        return (shortage + topupUnit - 1) / topupUnit * topupUnit;
+    }
+
+    // READY 충전 건이 만료되기까지의 시간
+    public Duration topupReadyTtl() {
+        return topupReadyTtl;
+    }
+
+    // PROCESSING 충전 건을 토스에 다시 확인하기까지 기다리는 시간 (승인 요청이 아직 진행 중인 건과 겹치지 않게)
+    public Duration topupReconcileDelay() {
+        return topupReconcileDelay;
+    }
+
+    // 결과 확인 스케줄러가 한 번에 조회하는 충전 건수 (다 채우면 같은 실행에서 이어서 조회)
+    public int topupReconcileBatchSize() {
+        return topupReconcileBatchSize;
+    }
+
+    // 결과 확인 스케줄러가 회차를 멈추는 결과 모름 연속 건수 (PG 장애 중 회차가 길어지지 않게)
+    public int topupReconcileUnknownStreak() {
+        return topupReconcileUnknownStreak;
+    }
+
+    // 결과가 정해지지 않은 상태(PROCESSING·CANCELING·METHOD_CANCELING)로 이 시간이 넘게 남은 충전 건은 오류 로그로 알림
+    public Duration topupStuckWarnAfter() {
+        return topupStuckWarnAfter;
+    }
+
+    // 정산 수수료(FEE)를 받는 관리자 회원 ID
+    public Long adminMemberId() {
+        return adminMemberId;
+    }
+
+    // 단순 변심 반품 때 구매자가 내는 반품 배송비(원). 무료 배송 주문도 같은 금액
+    public long returnPickupFee() {
+        return returnPickupFee;
+    }
+}

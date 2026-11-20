@@ -1,0 +1,32 @@
+# ai 파드 수를 요청 수에 따라 1~2개로 자동 조절한다(HPA, TRSS-327).
+# 기준 값(ai_requests_per_second)은 Prometheus Adapter(infra/k8s/prometheus-adapter.yaml)가 Prometheus에서 읽어 준다.
+#   kubectl apply -f infra/k8s/ai/hpa.yaml
+# 지켜보기: kubectl -n palette get hpa ai -w
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai
+  namespace: palette
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai
+  minReplicas: 1
+  # 앱 서버 메모리(7.6GB)를 다른 앱·k3s와 나눠 써서 2개가 한계다(ai 파드 하나 최대 768MB)
+  maxReplicas: 2
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: ai_requests_per_second
+        target:
+          # 파드 하나가 맡을 초당 요청 수. 전체 값 ÷ 이 값 = 원하는 파드 수(올림).
+          # 예: 초당 3건이면 3 ÷ 2 = 1.5 → 2개, 초당 1건이면 1개.
+          # 임시 값이다. 부하 테스트로 응답이 느려지기 시작하는 지점을 보고 정한다(설계 문서 "구현 단계" 3)
+          type: AverageValue
+          averageValue: "2"
+  behavior:
+    scaleDown:
+      # 요청이 줄어도 2분 동안 계속 적을 때만 줄인다(기본 5분). 잠깐 조용해졌다고 바로 줄였다 다시 늘리는 걸 막는다
+      stabilizationWindowSeconds: 120

@@ -1,0 +1,48 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "tokenizer": {
+        "korean_mixed": {
+          "type": "nori_tokenizer",
+          "decompound_mode": "mixed"
+        }
+      },
+      "analyzer": {
+        "korean": {
+          "type": "custom",
+          "tokenizer": "korean_mixed",
+          "filter": ["lowercase", "nori_readingform", "nori_part_of_speech"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "_meta": { "version": 5 },
+    "dynamic": "strict",
+    "properties": {
+      "productId": { "type": "long" },
+      "name": {
+        "type": "text",
+        "analyzer": "korean",
+        "fields": {
+          "keyword": { "type": "keyword", "ignore_above": 256 }
+        }
+      },
+      "description": { "type": "text", "analyzer": "korean" },
+      "businessName": { "type": "text", "analyzer": "korean" },
+      "categoryId": { "type": "long" },
+      "status": { "type": "keyword" },
+      "soldOut": { "type": "boolean" },
+      "effectivePrice": { "type": "long" },
+      "discountRate": { "type": "integer" },
+      "wishCount": { "type": "long" },
+      "reviewCount": { "type": "long" },
+      "ratingScore": { "type": "double" },
+      "salesCount30d": { "type": "long" },
+      "behaviorScore": { "type": "double" },
+      "createdAt": { "type": "date", "format": "epoch_millis" }
+    }
+  }
+}

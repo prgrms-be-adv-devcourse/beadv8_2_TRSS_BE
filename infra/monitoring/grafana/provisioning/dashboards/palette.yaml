@@ -1,0 +1,13 @@
+# Grafana가 뜰 때 palette/ 폴더의 대시보드(JSON)를 자동으로 불러온다(TRSS-335).
+# 화면에서 고쳐도 저장되지 않으니(allowUiUpdates: false) 대시보드는 JSON 파일을 고쳐 PR로 바꾼다.
+apiVersion: 1
+
+providers:
+  - name: palette
+    orgId: 1
+    folder: Palette          # 알림 규칙(alerting/rules.yaml)과 같은 폴더에 둔다
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards/palette

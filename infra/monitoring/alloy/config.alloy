@@ -1,0 +1,136 @@
+// compose 프로젝트 컨테이너의 stdout 로그를 Docker API로 읽어 Loki로 보낸다.
+// 앱은 로그를 파일로 남기지 않으므로 앱 코드·설정을 바꾸지 않아도 수집된다.
+//
+// 앱 서버(compose.prod.yaml)와 데이터 서버(compose.data.yaml)가 이 파일 하나를 같이 쓴다. 서버마다 다른 값은 환경변수로 받는다.
+//   COMPOSE_PROJECT : 로그를 모을 compose 프로젝트 이름(palette / palette-data)
+//   SERVER_NAME     : 모든 로그·지표에 붙일 server 라벨. 두 서버의 호스트 지표를 구분한다
+//   LOKI_URL, PROMETHEUS_URL : 보낼 곳. 데이터 서버는 앱 서버 내부 IP로 보낸다
+
+discovery.docker "palette" {
+  host = "unix:///var/run/docker.sock"
+
+  // 같은 서버의 다른 컨테이너 로그는 가져오지 않는다
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=" + sys.env("COMPOSE_PROJECT")]
+  }
+}
+
+discovery.relabel "palette" {
+  targets = []
+
+  // container="palette-app"처럼 컨테이너 이름으로 조회한다 (앞의 / 제거)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // service="app"처럼 compose 서비스 이름으로도 조회할 수 있게 한다
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "palette" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.palette.targets
+  relabel_rules = discovery.relabel.palette.rules
+  forward_to    = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = sys.env("LOKI_URL")
+  }
+  external_labels = { server = sys.env("SERVER_NAME") }
+}
+
+// ── 메트릭 ──────────────────────────────────────────────────────────────
+// Spring 앱: 관리 포트 9091(Dockerfile의 MANAGEMENT_SERVER_PORT)을 연 palette 컨테이너만 스크랩한다.
+// 앱 이미지는 모두 같은 Dockerfile이라 서비스가 늘어도 이 설정을 고치지 않는다.
+discovery.relabel "app_metrics" {
+  targets = discovery.docker.palette.targets
+
+  rule {
+    source_labels = ["__meta_docker_port_private"]
+    regex         = "9091"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+prometheus.scrape "app" {
+  job_name        = "spring"
+  targets         = discovery.relabel.app_metrics.output
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// 컨테이너 CPU·메모리·네트워크. 라벨은 name(컨테이너 이름)만, compose 라벨은 붙이지 않는다(시계열 수)
+prometheus.exporter.cadvisor "containers" {
+  docker_host            = "unix:///var/run/docker.sock"
+  docker_only            = true
+  store_container_labels = false
+}
+
+// 내장 exporter 타깃은 job="integrations/cadvisor"를 미리 달고 있어 scrape의 job_name이 적용되지 않는다. 여기서 바꾼다
+discovery.relabel "cadvisor" {
+  targets = prometheus.exporter.cadvisor.containers.targets
+
+  rule {
+    target_label = "job"
+    replacement  = "cadvisor"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  job_name        = "cadvisor"
+  targets         = discovery.relabel.cadvisor.output
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// 호스트(EC2) CPU·메모리·디스크·부하. 네트워크는 컨테이너 안에서 호스트 값을 못 읽어 뺀다
+prometheus.exporter.unix "host" {
+  procfs_path    = "/host/proc"
+  sysfs_path     = "/sys"
+  rootfs_path    = "/rootfs"
+  set_collectors = ["cpu", "meminfo", "loadavg", "filesystem", "diskstats", "pressure", "vmstat", "stat", "uname", "time"]
+}
+
+// 위 cadvisor와 같은 이유로 job을 "node"로 바꾼다(job="integrations/unix" → 대시보드 1860이 쓰는 이름)
+discovery.relabel "host" {
+  targets = prometheus.exporter.unix.host.targets
+
+  rule {
+    target_label = "job"
+    replacement  = "node"
+  }
+}
+
+prometheus.scrape "host" {
+  job_name        = "node"
+  targets         = discovery.relabel.host.output
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = sys.env("PROMETHEUS_URL")
+  }
+  external_labels = { server = sys.env("SERVER_NAME") }
+}

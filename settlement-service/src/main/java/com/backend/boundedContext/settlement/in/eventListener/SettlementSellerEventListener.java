@@ -1,0 +1,88 @@
+package com.backend.boundedContext.settlement.in.eventListener;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
+
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.backend.boundedContext.settlement.app.SettlementFacade;
+import com.backend.global.eventConsumer.ProcessedEvents;
+import com.backend.global.outbox.EventMessages;
+import com.backend.shared.event.DomainEvent;
+import com.backend.shared.event.EventEnvelope;
+import com.backend.shared.member.event.SellerSanctionedEvent;
+import com.backend.shared.member.event.SellerUnsanctionedEvent;
+
+import lombok.RequiredArgsConstructor;
+
+/**
+ * 회원 서비스의 판매자 제재 이벤트를 Kafka(seller.events)로 받아 그 판매자의 지급 전 정산서를 보류하고,
+ * 제재 해지 이벤트를 받으면 제재 보류(hold_type SANCTION) 정산서만 READY로 되돌린다(시도 횟수 초기화).
+ *
+ * 흐름: 관리자 판매자 제재 → outbox 저장 → 릴레이가 Kafka 발행 → 이 컨슈머(groupId = settlement)
+ * 메시지 키가 sellerId라 같은 판매자 이벤트는 보낸 순서대로 받는다.
+ * 한 메시지를 하나의 트랜잭션에서 처리한다(@Transactional).
+ *   1. seller.events에 함께 오는 다른 판매자 이벤트(철회 요청·철회 거절 등)는 정산이 할 일이 없으므로 무시한다.
+ *      eventType 헤더로 먼저 거르고(payload를 읽지 않음), 헤더가 없는 메시지(콘솔로 다시 보낸 DLT 메시지 등)는 봉투의 eventType만 읽어 거른다.
+ *      그래서 이 앱이 아직 모르는 새 판매자 이벤트가 헤더 없이 와도 역직렬화 실패로 DLT에 쌓이지 않는다
+ *   2. 같은 트랜잭션 안에서 eventId를 processed_event에 기록한다. 이미 있으면(재전달) 아무것도 하지 않는다
+ *   3. 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 HOLD로 바꾸고 처리 이력을 EVENT로 남긴다
+ * 3이 실패하면 2의 기록도 함께 롤백되므로, 같은 메시지를 다시 받으면 처음부터 다시 처리한다.
+ * 실패한 메시지는 1·2·4·8초 간격으로 다시 받고(총 5번), 그래도 실패하면 seller.events-dlt로 간다(KafkaConsumerConfig).
+ * 보류는 이미 HOLD인 정산서를 건너뛰므로 이중으로 처리돼도 결과가 같다.
+ *
+ * 이벤트가 도착하기 전(보통 1초 이내, Kafka가 멈추면 더 길게)에 지급이 돌 수 있는 틈은
+ * SettlementPayoutUseCase가 지급 직전에 판매자 상태를 다시 보고 SANCTIONED면 지급하지 않고 보류해 막는다.
+ * 제재 뒤에 새로 만들어지는 정산서는 월 정산 집계가 판매자 상태를 보고 처음부터 HOLD로 만든다(SettlementAggregateUseCase).
+ */
+@Component
+@RequiredArgsConstructor
+public class SettlementSellerEventListener {
+
+    /** Kafka groupId. 정산의 모든 리스너가 같은 그룹을 쓴다(바꾸면 오프셋이 처음부터 다시 잡히므로 그대로 둔다) */
+    static final String GROUP_ID = "settlement";
+
+    /**
+     * processed_event.consumer 값. 예전 이름("settlement")을 그대로 쓴다.
+     * 바꾸면 이미 처리한 제재 이벤트의 기록이 무시되어, 그 이벤트가 다시 오면(콘솔 재전송, 배포 중 오프셋 커밋 전 종료)
+     * 제재가 풀려 보류를 해제한 정산서를 다시 HOLD로 바꾼다. 주문 리스너(settlement.order-confirmed)와는 토픽과 eventId가 달라 기록이 겹치지 않는다
+     */
+    static final String CONSUMER = "settlement";
+
+    /** OutboxKafkaSender가 붙이는 이벤트 타입 헤더 */
+    private static final String EVENT_TYPE_HEADER = "eventType";
+
+    /** 정산이 다루는 판매자 이벤트: 제재(보류), 제재 해지(제재 보류 해제) */
+    private static final Set<String> HANDLED_EVENT_TYPES = Set.of(SellerSanctionedEvent.class.getSimpleName(),
+            SellerUnsanctionedEvent.class.getSimpleName());
+
+    private final SettlementFacade settlementFacade;
+    private final EventMessages eventMessages;
+    private final ProcessedEvents processedEvents;
+
+    @KafkaListener(topics = "seller.events", groupId = GROUP_ID)
+    @Transactional
+    public void handle(ConsumerRecord<String, String> record) {
+        // 다루지 않는 이벤트는 payload를 읽기 전에 거른다. 이 앱이 모르는 새 이벤트 타입이어도 DLT로 보내지 않는다
+        Header eventType = record.headers().lastHeader(EVENT_TYPE_HEADER);
+        String type = eventType != null
+                ? new String(eventType.value(), StandardCharsets.UTF_8)
+                : eventMessages.eventTypeOf(record.value());   // 헤더가 없으면 봉투의 eventType만 읽는다
+        if (!HANDLED_EVENT_TYPES.contains(type)) return;
+
+        EventEnvelope<DomainEvent> envelope = eventMessages.read(record.value());
+        DomainEvent payload = envelope.payload();
+        if (!(payload instanceof SellerSanctionedEvent) && !(payload instanceof SellerUnsanctionedEvent)) return;
+        if (!processedEvents.markProcessed(envelope.eventId(), CONSUMER)) return;     // 이미 처리한 이벤트
+        // 같은 판매자 이벤트는 메시지 키(sellerId)가 같아 보낸 순서대로 받는다(제재 → 해지 순서 보장)
+        if (payload instanceof SellerSanctionedEvent event) {
+            settlementFacade.holdSellerBySanctionEvent(event.sellerId(), event.reason());
+        } else if (payload instanceof SellerUnsanctionedEvent event) {
+            settlementFacade.releaseSanctionHoldsByEvent(event.sellerId(), event.reason());
+        }
+    }
+}

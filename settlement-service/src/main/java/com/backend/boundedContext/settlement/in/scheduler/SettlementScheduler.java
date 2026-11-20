@@ -1,0 +1,282 @@
+package com.backend.boundedContext.settlement.in.scheduler;
+
+import com.backend.boundedContext.settlement.app.SettlementFacade;
+import com.backend.boundedContext.settlement.domain.SettlementPolicy;
+import com.backend.boundedContext.settlement.domain.SettlementTrigger;
+import com.backend.boundedContext.settlement.in.dto.SettlementPayoutResult;
+import com.backend.boundedContext.settlement.in.dto.SettlementRunResponse;
+import com.backend.global.exception.DomainException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 정산 스케줄러 6개
+ *   매일 03:35 KST: 원장 재대조(지난 lookbackDays(2)일 동안 지급된 정산서 = T+1 + 풀리지 않은 불일치 정산서) 후 원장 불일치 보류 정리.
+ *                   custom.settlement.ledgerRecheck.enabled일 때만
+ *   매일 03:45 KST: 출력 대사(지급을 시도했지만 PAID가 아닌 정산서에 결제 원장의 지급 기록이 있는지). ledgerRecheck.enabled일 때만
+ *   매월 1~9일 02:30 KST: 사전 판별(지난달 월 정산 대상 판매자를 미리 판별해 이력만 남김. 상태는 바꾸지 않음)
+ *   매월 payDayOfMonth(10)일 00:00 KST: 지난달 월 정산 Job 실행(확정만. 지급은 하지 않음)
+ *   10분마다: 지급 스케줄러. 지급 예정일이 된 READY(월 정산 확정, 보류 해제) + 다음 재시도 일시가 지난 FAILED 정산서를
+ *            최대 retryBatchSize(50)건 지급
+ *   5분마다: PROCESSING(지급 요청 결과 모름)이 된 지 processingRecheckMinutes(5)분이 지난 정산서를 결제 원장으로 확정
+ *
+ * 재시도 간격(운영 2시간, 테스트 10분)은 실패 기록 때 다음 재시도 일시로 정해지고, 스케줄러는 10분마다 그 시각이 지났는지만 본다.
+ * 스케줄러 스레드가 여러 개(spring.task.scheduling.pool.size)라 두 작업이 동시에 돌 수 있다.
+ * 지급 스케줄러는 월 정산 Job이 실행 중이면 그 회차를 건너뛴다. Job이 판매자마다 정산서를 만드는 도중에 지급이 섞이지 않게 해서
+ * 확정이 끝난 뒤 한 번에 지급이 시작되게 한다. 겹치더라도 정산서 잠금으로 같은 정산서는 한 번만 지급된다.
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class SettlementScheduler {
+
+    private final SettlementFacade settlementFacade;
+    // 10/14 리뷰 반영: 예전엔 정적 필드(SettlementPolicy.RETRY_BATCH_SIZE)를 읽어 스프링 밖에서 0이 될 수 있었다.
+    // 지금은 정책 빈을 생성자로 주입받아 getRetryBatchSize()로 꺼낸다(값은 인스턴스)
+    private final SettlementPolicy settlementPolicy;
+
+    @Scheduled(cron = "0 0 0 ${custom.settlement.payDayOfMonth} * *", zone = "Asia/Seoul")
+    public void runMonthlySettlement() {
+        YearMonth targetMonth = YearMonth.now().minusMonths(1);
+        try {
+            SettlementRunResponse result = settlementFacade.runMonthlyJob(targetMonth, SettlementTrigger.MONTHLY_JOB);
+            log.info("월 정산 스케줄 실행(확정) targetMonth={} status={} confirmedSellers={} failedSellers={}",
+                    targetMonth, result.status(), result.aggregatedSellerCount(), result.failedSellerCount());
+        } catch (DomainException e) {
+            // 로그 규칙(exception_handling 9장): 4xx는 INFO·스택 없음(예: 관리자가 먼저 실행해 409 이미 완료된 달), 5xx는 ERROR
+            if (e.statusCode() < 500) {
+                log.info("월 정산 스케줄 실행 안 함 targetMonth={} [{}]", targetMonth, e.getResultCode());
+            } else {
+                log.error("월 정산 스케줄 실행 실패 targetMonth={}", targetMonth, e);
+            }
+        } catch (Exception e) {
+            // 관리자 화면(실행 결과)에서 실패를 보고 POST /admin/settlements/runs로 수동 실행한다
+            log.error("월 정산 스케줄 실행 실패 targetMonth={}", targetMonth, e);
+        }
+    }
+
+    /**
+     * 원장 무결성 2단계 ②: 매일 새벽 지급 영수증 재대조(T+1)
+     * ① 지난 lookbackDays일 동안 지급된 정산서 ② 지급일과 상관없이 불일치가 아직 풀리지 않은 정산서(①에서 본 것은 빼고)
+     * ②를 매일 다시 봐야 원장이 고쳐졌을 때 불일치가 풀리고, 그 사유로 보류된 정산서가 자동 해제된다
+     * ③ 정리: 불일치가 없는 판매자인데 원장 불일치 사유로 남은 보류를 푼다(재시작한 Job의 예전 판정, 해소와 동시에 생긴 보류)
+     * 재시도 스케줄러(10분마다 정각 0·10·20…분)와 같은 시각에 돌면 지급 직전 보류와 해소가 엇갈리므로 35분에 돈다
+     * 월 정산 Job 안에서는 재대조하지 않는다. 불일치 이력은 다음 Job의 확정 Step 판별(LedgerMismatchRule)과 지급 직전 확인이 읽어 지급을 보류한다
+     * 불일치가 풀리면 자동 해제(③ 정리 포함)로 원장 불일치 보류 정산서를 HOLD → READY로 바꾼다. 정산서를 잠가서 바꾸므로
+     * 월 정산 Job(확정 Step)과 겹쳐도 안전해 Job이 실행 중이어도 건너뛰지 않는다
+     */
+    @Scheduled(cron = "0 35 3 * * *", zone = "Asia/Seoul")
+    public void recheckLedgers() {
+        if (!settlementPolicy.isLedgerRecheckEnabled()) return;
+        LocalDateTime since = LocalDateTime.now().minusDays(settlementPolicy.getLedgerRecheckLookbackDays());
+        long afterId = 0L;
+        int checked = 0;
+        int mismatched = 0;
+        int errors = 0;
+        Set<Long> seen = new HashSet<>();
+        while (true) {
+            List<Long> settlementIds = settlementFacade.findLedgerRecheckTargetIds(since, afterId,
+                    settlementPolicy.getBatchChunkSize());
+            if (settlementIds.isEmpty()) break;
+            for (Long settlementId : settlementIds) {
+                seen.add(settlementId);
+                Boolean mismatch = recheckLedger(settlementId);
+                if (mismatch == null) errors++;
+                else {
+                    checked++;
+                    if (mismatch) mismatched++;
+                }
+            }
+            afterId = settlementIds.get(settlementIds.size() - 1);
+        }
+        int unresolvedChecked = 0;
+        for (Long settlementId : settlementFacade.findUnresolvedLedgerRecheckTargetIds()) {
+            if (!seen.add(settlementId)) continue;
+            Boolean mismatch = recheckLedger(settlementId);
+            if (mismatch == null) errors++;
+            else {
+                unresolvedChecked++;
+                if (mismatch) mismatched++;
+            }
+        }
+        int released = 0;
+        for (Long sellerId : settlementFacade.findSellerIdsWithLedgerMismatchHolds()) {
+            try {
+                released += settlementFacade.releaseLedgerMismatchHoldsIfResolved(sellerId,
+                        SettlementTrigger.LEDGER_RECHECK);
+            } catch (Exception e) {
+                errors++;
+                log.error("원장 불일치 보류 정리 오류 sellerId={}", sellerId, e);
+            }
+        }
+        log.info("원장 재대조 스케줄 checked={} unresolvedChecked={} mismatched={} released={} errors={}", checked,
+                unresolvedChecked, mismatched, released, errors);
+    }
+
+    /**
+     * 출력 대사: 매일 03:45, 지급을 시도했지만 PAID가 아닌 정산서에 결제 원장의 지급 기록이 있는지 본다
+     * 찾으면 정산 데이터는 고치지 않고 이력(RECONCILE, MANUAL_REQUIRED)과 ERROR 로그로 알린다
+     * 결제 원장 조회(findTransfer)가 필요해 원장 재대조와 같은 설정(custom.settlement.ledgerRecheck.enabled)으로 켠다
+     */
+    @Scheduled(cron = "0 45 3 * * *", zone = "Asia/Seoul")
+    public void reconcileOutputs() {
+        if (!settlementPolicy.isLedgerRecheckEnabled()) return;
+        long afterId = 0L;
+        int checked = 0;
+        int paidNotRecorded = 0;
+        int errors = 0;
+        while (true) {
+            List<Long> settlementIds = settlementFacade.findOutputReconcileTargetIds(afterId,
+                    settlementPolicy.getBatchChunkSize());
+            if (settlementIds.isEmpty()) break;
+            for (Long settlementId : settlementIds) {
+                try {
+                    if (settlementFacade.reconcileOutput(settlementId)) paidNotRecorded++;
+                    checked++;
+                } catch (Exception e) {
+                    errors++;
+                    log.error("정산 출력 대사 오류 settlementId={}", settlementId, e);
+                }
+            }
+            afterId = settlementIds.get(settlementIds.size() - 1);
+        }
+        log.info("정산 출력 대사 스케줄 checked={} paidNotRecorded={} errors={}", checked, paidNotRecorded, errors);
+    }
+
+    /** 정산서 1건 재대조. 불일치면 true, 같으면 false, 오류면 null(다음 회차에 다시 본다) */
+    private Boolean recheckLedger(Long settlementId) {
+        try {
+            return settlementFacade.recheckLedger(settlementId, SettlementTrigger.LEDGER_RECHECK, null).isMismatch();
+        } catch (Exception e) {
+            log.error("원장 재대조 스케줄 오류 settlementId={}", settlementId, e);
+            return null;
+        }
+    }
+
+    /**
+     * 지급 결과 재확인: 5분마다 PROCESSING(결과 모름)이 된 지 processingRecheckMinutes가 지난 정산서를
+     * 결제 원장(findTransfer)으로 확정한다(PAID, FAILED, MANUAL_REQUIRED).
+     * PROCESSING은 Job·재시도 스케줄러의 지급 대상이 아니므로 월 정산 Job이 실행 중이어도 겹치지 않는다
+     * 원장 조회가 실패한 건은 PROCESSING으로 남고 ERROR 로그로 알린 뒤 다음 회차에 다시 본다
+     */
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Seoul")
+    public void reconcileProcessingPayouts() {
+        List<Long> settlementIds = settlementFacade.findProcessingOverdueIds(settlementPolicy.getRetryBatchSize());
+        int confirmed = 0;
+        int failed = 0;
+        for (Long settlementId : settlementIds) {
+            try {
+                settlementFacade.reconcileProcessing(settlementId);
+                confirmed++;
+            } catch (Exception e) {
+                failed++;
+                log.error("정산 지급 결과 재확인 실패, PROCESSING으로 남김 settlementId={}", settlementId, e);
+            }
+        }
+        if (!settlementIds.isEmpty()) {
+            log.info("정산 지급 결과 재확인 targets={} confirmed={} failed={}", settlementIds.size(), confirmed, failed);
+        }
+    }
+
+    /**
+     * 사전 판별: 매월 1~9일 02:30, 지난달 정산 대상(READY 후보가 있는 판매자)을 미리 판별해 이력만 남긴다
+     * 관리자가 10일 전에 보류, 막힘이 될 판매자를 미리 보고 처리할 수 있게 한다. 실제 확정은 10일 Job이 잠근 후보로 다시 판별한다
+     */
+    @Scheduled(cron = "0 30 2 1-9 * *", zone = "Asia/Seoul")
+    public void prejudge() {
+        YearMonth targetMonth = YearMonth.now().minusMonths(1);
+        Set<Long> ledgerMismatchSellerIds = settlementFacade.findLedgerMismatchSellerIds();
+        long afterSellerId = 0L;
+        int judged = 0;
+        int notPass = 0;
+        int failed = 0;
+        while (true) {
+            List<Long> sellerIds = settlementFacade.findAggregatableSellerIds(targetMonth, afterSellerId,
+                    settlementPolicy.getBatchChunkSize());
+            if (sellerIds.isEmpty()) break;
+            for (Long sellerId : sellerIds) {
+                try {
+                    if (!settlementFacade.judgeSeller(sellerId, targetMonth, ledgerMismatchSellerIds,
+                            SettlementTrigger.PREJUDGE, null).isPass()) {
+                        notPass++;
+                    }
+                    judged++;
+                } catch (Exception e) {
+                    failed++;
+                    log.warn("정산 사전 판별 실패 sellerId={} targetMonth={}", sellerId, targetMonth, e);
+                }
+            }
+            afterSellerId = sellerIds.get(sellerIds.size() - 1);
+        }
+        log.info("정산 사전 판별 targetMonth={} judged={} holdOrBlock={} failed={}", targetMonth, judged, notPass, failed);
+    }
+
+    /** 지급 스케줄러 한 회차의 최대 시간. 회차 간격(10분)보다 짧게 두어 남은 건은 다음 회차가 이어서 지급한다 */
+    static final Duration PAYOUT_ROUND_TIME_LIMIT = Duration.ofMinutes(8);
+
+    /**
+     * 지급 스케줄러: 10분마다, 지급 예정일이 된 READY와 재시도 일시가 지난 FAILED를 지급한다
+     * 한 회차 안에서 대상이 없을 때까지 retryBatchSize씩 페이지를 이어 읽어 지급한다(월 정산 확정 직후 수천 건도 한 회차에 끝나게).
+     * ID 커서로 읽으므로 지급하지 못하고 대상에 남은 건을 같은 회차에서 다시 집지 않는다(다음 회차가 처음부터 다시 본다).
+     * 회차가 PAYOUT_ROUND_TIME_LIMIT(8분)를 넘기거나 월 정산 Job이 시작되면 멈추고, 남은 건은 다음 회차가 지급한다
+     */
+    @Scheduled(cron = "0 */10 * * * *", zone = "Asia/Seoul")
+    public void retryPayouts() {
+        if (settlementFacade.isMonthlyJobRunning()) {
+            log.info("월 정산 Job 실행 중이라 이번 정산 재시도 스케줄을 건너뜀");
+            return;
+        }
+        long startedAt = currentNanos();
+        long afterId = 0L;
+        int targets = 0;
+        int paid = 0;
+        int notPaid = 0;
+        int pages = 0;
+        String stoppedBy = null;
+        while (true) {
+            if (currentNanos() - startedAt >= PAYOUT_ROUND_TIME_LIMIT.toNanos()) {
+                stoppedBy = "시간 한도";
+                break;
+            }
+            if (pages > 0 && settlementFacade.isMonthlyJobRunning()) {
+                stoppedBy = "월 정산 Job 시작";
+                break;
+            }
+            List<Long> settlementIds = settlementFacade.findRetryTargetIds(afterId,
+                    settlementPolicy.getRetryBatchSize());
+            if (settlementIds.isEmpty()) break;
+            pages++;
+            targets += settlementIds.size();
+            for (Long settlementId : settlementIds) {
+                try {
+                    SettlementPayoutResult result =
+                            settlementFacade.payout(settlementId, SettlementTrigger.RETRY_SCHEDULER, null);
+                    if (result.isPaid()) paid++;
+                    else if (result.processed()) notPaid++;
+                } catch (Exception e) {
+                    notPaid++;
+                    log.error("정산 재시도 스케줄 오류 settlementId={}", settlementId, e);
+                }
+            }
+            afterId = settlementIds.get(settlementIds.size() - 1);
+        }
+        if (targets > 0 || stoppedBy != null) {
+            log.info("정산 재시도 스케줄 targets={} paid={} notPaid={} pages={}{}", targets, paid, notPaid, pages,
+                    stoppedBy == null ? "" : " 멈춤=" + stoppedBy + "(남은 건은 다음 회차)");
+        }
+    }
+
+    /** 회차 시간 측정용. 테스트에서 시간을 바꿔 끼울 수 있게 따로 둔다 */
+    long currentNanos() {
+        return System.nanoTime();
+    }
+}

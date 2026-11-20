@@ -1,0 +1,21 @@
+# ai 파드 앞의 고정 주소(Service). 파드가 몇 개든, 몇 번 바뀌든 이 주소 하나로 받아 살아 있는 파드에 나눠 준다.
+# NodePort: 노드(EC2-A)의 30087번을 열어 Service로 잇는다. Compose의 gateway가 http://10.0.1.122:30087 로 부른다.
+# 보안 그룹이 30087을 열지 않아 인터넷에서는 닿지 않는다.
+#   kubectl apply -f infra/k8s/ai/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai
+  namespace: palette
+  labels:
+    app: ai
+spec:
+  type: NodePort
+  selector:
+    app: ai
+  ports:
+    - name: http
+      port: 8087
+      targetPort: http
+      # 30000~32767 중에서 고른다. ai 앱 포트(8087)와 끝자리를 맞춰 알아보기 쉽게 했다
+      nodePort: 30087

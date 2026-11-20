@@ -1,0 +1,226 @@
+package com.backend.boundedContext.settlement.out;
+
+import com.backend.boundedContext.settlement.domain.Settlement;
+import com.backend.boundedContext.settlement.domain.SettlementHoldType;
+import com.backend.boundedContext.settlement.domain.SettlementStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 정산서 저장·조회. 상태를 바꾸기 전에는 반드시 잠금 조회(findWithLock...)를 쓴다.
+ * 지급 트랜잭션이 행을 잡고 있으면 나중에 들어온 작업은 기다렸다가 바뀐 상태를 보고 건너뛴다(동시 실행 방지)
+ */
+public interface SettlementRepository extends JpaRepository<Settlement, Long>, JpaSpecificationExecutor<Settlement> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Settlement s where s.id = :id")
+    Optional<Settlement> findWithLockById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Settlement s where s.sellerId = :sellerId and s.settlementMonth = :month")
+    Optional<Settlement> findWithLockBySellerIdAndSettlementMonth(@Param("sellerId") Long sellerId,
+                                                                  @Param("month") String month);
+
+    /**
+     * 지급 결과 재확인 대상: PROCESSING(결과 모름)이 된 지 오래된 정산서. 오래된 순
+     * @param before processingStartedAt이 이 시각 이전(포함)인 건만
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PROCESSING
+               and s.processingStartedAt <= :before
+             order by s.processingStartedAt, s.id
+            """)
+    List<Long> findProcessingOverdueIds(@Param("before") LocalDateTime before, Pageable pageable);
+
+    /**
+     * 관리자 실패 거래: 이 상태가 [from, to) 사이에 마지막으로 바뀐(updatedAt) 정산서, 최신순
+     * from, to가 없으면 호출하는 쪽에서 아주 이른, 아주 늦은 시각을 넘긴다(null 파라미터 타입 문제를 피함)
+     */
+    @Query("""
+            select s from Settlement s
+             where s.status = :status
+               and s.updatedAt >= :from
+               and s.updatedAt < :to
+            """)
+    Page<Settlement> findByStatusUpdatedBetween(@Param("status") SettlementStatus status,
+                                               @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                               Pageable pageable);
+
+    /**
+     * 지급 스케줄러 대상: 지급 예정일이 된 READY(월 정산 확정, 보류 해제) + 다음 재시도 일시가 지난 FAILED
+     * 지급 예정일이 없는 READY(이 컬럼이 생기기 전 정산서)는 바로 지급한다
+     * afterId 다음 ID부터 ID 순. 스케줄러가 한 회차 안에서 페이지를 이어 읽을 때, 지급하지 못하고 대상에 남은 건을 다시 집지 않게 한다
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.id > :afterId
+               and ((s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.READY
+                     and (s.payableOn is null or s.payableOn <= :today))
+                    or (s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.FAILED
+                        and s.nextRetryAt <= :now))
+             order by s.id
+            """)
+    List<Long> findRetryTargetIds(@Param("now") LocalDateTime now, @Param("today") LocalDate today,
+                                  @Param("afterId") Long afterId, Pageable pageable);
+
+    /**
+     * 원장 재대조 대상: 지급일이 since 이후인 PAID 정산서. afterId 커서로 한 번씩만 본다
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PAID
+               and s.paidAt >= :since
+               and s.id > :afterId
+             order by s.id
+            """)
+    List<Long> findLedgerRecheckTargetIds(@Param("since") LocalDateTime since, @Param("afterId") Long afterId,
+                                          Pageable pageable);
+
+    /**
+     * 출력 대사 대상: 지급을 한 번 이상 시도했지만(retryCount > 0) PAID가 아닌 정산서. afterId 커서로 한 번씩만 본다
+     * 지급 요청 결과를 기다리는 정산서(결과 모름)는 지급 결과 재확인이 따로 보므로 대상 상태에 넣지 않는다
+     */
+    @Query("""
+            select s.id from Settlement s
+             where s.status in :statuses
+               and s.retryCount > 0
+               and s.id > :afterId
+             order by s.id
+            """)
+    List<Long> findOutputReconcileTargetIds(@Param("statuses") Collection<SettlementStatus> statuses,
+                                            @Param("afterId") Long afterId, Pageable pageable);
+
+    /**
+     * 이 판매자의 정산서 중 원장 재대조 불일치가 아직 풀리지 않은 것이 있는지
+     * (정산서별 가장 마지막 VERIFY 이력이 MANUAL_REQUIRED. SettlementProcessHistoryRepository.findUnresolvedLedgerMismatchSettlementIds와 같은 기준)
+     * 지급 직전 확인·보류 해제·불일치 해소 후 자동 해제가 쓴다
+     */
+    @Query("""
+            select count(s) > 0 from Settlement s
+             where s.sellerId = :sellerId
+               and s.id in (select h.targetId from SettlementProcessHistory h
+                             where h.targetType = com.backend.boundedContext.settlement.domain.SettlementHistoryTargetType.SETTLEMENT
+                               and h.stage = com.backend.boundedContext.settlement.domain.SettlementHistoryStage.VERIFY
+                               and h.result = com.backend.boundedContext.settlement.domain.SettlementHistoryResult.MANUAL_REQUIRED
+                               and h.id = (select max(h2.id) from SettlementProcessHistory h2
+                                            where h2.targetType = h.targetType
+                                              and h2.stage = h.stage
+                                              and h2.targetId = h.targetId))
+            """)
+    boolean existsUnresolvedLedgerMismatchBySellerId(@Param("sellerId") Long sellerId);
+
+    /** 이 종류로 보류(HOLD)된 정산서가 있는 판매자 ID (원장 불일치 보류 정리: 불일치가 없는데 남은 보류를 찾는다) */
+    @Query("""
+            select distinct s.sellerId from Settlement s
+             where s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.HOLD
+               and s.holdType = :holdType
+             order by s.sellerId
+            """)
+    List<Long> findSellerIdsByHoldType(@Param("holdType") SettlementHoldType holdType);
+
+    /** 판매자의 이 종류 보류 정산서(잠금). 제재 해지 시 제재 보류만 골라 푼다 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select s from Settlement s
+             where s.sellerId = :sellerId
+               and s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.HOLD
+               and s.holdType = :holdType
+             order by s.id
+            """)
+    List<Settlement> findWithLockBySellerIdAndHoldType(@Param("sellerId") Long sellerId,
+                                                       @Param("holdType") SettlementHoldType holdType);
+
+    /** 판매자의 이 종류 보류 정산서 ID. 제재 해지 때 남은 관리자 보류를 알린다 */
+    @Query("""
+            select s.id from Settlement s
+             where s.sellerId = :sellerId
+               and s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.HOLD
+               and s.holdType = :holdType
+             order by s.id
+            """)
+    List<Long> findIdsBySellerIdAndHoldType(@Param("sellerId") Long sellerId,
+                                            @Param("holdType") SettlementHoldType holdType);
+
+    /** 정산서 ID들의 판매자 ID (원장 불일치가 남은 판매자 찾기) */
+    @Query("select distinct s.sellerId from Settlement s where s.id in :ids")
+    List<Long> findSellerIdsByIdIn(@Param("ids") Collection<Long> ids);
+
+    /**
+     * 엑셀 다운로드 대상: 정산월 기간의 지급 완료(PAID) 정산서를 (정산월, ID) 순으로 끊어 읽는다
+     * 엔티티가 아니라 필요한 값만(SettlementExportRow) 읽어 영속성 컨텍스트에 쌓이지 않게 한다
+     * 커서는 마지막으로 읽은 (정산월, ID). 처음에는 afterMonth = "", afterId = 0
+     * sellerId가 null이면 판매자 조건을 빼고 읽는다(관리자 전체)
+     */
+    @Query("""
+            select new com.backend.boundedContext.settlement.out.SettlementExportRow(
+                       s.id, s.settlementMonth, s.sellerId, s.totalSalePrice, s.totalFee, s.payoutAmount,
+                       s.itemCount, s.paidAt, s.walletTxId)
+              from Settlement s
+             where s.settlementMonth between :fromMonth and :toMonth
+               and s.status = com.backend.boundedContext.settlement.domain.SettlementStatus.PAID
+               and (:sellerId is null or s.sellerId = :sellerId)
+               and (s.settlementMonth > :afterMonth
+                    or (s.settlementMonth = :afterMonth and s.id > :afterId))
+             order by s.settlementMonth, s.id
+            """)
+    List<SettlementExportRow> findPaidExportRows(@Param("fromMonth") String fromMonth,
+                                                 @Param("toMonth") String toMonth, @Param("sellerId") Long sellerId,
+                                                 @Param("afterMonth") String afterMonth, @Param("afterId") Long afterId,
+                                                 Pageable pageable);
+
+    /**
+     * 상태별 건수·지급액 합 (요약 카드). 조건은 모두 선택(null이면 그 조건을 빼고 센다)
+     * 정산월 하나를 볼 때는 fromMonth = toMonth
+     */
+    @Query("""
+            select new com.backend.boundedContext.settlement.out.SettlementStatusAmountRow(
+                       s.status, count(s), sum(s.payoutAmount))
+              from Settlement s
+             where (:fromMonth is null or s.settlementMonth >= :fromMonth)
+               and (:toMonth is null or s.settlementMonth <= :toMonth)
+               and (:sellerId is null or s.sellerId = :sellerId)
+             group by s.status
+            """)
+    List<SettlementStatusAmountRow> sumByStatus(@Param("fromMonth") String fromMonth,
+                                                @Param("toMonth") String toMonth,
+                                                @Param("sellerId") Long sellerId);
+
+    /** 판매자의 가장 최근 지급 정산서 (지급 일시 기준) */
+    Optional<Settlement> findFirstBySellerIdAndStatusOrderByPaidAtDesc(Long sellerId, SettlementStatus status);
+
+    /** 판매자 본인 정산서 조회. 소유자를 조회 조건에 넣어 남의 정산서는 404가 되게 한다(예외 처리 5.1) */
+    Optional<Settlement> findByIdAndSellerId(Long id, Long sellerId);
+
+    /**
+     * 판매자 제재(holdSeller) 대상: 이 판매자의 지급 전 정산서(READY·FAILED·MANUAL_REQUIRED)를 잠가서 가져온다
+     * 지급 트랜잭션이 잡고 있는 정산서는 지급이 끝날 때까지 기다린다. PAID가 되면 조건에서 빠지므로 보류하지 않는다
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select s from Settlement s
+             where s.sellerId = :sellerId
+               and s.status in :statuses
+             order by s.id
+            """)
+    List<Settlement> findWithLockBySellerIdAndStatusIn(@Param("sellerId") Long sellerId,
+                                                       @Param("statuses") Collection<SettlementStatus> statuses);
+
+    /** 관리자 정산 미리보기: 대상월에 이미 만들어진 정산서(판매자별 상태 표시용) */
+    List<Settlement> findBySettlementMonthAndSellerIdIn(String settlementMonth, Collection<Long> sellerIds);
+
+    /** 운영 알림: 이 상태의 정산서 수 (MANUAL_REQUIRED 점검) */
+    long countByStatus(SettlementStatus status);
+}

@@ -1,0 +1,44 @@
+# Prometheus Adapter: Prometheus의 값을 쿠버네티스 지표 API(external.metrics.k8s.io)로 바꿔 HPA가 읽게 한다(TRSS-327).
+# HPA는 원래 CPU·메모리만 알아듣는다. ai는 OpenAI 응답을 기다리느라 CPU가 잘 안 올라서, 요청 수로 파드를 늘리려고 둔다.
+#
+# 설치는 k3s에 기본으로 든 HelmChart 기능으로 한다. 이 파일을 적용하면 k3s가 helm 차트를 받아 설치한다(서버에 helm을 깔지 않는다).
+#   kubectl apply -f infra/k8s/prometheus-adapter.yaml
+# 확인: kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/palette/ai_requests_per_second"
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: prometheus-adapter
+  namespace: kube-system
+spec:
+  repo: https://prometheus-community.github.io/helm-charts
+  chart: prometheus-adapter
+  # 버전을 고정한다. 비워 두면 설치할 때마다 최신 차트를 받는다(2026-11-03 출시, Adapter v0.12.0)
+  version: 5.4.0
+  targetNamespace: kube-system
+  valuesContent: |-
+    # Compose의 Prometheus. 앱 서버 내부 IP에만 열려 있고(compose.prod.yaml의 MONITORING_BIND_IP), 파드는 노드를 거쳐 닿는다
+    prometheus:
+      url: http://10.0.1.122
+      port: 9090
+    rules:
+      # 차트 기본 규칙(모든 지표를 custom metrics로 노출)은 끈다. 필요한 값 하나만 둔다
+      default: false
+      external:
+        # gateway가 ai로 넘긴 초당 요청 수(최근 1분 평균). gateway가 이미 경로(routeId)별로 세어 Prometheus에 넣고 있다.
+        # ai로 가는 요청은 모두 gateway를 지나므로 이 값이 곧 ai가 받는 요청 수다
+        - seriesQuery: 'spring_cloud_gateway_requests_seconds_count{routeId="ai"}'
+          resources:
+            # 이 지표는 쿠버네티스 밖(gateway)에서 와서 namespace 라벨이 없다.
+            # false로 두지 않으면 Adapter가 HPA의 namespace(palette)를 쿼리 조건에 붙여 값이 하나도 안 나온다
+            namespaced: false
+          name:
+            matches: "^spring_cloud_gateway_requests_seconds_count$"
+            as: "ai_requests_per_second"
+          # routeId 조건을 쿼리에 직접 적는다. HPA 쪽에서 조건을 빠뜨려도 다른 경로 요청이 섞이지 않게 한다
+          metricsQuery: 'sum(rate(spring_cloud_gateway_requests_seconds_count{routeId="ai"}[1m]))'
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
