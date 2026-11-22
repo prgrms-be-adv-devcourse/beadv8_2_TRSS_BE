@@ -449,8 +449,10 @@ public class ProductFacade {
         return productSupport.getOnSaleProductIdsBySeller(sellerId);
     }
 
-    /** 상품들을 DB의 지금 값으로 다시 색인한다 (검색 색인 컨슈머). 새 트랜잭션에서 읽는다 */
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    /**
+     * 상품들을 DB의 지금 값으로 다시 색인한다 (검색 색인 컨슈머).
+     * 트랜잭션을 잡지 않는다. DB 읽기만 짧은 읽기 트랜잭션에서 하고, 상호명 조회와 ES 쓰기는 그 밖에서 한다 (Support가 나눠 잡는다)
+     */
     public void indexProducts(Collection<Long> productIds) {
         productSearchIndexSupport.indexProducts(productIds);
     }
@@ -478,20 +480,20 @@ public class ProductFacade {
         return productIds.size();
     }
 
-    /** 상호명 없이 색인된 상품을 다시 색인해 상호명을 채운다. 채운 상품 수 (복구 스케줄러) */
-    @Transactional(readOnly = true)
+    /** 상호명 없이 색인된 상품을 다시 색인해 상호명을 채운다. 채운 상품 수 (복구 스케줄러). 트랜잭션은 Support가 나눠 잡는다 */
     public int fillMissingBusinessNames() {
         return productSearchIndexSupport.fillMissingBusinessNames();
     }
 
-    /** 판매 중인 상품 전체를 새 인덱스에 색인하고 검색 alias를 옮긴다. 색인한 상품 수를 돌려준다 (관리자) */
-    @Transactional(readOnly = true)
+    /** 판매 중인 상품 전체를 새 인덱스에 색인하고 검색 alias를 옮긴다. 색인한 상품 수를 돌려준다 (관리자). 트랜잭션은 묶음마다 Support가 잡는다 */
     public int rebuildSearchIndex() {
         return productSearchIndexSupport.rebuildIndex();
     }
 
-    /** 검색 인덱스가 최신이 아니면(alias 없음·매핑 버전 낮음) 전체 재색인하고 색인한 상품 수를, 아니면 빈 값을 돌려준다 (복구 스케줄러) */
-    @Transactional(readOnly = true)
+    /**
+     * 검색 인덱스가 최신이 아니면(alias 없음·매핑 버전 낮음) 전체 재색인하고 색인한 상품 수를, 아니면 빈 값을 돌려준다 (복구 스케줄러).
+     * 트랜잭션은 묶음마다 Support가 잡는다
+     */
     public OptionalInt rebuildSearchIndexIfOutdated() {
         return productSearchIndexSupport.rebuildIndexIfOutdated();
     }

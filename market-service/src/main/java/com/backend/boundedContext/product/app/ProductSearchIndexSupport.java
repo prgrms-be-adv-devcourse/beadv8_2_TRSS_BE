@@ -12,11 +12,11 @@ import com.backend.boundedContext.product.out.ProductRepository;
 import com.backend.boundedContext.product.out.search.ProductSearchDocument;
 import com.backend.boundedContext.product.out.search.ProductSearchIndexPort;
 import com.backend.global.exception.DomainException;
-import jakarta.persistence.EntityManager;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -36,10 +36,13 @@ import java.util.stream.Collectors;
  * 상품을 바꾼 트랜잭션은 상품 변경 이벤트(ProductChangedEvent)를 outbox에 남기고, 검색 색인 컨슈머가 Kafka로 받아
  * {@link #indexProducts}로 DB의 최신 값을 색인한다.
  * 판매 중인 상품만 색인하고, 판매 중이 아니거나 없는 상품은 색인에서 지운다.
+ *
+ * <p>색인은 세 단계로 나눈다. DB 값 읽기만 짧은 읽기 트랜잭션에서 하고, 상호명 조회(회원 서비스)와 ES 쓰기는 트랜잭션 밖에서 한다.
+ * 색인 컨슈머·복구 스케줄러·전체 재색인이 사용자 요청과 같은 커넥션 풀을 쓰므로, 외부 호출을 기다리는 동안 커넥션을 쥐지 않게 한다.
+ * 트랜잭션 안에서 읽은 값은 엔티티가 아닌 {@link IndexSource}로 옮겨, 트랜잭션 밖에서 지연 로딩을 건드릴 수 없게 한다.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ProductSearchIndexSupport {
     private final ProductRepository productRepository;
     private final ProductDiscountRepository productDiscountRepository;
@@ -48,7 +51,22 @@ public class ProductSearchIndexSupport {
     private final ProductSearchIndexPort productSearchIndexPort;
     private final ProductPolicy productPolicy;
     private final ProductBehaviorSupport productBehaviorSupport;
-    private final EntityManager entityManager;
+    private final TransactionTemplate readOnlyTransaction;
+
+    public ProductSearchIndexSupport(ProductRepository productRepository, ProductDiscountRepository productDiscountRepository,
+                                     ProductSupport productSupport, ProductDiscountSupport productDiscountSupport,
+                                     ProductSearchIndexPort productSearchIndexPort, ProductPolicy productPolicy,
+                                     ProductBehaviorSupport productBehaviorSupport, PlatformTransactionManager transactionManager) {
+        this.productRepository = productRepository;
+        this.productDiscountRepository = productDiscountRepository;
+        this.productSupport = productSupport;
+        this.productDiscountSupport = productDiscountSupport;
+        this.productSearchIndexPort = productSearchIndexPort;
+        this.productPolicy = productPolicy;
+        this.productBehaviorSupport = productBehaviorSupport;
+        this.readOnlyTransaction = new TransactionTemplate(transactionManager);
+        this.readOnlyTransaction.setReadOnly(true);
+    }
 
     /**
      * 전체 재색인이 실행 중인지. 두 재색인이 겹치면 뒤의 alias 전환이 앞 재색인의 인덱스를 지우고,
@@ -80,14 +98,17 @@ public class ProductSearchIndexSupport {
             indexedWhileRebuilding.addAll(productIds);   // 색인이 실패해도(alias 없음) 보정에 넣도록 먼저 모은다
         }
 
-        List<Product> onSale = productRepository.findAllById(productIds).stream()
-                .filter(product -> product.getStatus() == ProductSaleStatus.ON_SALE)
-                .toList();
-        Set<Long> removed = new HashSet<>(productIds);
-        onSale.forEach(product -> removed.remove(product.getId()));
+        IndexRead read = readOnlyTransaction.execute(status -> {
+            List<Product> onSale = productRepository.findAllById(productIds).stream()
+                    .filter(product -> product.getStatus() == ProductSaleStatus.ON_SALE)
+                    .toList();
+            Set<Long> removed = new HashSet<>(productIds);
+            onSale.forEach(product -> removed.remove(product.getId()));
+            return new IndexRead(readSources(onSale), removed);
+        });
 
-        productSearchIndexPort.upsert(toDocuments(onSale, nameCache));
-        productSearchIndexPort.delete(removed);
+        productSearchIndexPort.upsert(toDocuments(read.sources(), nameCache));
+        productSearchIndexPort.delete(read.removed());
     }
 
     /**
@@ -176,59 +197,61 @@ public class ProductSearchIndexSupport {
         long afterId = 0L;
         int indexed = 0;
         while (true) {
-            List<Long> ids = productRepository.findIdsByStatusAfter(ProductSaleStatus.ON_SALE, afterId, Limit.of(batchSize));
-            if (ids.isEmpty()) break;
+            // 묶음마다 읽기 트랜잭션을 따로 잡아 커넥션을 묶음 동안만 쥔다. 트랜잭션이 끝나면 읽은 상품도 1차 캐시에서 빠지므로
+            // 묶음마다 메모리가 쌓이지 않고, 뒤의 보정은 재색인 중 다른 트랜잭션이 커밋한 최신 값을 읽는다
+            long cursor = afterId;
+            BatchRead batch = readOnlyTransaction.execute(status -> {
+                List<Long> ids = productRepository.findIdsByStatusAfter(ProductSaleStatus.ON_SALE, cursor, Limit.of(batchSize));
+                return new BatchRead(ids, ids.isEmpty() ? List.of() : readSources(productRepository.findAllById(ids)));
+            });
+            if (batch.ids().isEmpty()) break;
 
-            List<ProductSearchDocument> documents = toDocuments(productRepository.findAllById(ids), nameCache);
+            List<ProductSearchDocument> documents = toDocuments(batch.sources(), nameCache);
             productSearchIndexPort.bulkIndex(indexName, documents);
-            // 읽은 상품·재고를 1차 캐시에서 비운다. 남겨 두면 묶음마다 쌓여 상품 수만큼 메모리를 쓰고,
-            // 뒤의 보정이 재색인 중 다른 트랜잭션이 커밋한 변경 대신 이 옛 값을 돌려받는다
-            entityManager.clear();
             indexed += documents.size();
-            afterId = ids.get(ids.size() - 1);
-            if (ids.size() < batchSize) break;
+            afterId = batch.ids().getLast();
+            if (batch.ids().size() < batchSize) break;
         }
         productSearchIndexPort.switchAlias(indexName);
 
         LocalDateTime since = outdatedSince;
         LocalDateTime catchUpFrom = since != null && since.isBefore(startedAt) ? since : startedAt;
-        Set<Long> changed = new HashSet<>(productRepository.findIdsChangedSince(
-                catchUpFrom.minusSeconds(productPolicy.getDiscountBoundaryOverlapSeconds())));
-        changed.addAll(findDiscountBoundaryProductIds(
-                catchUpFrom.minusSeconds(productPolicy.getDiscountBoundaryOverlapSeconds()), LocalDateTime.now()));
+        LocalDateTime overlapFrom = catchUpFrom.minusSeconds(productPolicy.getDiscountBoundaryOverlapSeconds());
+        Set<Long> changed = readOnlyTransaction.execute(status -> {
+            Set<Long> ids = new HashSet<>(productRepository.findIdsChangedSince(overlapFrom));
+            ids.addAll(findDiscountBoundaryProductIds(overlapFrom, LocalDateTime.now()));
+            return ids;
+        });
         changed.addAll(indexedWhileRebuilding);   // alias를 옮긴 뒤의 색인은 새 인덱스로 들어가므로 여기까지 모은 것만 다시 반영한다
         indexedWhileRebuilding.clear();
-        indexProducts(changed, nameCache);   // 묶음마다 1차 캐시를 비웠으므로 DB의 최신 값을 읽는다. 상호명은 재색인과 같은 캐시를 쓴다
+        indexProducts(changed, nameCache);   // 새 읽기 트랜잭션에서 DB의 최신 값을 읽는다. 상호명은 재색인과 같은 캐시를 쓴다
         outdatedSince = null;
         log.info("상품 검색 전체 재색인을 마쳤습니다. index={}, 상품 {}개, {} 이후 바뀌어 다시 반영한 상품 {}개",
                 indexName, indexed, catchUpFrom, changed.size());
         return indexed;
     }
 
-    /** 상품들의 색인 문서. 품절 여부와 지금 기본가(할인 중이면 할인가)는 검색 화면과 같은 계산을 쓰고, 행동 지표는 지금 DB 값으로 다시 계산한다 */
-    List<ProductSearchDocument> toDocuments(List<Product> products) {
-        return toDocuments(products, new HashMap<>());
-    }
-
-    /** nameCache: 이미 읽은 판매자 상호명 (판매자 ID → 상호명, 읽지 못했으면 null) */
-    private List<ProductSearchDocument> toDocuments(List<Product> products, Map<Long, String> nameCache) {
+    /**
+     * 상품들의 색인 원천 (트랜잭션 안에서 부른다). 품절 여부와 지금 기본가(할인 중이면 할인가)는 검색 화면과 같은 계산을 쓰고,
+     * 행동 지표는 지금 DB 값으로 다시 계산한다. 상호명은 비워 두고 {@link #toDocuments}가 트랜잭션 밖에서 채운다
+     */
+    private List<IndexSource> readSources(List<Product> products) {
         if (products.isEmpty()) return List.of();
 
         List<Long> ids = products.stream().map(Product::getId).toList();
         Map<Long, List<OptionStock>> stocks = productSupport.getOptionStocksByProductId(ids);
         Map<Long, ProductPrice> prices = productDiscountSupport.getPrices(products);
         Map<Long, ProductBehaviorScore> behaviors = productBehaviorSupport.getScores(ids, LocalDateTime.now());
-        Map<Long, String> businessNames = businessNames(products, nameCache);
 
         return products.stream()
                 .map(product -> {
                     ProductPrice price = prices.get(product.getId());
                     ProductBehaviorScore behavior = behaviors.get(product.getId());
-                    return new ProductSearchDocument(
+                    return new IndexSource(product.getSellerId(), new ProductSearchDocument(
                             product.getId(),
                             product.getName(),
                             product.getDescription(),
-                            businessNames.get(product.getSellerId()),
+                            null,
                             product.getCategory().getId(),
                             product.getStatus().name(),
                             ProductSupport.isSoldOut(stocks.getOrDefault(product.getId(), List.of())),
@@ -239,8 +262,18 @@ public class ProductSearchIndexSupport {
                             behavior.ratingScore(),
                             behavior.salesCount(),
                             behavior.behaviorScore(),
-                            product.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+                            product.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
                 })
+                .toList();
+    }
+
+    /** 색인 문서 (트랜잭션 밖에서 부른다). nameCache: 이미 읽은 판매자 상호명 (판매자 ID → 상호명, 읽지 못했으면 null) */
+    private List<ProductSearchDocument> toDocuments(List<IndexSource> sources, Map<Long, String> nameCache) {
+        if (sources.isEmpty()) return List.of();
+
+        Map<Long, String> businessNames = businessNames(sources, nameCache);
+        return sources.stream()
+                .map(source -> source.document().withBusinessName(businessNames.get(source.sellerId())))
                 .toList();
     }
 
@@ -252,8 +285,8 @@ public class ProductSearchIndexSupport {
      *   <li>회원 서비스에 없는 판매자는 빈 문자열로 둔다. 다시 불러도 같으므로 채우기 대상에서 뺀다</li>
      * </ul>
      */
-    private Map<Long, String> businessNames(List<Product> products, Map<Long, String> nameCache) {
-        Set<Long> unread = products.stream().map(Product::getSellerId)
+    private Map<Long, String> businessNames(List<IndexSource> sources, Map<Long, String> nameCache) {
+        Set<Long> unread = sources.stream().map(IndexSource::sellerId)
                 .filter(sellerId -> !nameCache.containsKey(sellerId))
                 .collect(Collectors.toSet());
         if (unread.isEmpty()) return nameCache;
@@ -265,6 +298,23 @@ public class ProductSearchIndexSupport {
             unread.forEach(sellerId -> nameCache.put(sellerId, null));
         }
         return nameCache;
+    }
+
+    /**
+     * 트랜잭션 안에서 읽어 둔 색인 원천. 엔티티 대신 값만 담아 트랜잭션 밖에서 지연 로딩을 건드리지 않게 한다
+     *
+     * @param sellerId 상호명을 찾을 판매자 ID
+     * @param document 상호명이 빈 색인 문서
+     */
+    private record IndexSource(Long sellerId, ProductSearchDocument document) {
+    }
+
+    /** 색인할 상품의 원천과 색인에서 지울 상품 ID (판매 중이 아니거나 없는 상품) */
+    private record IndexRead(List<IndexSource> sources, Set<Long> removed) {
+    }
+
+    /** 전체 재색인 한 묶음의 상품 ID(다음 묶음 커서)와 색인 원천 */
+    private record BatchRead(List<Long> ids, List<IndexSource> sources) {
     }
 
     /** 색인 문서의 할인율. 할인 중이 아니면 0 (할인은 1% 이상만 등록되므로 0이면 할인 없음) */

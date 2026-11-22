@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -83,6 +84,9 @@ class ProductSearchIndexTest {
     private EntityManager entityManager;
 
     @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Autowired
     private ProductBehaviorSupport productBehaviorSupport;
 
     @MockitoBean
@@ -103,7 +107,7 @@ class ProductSearchIndexTest {
 
         indexPort = new RecordingIndexPort();
         indexSupport = new ProductSearchIndexSupport(productRepository, productDiscountRepository,
-                productSupport, productDiscountSupport, indexPort, productPolicy, productBehaviorSupport, entityManager);
+                productSupport, productDiscountSupport, indexPort, productPolicy, productBehaviorSupport, transactionManager);
     }
 
     @Test
