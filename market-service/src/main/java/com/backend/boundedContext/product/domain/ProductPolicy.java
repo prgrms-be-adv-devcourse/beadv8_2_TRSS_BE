@@ -18,6 +18,8 @@ public class ProductPolicy {
     private final int discountBoundaryOverlapSeconds;
     // 할인 경계 재색인: 지난 실행 시각이 없을 때(앱 기동 후 첫 실행) 돌아보는 구간(분)
     private final int discountBoundaryLookbackMinutes;
+    // ES 검색(검색·비슷한 상품·추천)이 접속·응답에 실패하면 이만큼(초) ES를 부르지 않고 DB로 대신한다
+    private final int searchSkipAfterFailureSeconds;
     // 인기 검색어: 집계 구간(시간), 반감기(시간), 최소 점수, 보여 주는 개수, 셀 수 있는 검색어 최대 길이, 순위 캐시(초)
     private final int popularKeywordWindowHours;
     private final double popularKeywordHalfLifeHours;
@@ -31,6 +33,7 @@ public class ProductPolicy {
             @Value("${custom.product.search.indexBatchSize}") int searchIndexBatchSize,
             @Value("${custom.product.search.discountBoundaryOverlapSeconds}") int discountBoundaryOverlapSeconds,
             @Value("${custom.product.search.discountBoundaryLookbackMinutes}") int discountBoundaryLookbackMinutes,
+            @Value("${custom.product.search.skipAfterFailureSeconds}") int searchSkipAfterFailureSeconds,
             @Value("${custom.product.popularKeyword.windowHours}") int popularKeywordWindowHours,
             @Value("${custom.product.popularKeyword.halfLifeHours}") double popularKeywordHalfLifeHours,
             @Value("${custom.product.popularKeyword.minScore}") double popularKeywordMinScore,
@@ -42,6 +45,7 @@ public class ProductPolicy {
         this.searchIndexBatchSize = searchIndexBatchSize;
         this.discountBoundaryOverlapSeconds = discountBoundaryOverlapSeconds;
         this.discountBoundaryLookbackMinutes = discountBoundaryLookbackMinutes;
+        this.searchSkipAfterFailureSeconds = searchSkipAfterFailureSeconds;
         this.popularKeywordWindowHours = popularKeywordWindowHours;
         this.popularKeywordHalfLifeHours = popularKeywordHalfLifeHours;
         this.popularKeywordMinScore = popularKeywordMinScore;

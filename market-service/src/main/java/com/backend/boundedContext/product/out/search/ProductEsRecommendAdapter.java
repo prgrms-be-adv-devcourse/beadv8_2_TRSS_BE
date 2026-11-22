@@ -43,27 +43,31 @@ public class ProductEsRecommendAdapter implements ProductRecommendPort {
 
     private final ElasticsearchClient client;
     private final ProductJpaRecommendAdapter fallback;
-    private final ProductEsIndexAdapter indexAdapter;
+    private final ProductEsSearchGuard guard;
     private final String alias;
 
     public ProductEsRecommendAdapter(ElasticsearchClient client, ProductJpaRecommendAdapter fallback,
-                                     ProductEsIndexAdapter indexAdapter,
+                                     ProductEsSearchGuard guard,
                                      @Value("${custom.product.search.indexAlias}") String alias) {
         this.client = client;
         this.fallback = fallback;
-        this.indexAdapter = indexAdapter;
+        this.guard = guard;
         this.alias = alias;
     }
 
     @Override
     public RecommendCandidates findCandidates(ProductRecommendQuery query) {
-        if (!indexAdapter.isKnownCurrent()) {
+        // 인덱스가 최신이 아니거나 ES 접속·응답이 방금 실패했으면 DB로 대신한다 (ProductEsSearchGuard)
+        if (!guard.canSearch()) {
             return fallback.findCandidates(query).asDegraded();
         }
         try {
-            return search(query);
+            RecommendCandidates result = search(query);
+            guard.onSuccess();
+            return result;
         } catch (Exception e) {
             log.warn("ES 개인화 추천 후보 조회에 실패해 DB로 대신합니다. seeds={}", query.seeds().size(), e);
+            guard.onFailure(e);
             return fallback.findCandidates(query).asDegraded();
         }
     }
