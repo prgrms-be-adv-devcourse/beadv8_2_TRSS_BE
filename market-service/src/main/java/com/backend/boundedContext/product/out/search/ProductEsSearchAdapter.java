@@ -36,28 +36,32 @@ public class ProductEsSearchAdapter implements ProductSearchPort {
 
     private final ElasticsearchClient client;
     private final ProductJpaSearchAdapter fallback;
-    private final ProductEsIndexAdapter indexAdapter;
+    private final ProductEsSearchGuard guard;
     private final String alias;
 
-    public ProductEsSearchAdapter(ElasticsearchClient client, ProductJpaSearchAdapter fallback, ProductEsIndexAdapter indexAdapter,
+    public ProductEsSearchAdapter(ElasticsearchClient client, ProductJpaSearchAdapter fallback, ProductEsSearchGuard guard,
                                   @Value("${custom.product.search.indexAlias}") String alias) {
         this.client = client;
         this.fallback = fallback;
-        this.indexAdapter = indexAdapter;
+        this.guard = guard;
         this.alias = alias;
     }
 
     @Override
     public Page<Long> searchProductIds(ProductSearchQuery query, Pageable pageable) {
         // 인덱스가 없거나 매핑 버전이 낮으면(매핑을 바꾼 배포 뒤 재색인 전) DB로 대신한다.
-        // 이전 인덱스에는 새 필드가 없어, 그 필드로 거르면 오류 없이 빈 결과가 나와 DB로 넘어가지도 않기 때문이다
-        if (!indexAdapter.isKnownCurrent()) {
+        // 이전 인덱스에는 새 필드가 없어, 그 필드로 거르면 오류 없이 빈 결과가 나와 DB로 넘어가지도 않기 때문이다.
+        // ES 접속·응답이 방금 실패했으면 잠시 ES를 부르지 않고 바로 DB로 대신한다 (ProductEsSearchGuard)
+        if (!guard.canSearch()) {
             return fallback.searchProductIds(query, pageable);
         }
         try {
-            return search(query, pageable);
+            Page<Long> result = search(query, pageable);
+            guard.onSuccess();
+            return result;
         } catch (Exception e) {
             log.warn("ES 상품 검색에 실패해 DB 검색으로 대신합니다. keyword={}, sort={}", query.keyword(), query.sort(), e);
+            guard.onFailure(e);
             return fallback.searchProductIds(query, pageable);
         }
     }

@@ -12,6 +12,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,6 +39,7 @@ class ProductEsRecommendAdapterEsTest {
     private ElasticsearchClient client;
     private ProductJpaRecommendAdapter fallback;
     private ProductEsIndexAdapter indexAdapter;
+    private ProductEsSearchGuard guard;
     private ProductEsRecommendAdapter adapter;
     private String alias;
 
@@ -46,7 +49,8 @@ class ProductEsRecommendAdapterEsTest {
         alias = "products_test_" + UUID.randomUUID().toString().substring(0, 8);
         fallback = mock(ProductJpaRecommendAdapter.class);
         indexAdapter = new ProductEsIndexAdapter(client, alias);
-        adapter = new ProductEsRecommendAdapter(client, fallback, indexAdapter, alias);
+        guard = new ProductEsSearchGuard(indexAdapter, Duration.ofSeconds(30), Clock.systemDefaultZone());
+        adapter = new ProductEsRecommendAdapter(client, fallback, guard, alias);
     }
 
     @AfterEach

@@ -37,6 +37,7 @@ import com.backend.boundedContext.review.domain.Review;
 import com.backend.boundedContext.review.out.ReviewRepository;
 import com.backend.shared.review.out.ReviewApi;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -105,6 +106,9 @@ class ProductFacadeSearchTest {
     @Autowired
     private ProductPolicy productPolicy;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @MockitoBean
     private MemberApi memberApi;
 
@@ -140,6 +144,21 @@ class ProductFacadeSearchTest {
             assertThat(item.soldOut()).isFalse();
         });
         assertThat(result.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("회원 서비스가 실패해도 검색은 성공하고, 상호명만 비운다")
+    void searchWithoutBusinessNameWhenMemberFails() {
+        Product cream = create(skincare, KEY + " 크림", 25_000, 10);
+        given(memberApi.getSellers(anyCollection())).willThrow(new IllegalStateException("member down"));
+
+        PageResponse<ProductSummaryDto> result = search(KEY, null, ProductSort.LATEST, true);
+
+        assertThat(result.items()).singleElement().satisfies(item -> {
+            assertThat(item.productId()).isEqualTo(cream.getId());
+            assertThat(item.sellerId()).isEqualTo(SELLER_ID);
+            assertThat(item.businessName()).isNull();
+        });
     }
 
     @Test
@@ -379,7 +398,7 @@ class ProductFacadeSearchTest {
         List<Long> staleIds = List.of(stopped.getId(), onSale.getId(), deleted.getId(), inactiveCategory.getId(), Long.MAX_VALUE);
         ProductSearchPort staleIndex = (query, pageable) -> new PageImpl<>(staleIds, pageable, staleIds.size());
         ProductSearchProductsUseCase useCase = new ProductSearchProductsUseCase(
-                productSupport, productSummarySupport, staleIndex, productPopularKeywordSupport);
+                productSupport, productSummarySupport, staleIndex, productPopularKeywordSupport, transactionManager);
 
         PageResponse<ProductSummaryDto> result = useCase.searchProducts(KEY, null, ProductSort.LATEST, true, false, PageRequest.of(0, 20));
 
@@ -405,14 +424,13 @@ class ProductFacadeSearchTest {
         };
         ProductSearchProductsUseCase useCase = new ProductSearchProductsUseCase(
                 productSupport, productSummarySupport, productSearchPort,
-                new ProductPopularKeywordSupport(recordingPort, productPolicy));
+                new ProductPopularKeywordSupport(recordingPort, productPolicy), transactionManager);
 
         useCase.searchProducts("  " + KEY.toUpperCase() + " 크림 ", null, null, true, false, PageRequest.of(0, 20));   // 앞뒤 공백, 대문자
         useCase.searchProducts(KEY, null, null, true, false, PageRequest.of(1, 20));          // 다음 페이지
         useCase.searchProducts(KEY + " 없는말", null, null, true, false, PageRequest.of(0, 20));   // 0건
         useCase.searchProducts(null, skincare.getId(), null, true, false, PageRequest.of(0, 20));   // 카테고리만
-        given(memberApi.getSellers(anyCollection())).willThrow(new IllegalStateException("member down"));
-        assertThatThrownBy(() -> useCase.searchProducts(KEY, null, null, true, false, PageRequest.of(0, 20)));   // 응답 실패
+        assertThatThrownBy(() -> useCase.searchProducts(KEY, Long.MAX_VALUE, null, true, false, PageRequest.of(0, 20)));   // 응답 실패 (없는 카테고리)
 
         assertThat(recorded).containsExactly(KEY + " 크림");
     }

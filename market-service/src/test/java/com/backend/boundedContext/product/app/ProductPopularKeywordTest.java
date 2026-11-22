@@ -24,7 +24,7 @@ class ProductPopularKeywordTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 16, 14, 30);
 
     private final FakePort port = new FakePort();
-    private final ProductPolicy policy = new ProductPolicy(10, 500, 30, 5, 24, 3.0, 1.0, 10, 30, 60);
+    private final ProductPolicy policy = new ProductPolicy(10, 500, 30, 5, 30, 24, 3.0, 1.0, 10, 30, 60);
     private final ProductPopularKeywordSupport support = new ProductPopularKeywordSupport(port, policy);
     private final ProductGetPopularKeywordsUseCase useCase = new ProductGetPopularKeywordsUseCase(port, policy);
 

@@ -43,14 +43,14 @@ public class ProductEsSimilarAdapter implements ProductSimilarPort {
 
     private final ElasticsearchClient client;
     private final ProductJpaSimilarAdapter fallback;
-    private final ProductEsIndexAdapter indexAdapter;
+    private final ProductEsSearchGuard guard;
     private final String alias;
 
-    public ProductEsSimilarAdapter(ElasticsearchClient client, ProductJpaSimilarAdapter fallback, ProductEsIndexAdapter indexAdapter,
+    public ProductEsSimilarAdapter(ElasticsearchClient client, ProductJpaSimilarAdapter fallback, ProductEsSearchGuard guard,
                                    @Value("${custom.product.search.indexAlias}") String alias) {
         this.client = client;
         this.fallback = fallback;
-        this.indexAdapter = indexAdapter;
+        this.guard = guard;
         this.alias = alias;
     }
 
@@ -62,15 +62,19 @@ public class ProductEsSimilarAdapter implements ProductSimilarPort {
     @Override
     public List<ProductSimilarCandidates> findAllCandidates(List<ProductSimilarQuery> queries) {
         if (queries.isEmpty()) return List.of();
-        // 매핑 버전이 낮은 이전 인덱스에는 설명 필드가 없어 텍스트 후보가 오류 없이 비므로 DB로 대신한다
-        if (!indexAdapter.isKnownCurrent()) {
+        // 매핑 버전이 낮은 이전 인덱스에는 설명 필드가 없어 텍스트 후보가 오류 없이 비므로 DB로 대신한다.
+        // ES 접속·응답이 방금 실패했으면 잠시 ES를 부르지 않고 바로 DB로 대신한다 (ProductEsSearchGuard)
+        if (!guard.canSearch()) {
             return degraded(queries);
         }
         try {
-            return search(queries);
+            List<ProductSimilarCandidates> result = search(queries);
+            guard.onSuccess();
+            return result;
         } catch (Exception e) {
             log.warn("ES 비슷한 상품 조회에 실패해 DB로 대신합니다. productIds={}",
                     queries.stream().map(ProductSimilarQuery::productId).toList(), e);
+            guard.onFailure(e);   // 응답 안 질의 하나의 실패(SearchIndexUnavailableException)는 ES가 살아 있는 실패라 건너뛰지 않는다
             return degraded(queries);
         }
     }

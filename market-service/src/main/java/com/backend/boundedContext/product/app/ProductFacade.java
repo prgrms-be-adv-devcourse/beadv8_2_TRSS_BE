@@ -131,7 +131,7 @@ public class ProductFacade {
         productChanged(productResumeAllBySellerUseCase.resumeAllBySeller(sellerId));
     }
 
-    @Transactional(readOnly = true)
+    /** 상품 검색. 비슷한 상품과 같이 트랜잭션을 잡지 않는다 (ES 검색·상호명 조회를 트랜잭션 밖에서 하려고 유스케이스가 나눠 잡는다) */
     public PageResponse<ProductSummaryDto> searchProducts(String keyword, Long categoryId, ProductSort sort,
                                                           boolean excludeSoldOut, boolean discountedOnly, Pageable pageable) {
         return productSearchProductsUseCase.searchProducts(keyword, categoryId, sort, excludeSoldOut, discountedOnly, pageable);
@@ -162,14 +162,12 @@ public class ProductFacade {
         productRecommendSupport.compute(memberId);
     }
 
-    /** 로그인하지 않은 구매자의 상품 상세 (찜 여부는 false) */
-    @Transactional(readOnly = true)
+    /** 로그인하지 않은 구매자의 상품 상세 (찜 여부는 false). 트랜잭션은 유스케이스가 나눠 잡는다 (상호명 조회를 트랜잭션 밖에서 하려고) */
     public ProductDetailDto getProductDetail(Long productId) {
         return productGetProductDetailUseCase.getProductDetail(productId, null);
     }
 
-    /** 구매자 상품 상세. memberId가 null이 아니면 그 회원의 찜 여부를 채운다 */
-    @Transactional(readOnly = true)
+    /** 구매자 상품 상세. memberId가 null이 아니면 그 회원의 찜 여부를 채운다. 트랜잭션은 유스케이스가 나눠 잡는다 */
     public ProductDetailDto getProductDetail(Long productId, Long memberId) {
         return productGetProductDetailUseCase.getProductDetail(productId, memberId);
     }
@@ -451,8 +449,10 @@ public class ProductFacade {
         return productSupport.getOnSaleProductIdsBySeller(sellerId);
     }
 
-    /** 상품들을 DB의 지금 값으로 다시 색인한다 (검색 색인 컨슈머). 새 트랜잭션에서 읽는다 */
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    /**
+     * 상품들을 DB의 지금 값으로 다시 색인한다 (검색 색인 컨슈머).
+     * 트랜잭션을 잡지 않는다. DB 읽기만 짧은 읽기 트랜잭션에서 하고, 상호명 조회와 ES 쓰기는 그 밖에서 한다 (Support가 나눠 잡는다)
+     */
     public void indexProducts(Collection<Long> productIds) {
         productSearchIndexSupport.indexProducts(productIds);
     }
@@ -480,20 +480,20 @@ public class ProductFacade {
         return productIds.size();
     }
 
-    /** 상호명 없이 색인된 상품을 다시 색인해 상호명을 채운다. 채운 상품 수 (복구 스케줄러) */
-    @Transactional(readOnly = true)
+    /** 상호명 없이 색인된 상품을 다시 색인해 상호명을 채운다. 채운 상품 수 (복구 스케줄러). 트랜잭션은 Support가 나눠 잡는다 */
     public int fillMissingBusinessNames() {
         return productSearchIndexSupport.fillMissingBusinessNames();
     }
 
-    /** 판매 중인 상품 전체를 새 인덱스에 색인하고 검색 alias를 옮긴다. 색인한 상품 수를 돌려준다 (관리자) */
-    @Transactional(readOnly = true)
+    /** 판매 중인 상품 전체를 새 인덱스에 색인하고 검색 alias를 옮긴다. 색인한 상품 수를 돌려준다 (관리자). 트랜잭션은 묶음마다 Support가 잡는다 */
     public int rebuildSearchIndex() {
         return productSearchIndexSupport.rebuildIndex();
     }
 
-    /** 검색 인덱스가 최신이 아니면(alias 없음·매핑 버전 낮음) 전체 재색인하고 색인한 상품 수를, 아니면 빈 값을 돌려준다 (복구 스케줄러) */
-    @Transactional(readOnly = true)
+    /**
+     * 검색 인덱스가 최신이 아니면(alias 없음·매핑 버전 낮음) 전체 재색인하고 색인한 상품 수를, 아니면 빈 값을 돌려준다 (복구 스케줄러).
+     * 트랜잭션은 묶음마다 Support가 잡는다
+     */
     public OptionalInt rebuildSearchIndexIfOutdated() {
         return productSearchIndexSupport.rebuildIndexIfOutdated();
     }

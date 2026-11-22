@@ -39,4 +39,9 @@ public record ProductSearchDocument(
         double behaviorScore,
         long createdAt
 ) {
+    /** 상호명만 바꾼 복사본 (DB 값으로 만든 문서에 트랜잭션 밖에서 상호명을 채울 때) */
+    public ProductSearchDocument withBusinessName(String businessName) {
+        return new ProductSearchDocument(productId, name, description, businessName, categoryId, status, soldOut,
+                effectivePrice, discountRate, wishCount, reviewCount, ratingScore, salesCount30d, behaviorScore, createdAt);
+    }
 }

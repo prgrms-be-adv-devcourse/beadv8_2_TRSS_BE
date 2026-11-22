@@ -107,6 +107,7 @@ custom:
       discountBoundaryIntervalSeconds: 10   # 할인 경계 재색인 스케줄러 실행 간격(초). 할인이 시작·종료된 뒤 가격순에 반영되기까지 최대 이만큼 늦어진다
       discountBoundaryOverlapSeconds: 30    # 전체 재색인 보정이 재색인 시작 시각보다 이만큼 앞부터 바뀐 상품을 다시 본다(커밋 지연). 할인 경계 스케줄러는 겹쳐 읽지 않는다
       discountBoundaryLookbackMinutes: 5    # 앱을 띄운 뒤 첫 실행(지난 실행 시각이 없을 때)만 이만큼 돌아본다. 재시작·배포 동안 지난 경계를 채운다
+      skipAfterFailureSeconds: 30           # ES 검색(검색·비슷한 상품·추천)이 접속·응답에 실패하면 이만큼(초) ES를 부르지 않고 DB로 대신한다. 장애 동안 요청마다 응답 제한 시간만큼 기다리지 않게 한다
       businessNameFillIntervalSeconds: 300  # 회원 서비스가 실패해 상호명 없이 색인된 상품을 찾아 상호명을 채우는 간격(초)
       aliasCheckIntervalSeconds: 60         # 검색 alias가 있는지 확인하는 간격(초). 없으면 전체 재색인한다(기동 직후 첫 확인). ES 장애·데이터 재구성 뒤 이 시간 안에 복구된다
       indexConsumer:                        # 검색 색인 컨슈머(product.events, groupId market-search-index). 일시 오류(ES·DB 연결)는 DLT 없이 성공할 때까지 다시 처리한다

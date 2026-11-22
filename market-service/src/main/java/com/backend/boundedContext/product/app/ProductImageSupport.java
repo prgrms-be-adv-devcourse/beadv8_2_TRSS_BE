@@ -98,14 +98,31 @@ public class ProductImageSupport {
                         image -> productImageStorage.getUrl(image.getImageKey()), (first, second) -> first));
     }
 
-    /** 대표 이미지. 없으면 null */
-    public ProductImageDto getThumbnail(Long productId) {
-        return findImages(productId, ProductImageType.THUMBNAIL).stream().findFirst().map(this::toDto).orElse(null);
+    /** 대표 이미지와 상세 이미지 (구매자 상세·판매자 수정 폼). 한 번의 조회로 읽어 종류별로 나눈다 */
+    public DisplayImages getDisplayImages(Long productId) {
+        List<ProductImage> images = productImageRepository.findAllByProductIdAndImageTypeInOrderBySortOrderAscIdAsc(
+                productId, List.of(ProductImageType.THUMBNAIL, ProductImageType.DETAIL));
+        ProductImageDto thumbnail = images.stream()
+                .filter(image -> image.getImageType() == ProductImageType.THUMBNAIL)
+                .findFirst().map(this::toDto).orElse(null);
+        List<ProductImageDto> details = images.stream()
+                .filter(image -> image.getImageType() == ProductImageType.DETAIL)
+                .map(this::toDto).toList();
+        return new DisplayImages(thumbnail, details);
     }
 
-    /** 상세 이미지 (보여 줄 순서대로) */
-    public List<ProductImageDto> getDetailImages(Long productId) {
-        return findImages(productId, ProductImageType.DETAIL).stream().map(this::toDto).toList();
+    /**
+     * @param thumbnail 대표 이미지. 없으면 null
+     * @param details   상세 이미지 (보여 줄 순서대로)
+     */
+    public record DisplayImages(ProductImageDto thumbnail, List<ProductImageDto> details) {
+        public String thumbnailUrl() {
+            return thumbnail == null ? null : thumbnail.url();
+        }
+
+        public List<String> detailUrls() {
+            return details.stream().map(ProductImageDto::url).toList();
+        }
     }
 
     private List<ProductImage> findImages(Long productId, ProductImageType imageType) {

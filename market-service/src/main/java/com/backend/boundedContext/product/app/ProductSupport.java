@@ -31,6 +31,7 @@ import com.backend.shared.product.dto.ProductSnapshotDto;
 import com.backend.shared.product.dto.ProductUnsaleableReason;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 
@@ -45,6 +46,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductSupport {
@@ -210,12 +212,25 @@ public class ProductSupport {
                 .collect(Collectors.groupingBy(stock -> stock.getOption().getProduct().getId()));
     }
 
-    /** 판매자 ID → 상호명. 회원 컨텍스트에 한 번만 묻는다. 없는 판매자는 키가 없다. */
+    /** 판매자 ID → 상호명. 회원 컨텍스트에 한 번만 묻는다. 없는 판매자는 키가 없다. 회원 서비스가 실패하면 예외를 던진다 (색인용) */
     public Map<Long, String> getBusinessNames(Collection<Long> sellerIds) {
         if (sellerIds.isEmpty()) return Map.of();
 
         return memberApi.getSellers(sellerIds).stream()
                 .collect(Collectors.toMap(SellerDto::sellerId, SellerDto::businessName));
+    }
+
+    /**
+     * 화면용 상호명. 회원 서비스가 실패하면 빈 Map을 돌려줘 상호명 없이 보여 준다 (상호명 때문에 목록·상세가 실패하지 않게).
+     * HTTP 호출이므로 DB 트랜잭션 밖에서 부른다.
+     */
+    public Map<Long, String> getBusinessNamesOrEmpty(Collection<Long> sellerIds) {
+        try {
+            return getBusinessNames(sellerIds);
+        } catch (RuntimeException e) {
+            log.warn("상호명을 가져오지 못해 상호명 없이 보여 줍니다. sellerIds={}", sellerIds, e);
+            return Map.of();
+        }
     }
 
     /** 판매자의 판매 중 상품 ID (상호가 바뀌어 검색 색인을 다시 할 상품) */
@@ -225,7 +240,7 @@ public class ProductSupport {
 
     /** 구매자에게 보여 줄 수 있는 상품. 없거나, 판매 중이 아니거나, 카테고리가 사용 중지면 404. */
     public Product getDisplayableProduct(Long productId) {
-        return productRepository.findById(productId)
+        return productRepository.findDisplayCandidateById(productId)
                 .filter(Product::isDisplayable)
                 .orElseThrow(() -> new DomainException(ProductErrorCode.PRODUCT_NOT_FOUND));
     }
@@ -318,11 +333,12 @@ public class ProductSupport {
         Category category = product.getCategory();
         List<OptionStock> stocks = getOptionStocksByProductId(Set.of(productId)).getOrDefault(productId, List.of());
         LocalDateTime now = LocalDateTime.now();
+        ProductImageSupport.DisplayImages images = productImageSupport.getDisplayImages(productId);
 
         return new SellerProductFormDto(
                 product.getId(), product.getName(), product.getPrice(), product.getDescription(),
                 category.getParent().getId(), category.getId(),
-                productImageSupport.getThumbnail(productId), productImageSupport.getDetailImages(productId),
+                images.thumbnail(), images.details(),
                 product.getOptionNames(), stocks.stream().map(SellerOptionDto::from).toList(),
                 productDiscountSupport.getPendingDiscounts(productId, now).stream()
                         .map(discount -> SellerDiscountDto.from(discount, now)).toList(),

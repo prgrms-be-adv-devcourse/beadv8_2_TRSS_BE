@@ -13,6 +13,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,6 +39,7 @@ class ProductEsSearchAdapterEsTest {
     private ElasticsearchClient client;
     private ProductJpaSearchAdapter fallback;
     private ProductEsIndexAdapter indexAdapter;
+    private ProductEsSearchGuard guard;
     private ProductEsSearchAdapter searchAdapter;
     private String alias;
 
@@ -46,7 +49,8 @@ class ProductEsSearchAdapterEsTest {
         alias = "products_test_" + UUID.randomUUID().toString().substring(0, 8);
         fallback = mock(ProductJpaSearchAdapter.class);
         indexAdapter = new ProductEsIndexAdapter(client, alias);
-        searchAdapter = new ProductEsSearchAdapter(client, fallback, indexAdapter, alias);
+        guard = new ProductEsSearchGuard(indexAdapter, Duration.ofSeconds(30), Clock.systemDefaultZone());
+        searchAdapter = new ProductEsSearchAdapter(client, fallback, guard, alias);
     }
 
     /** 전체 재색인처럼 새 인덱스를 만들고 alias를 붙인다 */
